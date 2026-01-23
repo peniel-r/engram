@@ -19,8 +19,6 @@ const BenchmarkResult = struct {
 /// Run all benchmarks and print results
 pub fn runAll(allocator: Allocator) !void {
     std.debug.print("\n=== Engram Phase 1 Performance Benchmarks ===\n\n", .{});
-    std.debug.print("NOTE: File Read, Graph Traversal, and Index Build benchmarks skipped due to Zig 0.15.2 API changes.\n", .{});
-    std.debug.print("      Only Cold Start benchmark is active (already validated: 0.19ms < 50ms ✅)\n\n", .{});
 
     var results = std.ArrayListUnmanaged(BenchmarkResult){};
     defer {
@@ -28,8 +26,11 @@ pub fn runAll(allocator: Allocator) !void {
         results.deinit(allocator);
     }
 
-    // Run only Cold Start (others skipped due to Zig 0.15.2 API incompatibility)
+    // Run all benchmarks
     try results.append(allocator, try benchmarkColdStart(allocator));
+    try results.append(allocator, try benchmarkFileRead(allocator));
+    try results.append(allocator, try benchmarkGraphTraversal(allocator));
+    try results.append(allocator, try benchmarkIndexBuild(allocator));
 
     // Print summary
     printResults(results.items);
@@ -137,8 +138,11 @@ fn benchmarkFileRead(allocator: Allocator) !BenchmarkResult {
         var timer = try std.time.Timer.start();
         const start = timer.read();
 
-        const content = std.fs.cwd().readFileAlloc(allocator, test_file, 4096);
-        allocator.free(content);
+        // Use direct file read to avoid allocator issues
+        var buffer: [4096]u8 = undefined;
+        const file = try std.fs.cwd().openFile(test_file, .{});
+        defer file.close();
+        _ = try file.readAll(&buffer);
 
         total_ns += (timer.read() - start);
     }
@@ -288,14 +292,15 @@ fn printResults(results: []const BenchmarkResult) void {
     }
 
     std.debug.print("\nTotal: {d}/{d} benchmarks passed\n", .{ passed, results.len });
-    std.debug.print("\nNote: To run full benchmark suite, update to Zig version compatible with TypeOf() union.\n", .{});
 }
 
 // Main entry point for standalone benchmark execution
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    // Note: Use page_allocator to avoid Zig 0.15.2 GPA TypeOf bug
+    // https://github.com/ziglang/zig/issues/...
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
 
     try runAll(allocator);
 }

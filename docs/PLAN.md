@@ -1,8 +1,8 @@
 # Engram CLI Master Plan
 
 **Version**: 1.0.0
-**Status**: In Progress
-**Last Updated**: 2025-01-22
+**Status**: In Progress - Phase 1 Nearly Complete
+**Last Updated**: 2026-01-23
 
 ---
 
@@ -69,9 +69,9 @@ Engram supports 10 Neurona flavors from the union of spec.md and NEURONA_OPEN_SP
 - ✅ Track connections in graph structure
 - ✅ All 10 Neurona flavors supported
 - ✅ Tier 1, 2, 3 metadata parsing complete
-- ✅ 90%+ test coverage
-- ✅ Sub-10ms graph traversal (depth 1)
-- ✅ Cold start < 50ms (validated: 0.19ms ✅)
+- ⚠️ 90%+ test coverage (Actual: ~60-70%, see TEST_COVERAGE_REPORT.md)
+- ✅ Sub-10ms graph traversal (depth 1, validated: 0.0001ms)
+- ✅ Cold start < 50ms (validated: 0.23ms)
 
 ---
 
@@ -457,7 +457,7 @@ zig build -Dtarget=aarch64-macos
 
 | Phase | Start | End | Duration | Status |
 |-------|-------|-----|----------|--------|
-| Phase 1: The Soma | Week 1 | Week 2 | 2 weeks | 🔄 In Progress |
+| Phase 1: The Soma | Week 1 | Week 2 | 2 weeks | 🔄 ~85% Complete |
 | Phase 2: The Axon | Week 3 | Week 4 | 2 weeks | ⏳ Pending |
 | Phase 3: The Cortex | Week 5 | Week 6 | 2 weeks | ⏳ Pending |
 
@@ -473,6 +473,6 @@ zig build -Dtarget=aarch64-macos
 
 ---
 
-**Last Updated**: 2025-01-22
-**Status**: In Progress - Phase 1
+**Last Updated**: 2026-01-23
+**Status**: In Progress - Phase 1 (~85% Complete, see notes below)
 **Owner**: Development Team

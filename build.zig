@@ -146,7 +146,7 @@ pub fn build(b: *std.Build) void {
     const bench_mod = b.createModule(.{
         .root_source_file = b.path("tests/benchmarks.zig"),
         .target = target,
-        .optimize = .ReleaseFast,
+        .optimize = .Debug,
         .imports = &.{
             .{ .name = "Engram", .module = mod },
         },
