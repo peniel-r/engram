@@ -33,6 +33,9 @@ pub const ConnectionType = enum {
     next,
     related,
 
+    /// Opposition: conflicts, opposes
+    opposes,
+
     pub fn fromString(s: []const u8) ?ConnectionType {
         if (std.mem.eql(u8, s, "parent")) return .parent;
         if (std.mem.eql(u8, s, "child")) return .child;
@@ -48,6 +51,7 @@ pub const ConnectionType = enum {
         if (std.mem.eql(u8, s, "prerequisite")) return .prerequisite;
         if (std.mem.eql(u8, s, "next")) return .next;
         if (std.mem.eql(u8, s, "related")) return .related;
+        if (std.mem.eql(u8, s, "opposes")) return .opposes;
         return null;
     }
 };
@@ -74,6 +78,7 @@ pub const Connection = struct {
             .prerequisite => "prerequisite",
             .next => "next",
             .related => "related",
+            .opposes => "opposes",
         };
 
         return std.fmt.allocPrint(allocator, "{s} -> {s} (weight: {d})", .{
@@ -420,4 +425,38 @@ test "Connection format produces readable string" {
 
     try std.testing.expect(formatted.len > 0);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "test.target") != null);
+}
+
+test "ConnectionType fromString parses all 15 types" {
+    // Test all 15 connection types
+    const test_cases = [_]struct {
+        input: []const u8,
+        expected: ConnectionType,
+    }{
+        .{ .input = "parent", .expected = .parent },
+        .{ .input = "child", .expected = .child },
+        .{ .input = "validates", .expected = .validates },
+        .{ .input = "validated_by", .expected = .validated_by },
+        .{ .input = "blocks", .expected = .blocks },
+        .{ .input = "blocked_by", .expected = .blocked_by },
+        .{ .input = "implements", .expected = .implements },
+        .{ .input = "implemented_by", .expected = .implemented_by },
+        .{ .input = "tested_by", .expected = .tested_by },
+        .{ .input = "tests", .expected = .tests },
+        .{ .input = "relates_to", .expected = .relates_to },
+        .{ .input = "prerequisite", .expected = .prerequisite },
+        .{ .input = "next", .expected = .next },
+        .{ .input = "related", .expected = .related },
+        .{ .input = "opposes", .expected = .opposes },
+    };
+
+    for (test_cases) |tc| {
+        const result = ConnectionType.fromString(tc.input);
+        try std.testing.expectEqual(tc.expected, result.?);
+    }
+}
+
+test "ConnectionType fromString returns null for invalid" {
+    const result = ConnectionType.fromString("invalid_type");
+    try std.testing.expectEqual(@as(?ConnectionType, null), result);
 }

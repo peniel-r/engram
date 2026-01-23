@@ -59,7 +59,7 @@ pub const Cortex = struct {
 
     /// Parse cortex.json file
     pub fn fromFile(allocator: Allocator, path: []const u8) !Cortex {
-        const file = try std.fs.cwd().openFile(path);
+        const file = try std.fs.cwd().openFile(path, .{});
         defer file.close();
 
         const content = try file.readToEndAlloc(allocator, 1024 * 1024); // 1MB max

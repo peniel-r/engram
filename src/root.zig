@@ -7,6 +7,9 @@ pub const NeuronaType = @import("core/neurona.zig").NeuronaType;
 pub const Connection = @import("core/neurona.zig").Connection;
 pub const ConnectionType = @import("core/neurona.zig").ConnectionType;
 pub const Cortex = @import("core/cortex.zig").Cortex;
+pub const core = struct {
+    pub const graph = @import("core/graph.zig");
+};
 
 // Re-export storage modules
 pub const storage = struct {
@@ -19,6 +22,9 @@ pub const storage = struct {
 // Re-export utils
 pub const frontmatter = @import("utils/frontmatter.zig").Frontmatter;
 pub const yaml = @import("utils/yaml.zig").Parser;
+pub const utils = struct {
+    pub const timestamp = @import("utils/timestamp.zig");
+};
 
 pub fn bufferedPrint() !void {
     // Stdout is for actual output of your application, for example if you

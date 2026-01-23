@@ -31,7 +31,7 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
     // 2. Find source Neurona
     const source_path = fs.findNeuronaPath(allocator, config.neuronas_dir, config.source_id) catch |err| {
         if (err == error.NeuronaNotFound) {
-            std.debug.print("Error: Source Neurona '{s}' not found in {s}.\n", .{config.source_id, config.neuronas_dir});
+            std.debug.print("Error: Source Neurona '{s}' not found in {s}.\n", .{ config.source_id, config.neuronas_dir });
         }
         return err;
     };
@@ -40,7 +40,7 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
     // 3. Find target Neurona
     const target_path = fs.findNeuronaPath(allocator, config.neuronas_dir, config.target_id) catch |err| {
         if (err == error.NeuronaNotFound) {
-            std.debug.print("Error: Target Neurona '{s}' not found in {s}.\n", .{config.target_id, config.neuronas_dir});
+            std.debug.print("Error: Target Neurona '{s}' not found in {s}.\n", .{ config.target_id, config.neuronas_dir });
         }
         return err;
     };
@@ -63,9 +63,9 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
         source.updated = try timestamp.nowDate(allocator);
 
         try fs.writeNeurona(allocator, source, source_path);
-        
+
         if (config.verbose) {
-            std.debug.print("Linked {s} --[{s}]--> {s}\n", .{config.source_id, config.connection_type, config.target_id});
+            std.debug.print("Linked {s} --[{s}]--> {s}\n", .{ config.source_id, config.connection_type, config.target_id });
         }
     }
 
@@ -95,7 +95,7 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
         try fs.writeNeurona(allocator, target, target_path);
 
         if (config.verbose) {
-            std.debug.print("Linked {s} --[{s}]--> {s}\n", .{config.target_id, @tagName(reverse_type), config.source_id});
+            std.debug.print("Linked {s} --[{s}]--> {s}\n", .{ config.target_id, @tagName(reverse_type), config.source_id });
         }
     }
 }
@@ -117,6 +117,7 @@ fn getReverseType(ctype: ConnectionType) ?ConnectionType {
         .next => .prerequisite,
         .related => .related,
         .relates_to => .relates_to,
+        .opposes => .opposes,
     };
 }
 

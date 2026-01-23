@@ -7,6 +7,7 @@ const new_cmd = @import("cli/new.zig");
 const show_cmd = @import("cli/show.zig");
 const link_cmd = @import("cli/link.zig");
 const sync_cmd = @import("cli/sync.zig");
+const delete_cmd = @import("cli/delete.zig");
 const trace_cmd = @import("cli/trace.zig");
 const status_cmd = @import("cli/status.zig");
 const query_cmd = @import("cli/query.zig");
@@ -49,6 +50,12 @@ const commands = [_]Command{
         .description = "Rebuild graph index",
         .handler = handleSync,
         .help_fn = printSyncHelp,
+    },
+    .{
+        .name = "delete",
+        .description = "Delete a Neurona",
+        .handler = handleDelete,
+        .help_fn = printDeleteHelp,
     },
     .{
         .name = "trace",
@@ -544,6 +551,47 @@ fn handleStatus(allocator: Allocator, args: []const []const u8) !void {
     try status_cmd.execute(allocator, config);
 }
 
+fn handleDelete(allocator: Allocator, args: []const []const u8) !void {
+    if (args.len < 3) {
+        std.debug.print("Error: Missing Neurona ID\n", .{});
+        printDeleteHelp();
+        std.process.exit(1);
+    }
+
+    var config = delete_cmd.DeleteConfig{
+        .id = args[2],
+        .verbose = false,
+    };
+
+    // Parse options
+    var i: usize = 3;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+
+        if (std.mem.eql(u8, arg, "--verbose") or std.mem.eql(u8, arg, "-v")) {
+            config.verbose = true;
+        } else if (std.mem.eql(u8, arg, "--neuronas-dir") or std.mem.eql(u8, arg, "-d")) {
+            if (i + 1 >= args.len) {
+                std.debug.print("Error: --neuronas-dir requires a value\n", .{});
+                printDeleteHelp();
+                std.process.exit(1);
+            }
+            i += 1;
+            config.neuronas_dir = args[i];
+        } else if (std.mem.startsWith(u8, arg, "-")) {
+            std.debug.print("Error: Unknown flag '{s}'\n", .{arg});
+            printDeleteHelp();
+            std.process.exit(1);
+        } else {
+            std.debug.print("Error: Too many arguments\n", .{});
+            printDeleteHelp();
+            std.process.exit(1);
+        }
+    }
+
+    try delete_cmd.execute(allocator, config);
+}
+
 fn handleQuery(allocator: Allocator, args: []const []const u8) !void {
     // Simple query implementation
     var config = query_cmd.QueryConfig{
@@ -594,26 +642,16 @@ fn handleQuery(allocator: Allocator, args: []const []const u8) !void {
 
 fn printUsage() void {
     std.debug.print(
-        \\Engram - High-performance CLI tool for Neurona Knowledge Protocol
-        \\
-        \\Usage:
-        \\  engram <command> [options]
-        \\
-        \\Common Commands:
+        \\Commands:
         \\  init              Initialize a new Cortex
         \\  new               Create a new Neurona
         \\  show              Display a Neurona
         \\  link              Create connections between Neuronas
-        \\
-        \\Graph Operations:
+        \\  delete            Delete a Neurona
         \\  sync              Rebuild graph index
         \\  trace             Trace dependencies
-        \\
-        \\Query & Status:
         \\  status            List status
         \\  query             Query interface
-        \\
-        \\Global Options:
         \\  --help, -h        Show this help message
         \\  --version, -v     Show version information
         \\
@@ -827,6 +865,27 @@ fn printQueryHelp() void {
         \\Examples:
         \\  engram query
         \\  engram query --type issue --limit 10
+        \\
+    , .{});
+}
+
+fn printDeleteHelp() void {
+    std.debug.print(
+        \\Delete a Neurona
+        \\
+        \\Usage:
+        \\  engram delete <id> [options]
+        \\
+        \\Arguments:
+        \\  id                Neurona ID to delete (required)
+        \\
+        \\Options:
+        \\  --verbose, -v    Show verbose output
+        \\  --neuronas-dir, -d   Directory containing neuronas (default: neuronas)
+        \\
+        \\Examples:
+        \\  engram delete test.001
+        \\  engram delete req.auth.oauth2 --verbose
         \\
     , .{});
 }
