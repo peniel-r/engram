@@ -2,3 +2,10 @@
 .zig-cache/
 zig-out/
 
+# ---> Tmp
+.tmp/
+
+# ---> Windows
+.vscode/
+.idea/
+.DS_Store
