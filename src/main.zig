@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const init_cmd = @import("cli/init.zig");
 const link_cmd = @import("cli/link.zig");
+const trace_cmd = @import("cli/trace.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -25,6 +26,8 @@ pub fn main() !void {
         try handleInit(allocator, args);
     } else if (std.mem.eql(u8, command, "link")) {
         try handleLink(allocator, args);
+    } else if (std.mem.eql(u8, command, "trace")) {
+        try handleTrace(allocator, args);
     } else if (std.mem.eql(u8, command, "--help") or std.mem.eql(u8, command, "-h")) {
         printHelp();
     } else if (std.mem.eql(u8, command, "--version") or std.mem.eql(u8, command, "-v")) {
@@ -159,6 +162,70 @@ fn handleLink(allocator: Allocator, args: []const []const u8) !void {
     try link_cmd.execute(allocator, config);
 }
 
+fn handleTrace(allocator: Allocator, args: []const []const u8) !void {
+    if (args.len < 3) {
+        std.debug.print("Error: Missing neurona ID\n", .{});
+        printTraceHelp();
+        std.process.exit(1);
+    }
+
+    var config = trace_cmd.TraceConfig{
+        .id = args[2],
+        .direction = .down,
+        .max_depth = 10,
+        .format = .tree,
+        .json_output = false,
+    };
+
+    // Parse command-line arguments
+    var i: usize = 3;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+
+        if (std.mem.eql(u8, arg, "--up") or std.mem.eql(u8, arg, "-u")) {
+            config.direction = .up;
+        } else if (std.mem.eql(u8, arg, "--depth") or std.mem.eql(u8, arg, "-d")) {
+            if (i + 1 >= args.len) {
+                std.debug.print("Error: --depth requires a value\n", .{});
+                printTraceHelp();
+                std.process.exit(1);
+            }
+            i += 1;
+            config.max_depth = std.fmt.parseInt(usize, args[i], 10) catch {
+                std.debug.print("Error: Invalid depth '{s}'\n", .{args[i]});
+                printTraceHelp();
+                std.process.exit(1);
+            };
+        } else if (std.mem.eql(u8, arg, "--json") or std.mem.eql(u8, arg, "-j")) {
+            config.json_output = true;
+        } else if (std.mem.eql(u8, arg, "--format") or std.mem.eql(u8, arg, "-f")) {
+            if (i + 1 >= args.len) {
+                std.debug.print("Error: --format requires a value\n", .{});
+                printTraceHelp();
+                std.process.exit(1);
+            }
+            i += 1;
+            const format_str = args[i];
+            if (std.mem.eql(u8, format_str, "tree")) {
+                config.format = .tree;
+            } else if (std.mem.eql(u8, format_str, "list")) {
+                config.format = .list;
+            } else {
+                std.debug.print("Error: Invalid format '{s}'. Valid formats: tree, list\n", .{format_str});
+                printTraceHelp();
+                std.process.exit(1);
+            }
+        } else if (std.mem.startsWith(u8, arg, "-")) {
+            std.debug.print("Error: Unknown flag '{s}'\n", .{arg});
+            printTraceHelp();
+            std.process.exit(1);
+        }
+    }
+
+    // Execute trace command
+    try trace_cmd.execute(allocator, config);
+}
+
 fn printUsage() void {
     std.debug.print(
         \\Engram - High-performance CLI tool for Neurona Knowledge Protocol
@@ -247,6 +314,31 @@ fn printLinkHelp() void {
         \\Examples:
         \\  engram link note.1 note.2 relates_to
         \\  engram link req.auth test.auth validates --bidirectional
+        \\
+    , .{});
+}
+
+fn printTraceHelp() void {
+    std.debug.print(
+        \\Trace dependencies between Neuronas
+        \\
+        \\Usage:
+        \\  engram trace <neurona_id> [options]
+        \\
+        \\Arguments:
+        \\  neurona_id       ID of Neurona to trace from (required)
+        \\
+        \\Options:
+        \\  --up, -u         Trace upstream (parents/dependencies) instead of downstream
+        \\  --depth, -d       Maximum trace depth (default: 10)
+        \\  --format, -f       Output format: tree, list (default: tree)
+        \\  --json, -j        Output as JSON instead of text
+        \\
+        \\Examples:
+        \\  engram trace req.auth
+        \\  engram trace req.auth --up
+        \\  engram trace req.auth --depth 3
+        \\  engram trace req.auth --json
         \\
     , .{});
 }

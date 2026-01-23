@@ -226,13 +226,12 @@ pub const Graph = struct {
 
     /// Recursive DFS helper (called from DFS traversal)
     fn dfsRecursive(allocator: Allocator, graph: *const Graph, node_id: []const u8, visited: *std.StringHashMap(void), result: *std.ArrayList([]const u8)) !void {
-    fn dfsRecursive(allocator: Allocator, graph: *const Graph, node_id: []const u8, visited: *std.StringHashMap(void), result: *std.ArrayList([]const u8)) !void {
-        const adj = self.getAdjacent(node_id);
+        const adj = graph.getAdjacent(node_id);
         for (adj) |edge| {
             if (visited.get(edge.target_id) == null) {
                 try visited.put(edge.target_id, {});
                 try result.append(edge.target_id);
-                try self.dfsRecursive(allocator, edge.target_id, visited, result);
+                try dfsRecursive(allocator, graph, edge.target_id, visited, result);
             }
         }
     }
@@ -266,7 +265,7 @@ pub const Graph = struct {
 
             // Explore neighbors
             const adj = self.getAdjacent(current_id);
-            const current_entry = visited.get(current_id).?;
+            _ = visited.get(current_id);
 
             for (adj) |edge| {
                 if (visited.get(edge.target_id) == null) {
@@ -300,6 +299,7 @@ pub const Graph = struct {
             while (i < j) {
                 const tmp = path.items[i];
                 path.items[i] = path.items[j];
+                path.items[j] = tmp;
                 i += 1;
                 j -= 1;
             }

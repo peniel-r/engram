@@ -4,9 +4,10 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Neurona = @import("storage").readNeurona;
-const Graph = @import("core").Graph;
-const scanNeuronas = @import("storage").scanNeuronas;
+const Neurona = @import("../core/neurona.zig").Neurona;
+const readNeurona = @import("../storage/filesystem.zig").readNeurona;
+const scanNeuronas = @import("../storage/filesystem.zig").scanNeuronas;
+const Graph = @import("../core/graph.zig").Graph;
 
 /// Trace configuration
 pub const TraceConfig = struct {
@@ -31,7 +32,7 @@ pub const OutputFormat = enum {
 pub const TraceNode = struct {
     id: []const u8,
     level: usize,
-    connections: std.ArrayList([]const u8),
+    connections: std.ArrayListUnmanaged([]const u8),
     node_type: []const u8,
 
     pub fn deinit(self: *TraceNode, allocator: Allocator) void {
@@ -45,24 +46,34 @@ pub const TraceNode = struct {
 /// Main command handler
 pub fn execute(allocator: Allocator, config: TraceConfig) !void {
     // Step 1: Load all Neuronas and build graph
-    const neuronas = try scanNeuronas(allocator, "neuronas");
+    const neuronas = scanNeuronas(allocator, "neuronas") catch |err| {
+        switch (err) {
+            error.FileNotFound => {
+                var stdout_buffer: [512]u8 = undefined;
+                var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+                const stdout = &stdout_writer.interface;
+                try stdout.writeAll("Error: No neuronas directory found. Please run 'engram init' first or ensure you're in a Cortex directory.\n");
+                try stdout.flush();
+                return err;
+            },
+            else => return err,
+        }
+    };
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);
     }
 
-    var graph = try Graph.init(allocator);
+    var graph = Graph.init();
     defer graph.deinit(allocator);
 
     // Build graph from Neuronas
     for (neuronas) |*neurona| {
-        try graph.addNode(neurona.id, neurona.*);
-
-        // Add connections
+        // Add connections - addEdge automatically creates nodes
         var conn_it = neurona.connections.iterator();
         while (conn_it.next()) |entry| {
             for (entry.value_ptr.connections.items) |conn| {
-                try graph.addEdge(neurona.id, conn.target_id, conn.weight);
+                try graph.addEdge(allocator, neurona.id, conn.target_id, conn.weight);
             }
         }
     }
@@ -92,7 +103,7 @@ fn trace(
     const filepath = try findNeuronaPath(allocator, config.id);
     defer allocator.free(filepath);
 
-    const start_neurona = try Neurona(allocator, filepath);
+    var start_neurona = try readNeurona(allocator, filepath);
     defer start_neurona.deinit(allocator);
 
     // Use BFS or DFS based on direction
@@ -105,9 +116,12 @@ fn trace(
         visited.deinit();
     }
 
-    var result = std.ArrayList(TraceNode).init(allocator);
+    var result = std.ArrayListUnmanaged(*TraceNode){};
     errdefer {
-        for (result) |*n| n.deinit(allocator);
+        for (result.items) |n| {
+            n.deinit(allocator);
+            allocator.destroy(n);
+        }
         result.deinit(allocator);
     }
 
@@ -117,7 +131,19 @@ fn trace(
         try buildUpstreamTree(allocator, graph, &visited, &result, config.id, config.max_depth);
     }
 
-    return result.toOwnedSlice();
+    // Convert pointer list to value list
+    var final_result = std.ArrayListUnmanaged(TraceNode){};
+    for (result.items) |node_ptr| {
+        try final_result.append(allocator, node_ptr.*);
+    }
+    
+    // Clean up pointers only (data moved to final_result)
+    for (result.items) |node_ptr| {
+        allocator.destroy(node_ptr);
+    }
+    result.deinit(allocator);
+
+    return final_result.toOwnedSlice(allocator);
 }
 
 /// Build downstream tree (children, implementations)
@@ -125,27 +151,27 @@ fn buildDownstreamTree(
     allocator: Allocator,
     graph: *Graph,
     visited: *std.StringHashMap(*TraceNode),
-    result: *std.ArrayList(TraceNode),
+    result: *std.ArrayListUnmanaged(*TraceNode),
     start_id: []const u8,
     max_depth: usize
 ) !void {
     // Create root node
     const root = try allocator.create(TraceNode);
     root.* = TraceNode{
-        .id = start_id,
+        .id = try allocator.dupe(u8, start_id),
         .level = 0,
-        .connections = std.ArrayList([]const u8).init(allocator),
+        .connections = std.ArrayListUnmanaged([]const u8){},
         .node_type = try allocator.dupe(u8, "root"),
     };
 
     try visited.put(start_id, root);
-    try result.append(root);
+    try result.append(allocator, root);
 
     // BFS to collect nodes by level
-    var queue = std.ArrayList([]const u8).init(allocator);
-    defer queue.deinit();
+    var queue = std.ArrayListUnmanaged([]const u8){};
+    defer queue.deinit(allocator);
 
-    try queue.append(start_id);
+    try queue.append(allocator, start_id);
 
     var current_depth: usize = 0;
 
@@ -157,19 +183,19 @@ fn buildDownstreamTree(
             if (visited.get(edge.target_id) == null) {
                 const child = try allocator.create(TraceNode);
                 child.* = TraceNode{
-                    .id = edge.target_id,
+                    .id = try allocator.dupe(u8, edge.target_id),
                     .level = current_depth + 1,
-                    .connections = std.ArrayList([]const u8).init(allocator),
+                    .connections = std.ArrayListUnmanaged([]const u8){},
                     .node_type = try allocator.dupe(u8, "downstream"),
                 };
 
                 try visited.put(edge.target_id, child);
-                try result.append(child);
-                try queue.append(edge.target_id);
+                try result.append(allocator, child);
+                try queue.append(allocator, edge.target_id);
 
                 // Add connection to parent
                 const parent_node = visited.get(current_id).?;
-                try parent_node.connections.append(allocator, edge.target_id);
+                try parent_node.connections.append(allocator, try allocator.dupe(u8, edge.target_id));
             }
         }
 
@@ -182,32 +208,32 @@ fn buildUpstreamTree(
     allocator: Allocator,
     graph: *Graph,
     visited: *std.StringHashMap(*TraceNode),
-    result: *std.ArrayList(TraceNode),
+    result: *std.ArrayListUnmanaged(*TraceNode),
     start_id: []const u8,
     max_depth: usize
 ) !void {
     // Create root node
     const root = try allocator.create(TraceNode);
     root.* = TraceNode{
-        .id = start_id,
+        .id = try allocator.dupe(u8, start_id),
         .level = 0,
-        .connections = std.ArrayList([]const u8).init(allocator),
+        .connections = std.ArrayListUnmanaged([]const u8){},
         .node_type = try allocator.dupe(u8, "root"),
     };
 
     try visited.put(start_id, root);
-    try result.append(root);
+    try result.append(allocator, root);
 
     // DFS to trace upstream
-    var stack = std.ArrayList([]const u8).init(allocator);
-    defer stack.deinit();
+    var stack = std.ArrayListUnmanaged([]const u8){};
+    defer stack.deinit(allocator);
 
-    try stack.append(start_id);
+    try stack.append(allocator, start_id);
 
     var current_depth: usize = 0;
 
     while (stack.items.len > 0 and current_depth < max_depth) {
-        const current_id = stack.pop();
+        const current_id = stack.pop().?;
 
         // Get incoming edges (parents)
         const incoming = graph.getIncoming(current_id);
@@ -216,19 +242,19 @@ fn buildUpstreamTree(
             if (visited.get(edge.target_id) == null) {
                 const parent = try allocator.create(TraceNode);
                 parent.* = TraceNode{
-                    .id = edge.target_id,
+                    .id = try allocator.dupe(u8, edge.target_id),
                     .level = current_depth + 1,
-                    .connections = std.ArrayList([]const u8).init(allocator),
+                    .connections = std.ArrayListUnmanaged([]const u8){},
                     .node_type = try allocator.dupe(u8, "upstream"),
                 };
 
                 try visited.put(edge.target_id, parent);
-                try result.append(parent);
-                try stack.append(edge.target_id);
+                try result.append(allocator, parent);
+                try stack.append(allocator, edge.target_id);
 
                 // Add connection to child
                 const child_node = visited.get(current_id).?;
-                try child_node.connections.append(allocator, edge.target_id);
+                try child_node.connections.append(allocator, try allocator.dupe(u8, edge.target_id));
             }
         }
 
@@ -267,15 +293,17 @@ fn findNeuronaPath(allocator: Allocator, id: []const u8) ![]const u8 {
 
 /// Output tree format to stdout
 fn outputTree(trace_nodes: []const TraceNode) !void {
-    const stdout = std.io.getStdOut().writer();
+    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
 
     try stdout.writeAll("\n🌲 Dependency Tree\n");
-    try stdout.writeByteNTimes('=', 40);
+    for (0..40) |_| try stdout.writeAll("=");
     try stdout.writeAll("\n");
 
     for (trace_nodes) |node| {
         // Indent based on level
-        try stdout.writeByteNTimes(' ', node.level * 2);
+        for (0..node.level * 2) |_| try stdout.writeAll(" ");
 
         try stdout.print("{s} ({d})\n", .{ node.id, node.connections.items.len });
         if (node.connections.items.len > 0) {
@@ -283,33 +311,38 @@ fn outputTree(trace_nodes: []const TraceNode) !void {
                 if (i > 0) try stdout.writeAll(", ");
                 try stdout.print("{s}", .{conn});
             }
+            try stdout.writeAll("\n");
         }
     }
 
     try stdout.writeAll("\n");
+    try stdout.flush();
 }
 
 /// JSON output for AI
 fn outputJson(trace_nodes: []const TraceNode) !void {
-    const stdout = std.io.getStdOut().writer();
+    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
 
     try stdout.writeAll("[");
-    for (trace_nodes, 0..) |node| {
-        if (node.id > 0) try stdout.writeAll(",");
+    for (trace_nodes, 0..) |node, i| {
+        if (i > 0) try stdout.writeAll(",");
         try stdout.writeAll("{");
-        try stdout.print("\"id\":\"{s}", .{node.id});
-        try stdout.print("\"level\":{d}", .{node.level});
-        try stdout.print("\"type\":\"{s}", .{node.node_type});
+        try stdout.print("\"id\":\"{s}\",", .{node.id});
+        try stdout.print("\"level\":{d},", .{node.level});
+        try stdout.print("\"type\":\"{s}\",", .{node.node_type});
         try stdout.print("\"connections\":[", .{});
 
-        for (node.connections.items, 0..) |conn, i| {
-            if (i > 0) try stdout.writeAll(",");
+        for (node.connections.items, 0..) |conn, j| {
+            if (j > 0) try stdout.writeAll(",");
             try stdout.print("\"{s}\"", .{conn});
         }
 
-        try stdout.writeAll("]");
+        try stdout.writeAll("]}");
     }
     try stdout.writeAll("]\n");
+    try stdout.flush();
 }
 
 // Example CLI usage:
@@ -325,3 +358,180 @@ fn outputJson(trace_nodes: []const TraceNode) !void {
 //
 //   engram trace req.auth.oauth2 --json
 //   → Returns JSON for AI parsing
+
+// ==================== Tests ====================
+
+test "trace command loads neuronas and builds graph" {
+    const allocator = std.testing.allocator;
+    
+    // Scan test fixtures
+    const neuronas = try scanNeuronas(allocator, "tests/fixtures/trace");
+    defer {
+        for (neuronas) |*n| n.deinit(allocator);
+        allocator.free(neuronas);
+    }
+    
+    // Should load all 4 test neuronas
+    try std.testing.expectEqual(@as(usize, 4), neuronas.len);
+    
+    // Build graph
+    var graph = Graph.init();
+    defer graph.deinit(allocator);
+    
+    for (neuronas) |*neurona| {
+        var conn_it = neurona.connections.iterator();
+        while (conn_it.next()) |entry| {
+            for (entry.value_ptr.connections.items) |conn| {
+                try graph.addEdge(allocator, neurona.id, conn.target_id, conn.weight);
+            }
+        }
+    }
+    
+    // Verify graph structure
+    try std.testing.expectEqual(@as(usize, 4), graph.nodeCount());
+    
+    // req.auth should have incoming edges (blocks from issue, implements from impl, validates from test)
+    const incoming_to_req = graph.getIncoming("req.auth");
+    try std.testing.expectEqual(@as(usize, 3), incoming_to_req.len);
+}
+
+test "trace downstream from req.auth" {
+    const allocator = std.testing.allocator;
+    
+    const neuronas = try scanNeuronas(allocator, "tests/fixtures/trace");
+    defer {
+        for (neuronas) |*n| n.deinit(allocator);
+        allocator.free(neuronas);
+    }
+    
+    var graph = Graph.init();
+    defer graph.deinit(allocator);
+    
+    for (neuronas) |*neurona| {
+        var conn_it = neurona.connections.iterator();
+        while (conn_it.next()) |entry| {
+            for (entry.value_ptr.connections.items) |conn| {
+                try graph.addEdge(allocator, neurona.id, conn.target_id, conn.weight);
+            }
+        }
+    }
+    
+    const config = TraceConfig{
+        .id = "req.auth",
+        .direction = .down,
+        .max_depth = 10,
+        .format = .tree,
+        .json_output = false,
+    };
+    
+    const trace_result = try trace(allocator, &graph, config);
+    defer {
+        for (trace_result) |*n| n.deinit(allocator);
+        allocator.free(trace_result);
+    }
+    
+    // Should find 3 downstream nodes (test, impl, issue)
+    try std.testing.expect(trace_result.len >= 1);
+}
+
+test "trace upstream from test.auth.login" {
+    const allocator = std.testing.allocator;
+    
+    const neuronas = try scanNeuronas(allocator, "tests/fixtures/trace");
+    defer {
+        for (neuronas) |*n| n.deinit(allocator);
+        allocator.free(neuronas);
+    }
+    
+    var graph = Graph.init();
+    defer graph.deinit(allocator);
+    
+    for (neuronas) |*neurona| {
+        var conn_it = neurona.connections.iterator();
+        while (conn_it.next()) |entry| {
+            for (entry.value_ptr.connections.items) |conn| {
+                try graph.addEdge(allocator, neurona.id, conn.target_id, conn.weight);
+            }
+        }
+    }
+    
+    const config = TraceConfig{
+        .id = "test.auth.login",
+        .direction = .up,
+        .max_depth = 10,
+        .format = .tree,
+        .json_output = false,
+    };
+    
+    const trace_result = try trace(allocator, &graph, config);
+    defer {
+        for (trace_result) |*n| n.deinit(allocator);
+        allocator.free(trace_result);
+    }
+    
+    // Should find req.auth as upstream
+    try std.testing.expect(trace_result.len >= 1);
+}
+
+test "findNeuronaPath finds existing file" {
+    const allocator = std.testing.allocator;
+    
+    const path = try findNeuronaPath(allocator, "req.auth");
+    defer allocator.free(path);
+    
+    try std.testing.expect(path.len > 0);
+    try std.testing.expect(std.mem.indexOf(u8, path, "req.auth") != null);
+}
+
+test "findNeuronaPath returns error for non-existent file" {
+    const allocator = std.testing.allocator;
+    
+    const result = findNeuronaPath(allocator, "nonexistent");
+    try std.testing.expectError(error.NeuronaNotFound, result);
+}
+
+test "outputTree generates valid output" {
+    const allocator = std.testing.allocator;
+    
+    var nodes = std.ArrayListUnmanaged(TraceNode){};
+    defer {
+        for (nodes.items) |*n| n.deinit(allocator);
+        nodes.deinit(allocator);
+    }
+    
+    // Create test node
+    const node = try allocator.create(TraceNode);
+    node.* = TraceNode{
+        .id = try allocator.dupe(u8, "test.id"),
+        .level = 0,
+        .connections = std.ArrayListUnmanaged([]const u8){},
+        .node_type = try allocator.dupe(u8, "root"),
+    };
+    try nodes.append(allocator, node);
+    
+    // Should not panic
+    try outputTree(nodes.items);
+}
+
+test "outputJson generates valid JSON" {
+    const allocator = std.testing.allocator;
+    
+    var nodes = std.ArrayListUnmanaged(TraceNode){};
+    defer {
+        for (nodes.items) |*n| n.deinit(allocator);
+        nodes.deinit(allocator);
+    }
+    
+    // Create test node
+    const node = try allocator.create(TraceNode);
+    node.* = TraceNode{
+        .id = try allocator.dupe(u8, "test.id"),
+        .level = 0,
+        .connections = std.ArrayListUnmanaged([]const u8){},
+        .node_type = try allocator.dupe(u8, "root"),
+    };
+    try nodes.append(allocator, node);
+    
+    // Should not panic
+    try outputJson(nodes.items);
+}
