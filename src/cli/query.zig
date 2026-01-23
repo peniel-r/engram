@@ -4,8 +4,9 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Neurona = @import("storage").readNeurona;
-const scanNeuronas = @import("storage").scanNeuronas;
+const Neurona = @import("../core/neurona.zig").Neurona;
+const NeuronaType = @import("../core/neurona.zig").NeuronaType;
+const storage = @import("../root.zig").storage;
 
 /// Query configuration
 pub const QueryConfig = struct {
@@ -53,16 +54,16 @@ pub const TagFilter = struct {
     }
 };
 
+pub const ConnectionOperator = enum {
+    @"and",
+    @"or",
+    not,
+};
+
 pub const ConnectionFilter = struct {
     connection_type: ?[]const u8 = null,
     target_id: ?[]const u8 = null,
-    operator: ConnectionOperator = .and,
-
-    pub const ConnectionOperator = enum {
-        and,
-        or,
-    not,
-    };
+    operator: ConnectionOperator = .@"and",
 };
 
 pub const FieldFilter = struct {
@@ -81,7 +82,7 @@ pub const FieldFilter = struct {
 /// Main command handler
 pub fn execute(allocator: Allocator, config: QueryConfig) !void {
     // Step 1: Scan all Neuronas
-    const neuronas = try scanNeuronas(allocator, "neuronas");
+    const neuronas = try storage.scanNeuronas(allocator, "neuronas");
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);
@@ -98,33 +99,38 @@ pub fn execute(allocator: Allocator, config: QueryConfig) !void {
     }
 
     // Step 2: Apply filters
-    var results = std.ArrayList(*const Neurona).init(allocator);
-    defer {
-        for (results.items) |*n| n.deinit(allocator);
-        allocator.free(results);
-    }
+    var results = std.ArrayListUnmanaged(*const Neurona){};
+    defer results.deinit(allocator);
 
     var count: usize = 0;
 
     for (neuronas) |*neurona| {
-        if (matchesFilters(neurona.*, config.filters)) {
-            try results.append(neurona);
+        if (matchesFilters(neurona, config.filters)) {
+            try results.append(allocator, neurona);
             count += 1;
 
             if (config.limit) |limit| {
-                if (count >= limit.*) break;
+                if (count >= limit) break;
             }
         }
     }
 
     // Step 3: Sort results (by id for now)
-    const sorted = sortResults(allocator, results.toOwnedSlice());
+    const sorted = try results.toOwnedSlice(allocator);
+    defer allocator.free(sorted);
 
-    // Step 4: Output
+    // Step 4: Output - Dereference pointers for output
+    var output_neuronas = std.ArrayListUnmanaged(Neurona){};
+    defer output_neuronas.deinit(allocator);
+    
+    for (sorted) |n| {
+        try output_neuronas.append(allocator, n.*);
+    }
+    
     if (config.json_output) {
-        try outputJson(allocator, sorted);
+        try outputJson(allocator, output_neuronas.items);
     } else {
-        try outputList(allocator, sorted);
+        try outputList(allocator, output_neuronas.items);
     }
 }
 
@@ -141,10 +147,10 @@ fn matchesFilters(neurona: *const Neurona, filters: []const QueryFilter) bool {
 /// Match a single filter
 fn matchesFilter(neurona: *const Neurona, filter: QueryFilter) bool {
     return switch (filter) {
-        .type_filter => |tf| matchesTypeFilter(neurona.*, tf),
-        .tag_filter => |tf| matchesTagFilter(neurona.*, tf),
-        .connection_filter => |cf| matchesConnectionFilter(neurona.*, cf),
-        .field_filter => |ff| matchesFieldFilter(neurona.*, ff),
+        .type_filter => |tf| matchesTypeFilter(neurona, tf),
+        .tag_filter => |tf| matchesTagFilter(neurona, tf),
+        .connection_filter => |cf| matchesConnectionFilter(neurona, cf),
+        .field_filter => |ff| matchesFieldFilter(neurona, ff),
     };
 }
 
@@ -164,15 +170,10 @@ fn matchesTypeFilter(neurona: *const Neurona, filter: TypeFilter) bool {
 /// Match tag filter
 fn matchesTagFilter(neurona: *const Neurona, filter: TagFilter) bool {
     for (filter.tags.items) |tag| {
-        var found = false;
         for (neurona.tags.items) |neurona_tag| {
             if (std.mem.eql(u8, neurona_tag, tag)) {
-                found = true;
-                break;
+                return filter.include;
             }
-        }
-        if (found) {
-            return filter.include;
         }
     }
     return !filter.include;
@@ -181,43 +182,45 @@ fn matchesTagFilter(neurona: *const Neurona, filter: TagFilter) bool {
 /// Match connection filter
 fn matchesConnectionFilter(neurona: *const Neurona, filter: ConnectionFilter) bool {
     var conn_it = neurona.connections.iterator();
+    var has_match = false;
 
     while (conn_it.next()) |entry| {
-        for (entry.value_ptr.connections.items) |conn| {
-            var matches = matchesSingleConnection(conn, filter);
+        for (entry.value_ptr.connections.items) |*conn| {
+            const conn_matches = matchesSingleConnection(conn, filter);
 
-            if (!matches and filter.operator == .and) {
+            if (conn_matches and filter.operator == .@"and") {
+                has_match = true;
                 break; // At least one match required
             }
 
-            if (matches and filter.operator == .not) {
+            if (conn_matches and filter.operator == .not) {
                 return false; // Found a match when we should NOT match
             }
+            
+            if (conn_matches) has_match = true;
         }
     }
 
     return switch (filter.operator) {
-        .or => matches, // Found at least one match
-        .not => !matches,
-        .and => matches,
+        .@"or" => has_match, // Found at least one match
+        .not => !has_match,
+        .@"and" => has_match,
     };
 }
 
 /// Match a single connection
-fn matchesSingleConnection(conn: *const Neurona, filter: ConnectionFilter) bool {
-    var matches_type = false;
-    var matches_target = false;
-
+fn matchesSingleConnection(conn: *const @import("../core/neurona.zig").Connection, filter: ConnectionFilter) bool {
     if (filter.connection_type) |ct| {
-        matches_type = std.mem.eql(u8, @tagName(conn.connection_type), ct);
+        const type_name = @tagName(conn.connection_type);
+        if (std.mem.eql(u8, type_name, ct)) {
+            return true;
+        }
     }
 
     if (filter.target_id) |tid| {
-        matches_target = std.mem.eql(u8, conn.target_id, tid);
-    }
-
-    if (matches_type or matches_target) {
-        return true;
+        if (std.mem.eql(u8, conn.target_id, tid)) {
+            return true;
+        }
     }
 
     return false;
@@ -228,22 +231,22 @@ fn matchesFieldFilter(neurona: *const Neurona, filter: FieldFilter) bool {
     // For now, just check basic fields (id, title, type, status)
     const value = filter.value orelse return false;
 
-    return switch (filter.field) {
-        "id" => if (value) |v| std.mem.eql(u8, neurona.id, v) else false,
-        "title" => if (value) |v| std.mem.indexOf(u8, neurona.title, v) != null else false,
-        "type" => if (value) |v| {
-            const type_str = @tagName(neurona.type);
-            std.mem.eql(u8, type_str, v);
-        } else false,
-        else => false,
-    };
+    if (std.mem.eql(u8, filter.field, "id")) {
+        return std.mem.eql(u8, neurona.id, value);
+    } else if (std.mem.eql(u8, filter.field, "title")) {
+        return std.mem.indexOf(u8, neurona.title, value) != null;
+    } else if (std.mem.eql(u8, filter.field, "type")) {
+        const type_str = @tagName(neurona.type);
+        return std.mem.eql(u8, type_str, value);
+    } else {
+        return false;
+    }
 }
 
 /// Sort results by ID
-fn sortResults(allocator: Allocator, neuras: []*const Neurona) ![]const Neurona {
+fn sortResults(allocator: Allocator, neuras: *[]*const Neurona) ![]const Neurona {
     // Simple bubble sort for small lists
     // For production, use std.sort
-    _ = allocator;
 
     const count = neuras.len;
     for (0..@min(3, count - 2)) |i| {
@@ -256,23 +259,27 @@ fn sortResults(allocator: Allocator, neuras: []*const Neurona) ![]const Neurona 
         }
     }
 
-    return try allocator.dupe(*const Neurona, neuras);
+    return try allocator.dupe(*const Neurona, neuras.*);
 }
 
 /// Output list format
 fn outputList(allocator: Allocator, neuras: []const Neurona) !void {
-    const stdout = std.io.getStdOut().writer();
+    _ = allocator;
+    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
 
     try stdout.writeAll("\n🔍 Search Results\n");
-    try stdout.writeByteNTimes('=', 40);
+    for (0..40) |_| try stdout.writeByte('=');
     try stdout.writeAll("\n");
 
-    if (neuronas.len == 0) {
+    if (neuras.len == 0) {
         try stdout.writeAll("No results found matching criteria\n");
-    return;
+        return;
     }
 
-    for (neuronas, 0..@min(10, neuronas.len - 1)) |neurona| {
+    const display_count = @min(10, neuras.len);
+    for (neuras[0..display_count]) |neurona| {
         try stdout.print("  {s}\n", .{neurona.id});
         try stdout.print("    Type: {s}\n", .{@tagName(neurona.type)});
         try stdout.print("    Title: {s}\n", .{neurona.title});
@@ -288,28 +295,33 @@ fn outputList(allocator: Allocator, neuras: []const Neurona) !void {
         }
     }
 
-    try stdout.print("\n  Found {d} results\n", .{neuronas.len});
+    try stdout.print("\n  Found {d} results\n", .{neuras.len});
 }
 
 /// JSON output for AI
 fn outputJson(allocator: Allocator, neuras: []const Neurona) !void {
-    const stdout = std.io.getStdOut().writer();
+    _ = allocator;
+    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
 
     try stdout.writeAll("[");
-    for (neuronas, 0..) |neurona| {
-        if (neurona.id > 0) try stdout.writeAll(",");
-        try stdout.print("\"id\":\"{s}", .{neurona.id});
-        try stdout.print("\"title\":\"{s}\"", .{neurona.title});
-        try stdout.print("\"type\":\"{s}\"", .{@tagName(neurona.type)});
+    for (neuras, 0..) |neurona, i| {
+        if (i > 0) try stdout.writeAll(",");
+        try stdout.print("\"id\":\"{s}\",", .{neurona.id});
+        try stdout.print("\"title\":\"{s}\",", .{neurona.title});
+        try stdout.print("\"type\":\"{s}\",", .{@tagName(neurona.type)});
 
         try stdout.print("\"tags\":[", .{});
 
-        for (neurona.tags.items, 0..) |tag, i| {
-            if (i > 0) try stdout.writeAll(",");
+        var tag_i: usize = 0;
+        for (neurona.tags.items) |tag| {
+            if (tag_i > 0) try stdout.writeAll(",");
             try stdout.print("\"{s}\"", .{tag});
+            tag_i += 1;
         }
 
-        try stdout.writeAll("]");
+        try stdout.writeAll("}");
     }
     try stdout.writeAll("]\n");
 }

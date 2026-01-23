@@ -13,6 +13,7 @@ pub const storage = struct {
     pub const isNeuronaFile = @import("storage/filesystem.zig").isNeuronaFile;
     pub const readNeurona = @import("storage/filesystem.zig").readNeurona;
     pub const writeNeurona = @import("storage/filesystem.zig").writeNeurona;
+    pub const scanNeuronas = @import("storage/filesystem.zig").scanNeuronas;
 };
 
 // Re-export utils

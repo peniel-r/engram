@@ -18,11 +18,11 @@ pub const ShowConfig = struct {
 
 /// Main command handler
 pub fn execute(allocator: Allocator, config: ShowConfig) !void {
-    // Step 1: Find and read Neurona file
+    // Step1: Find and read Neurona file
     const filepath = try findNeuronaPath(allocator, config.id);
     defer allocator.free(filepath);
 
-    const neurona = try readNeurona(allocator, filepath);
+    var neurona = try readNeurona(allocator, filepath);
     defer neurona.deinit(allocator);
 
     // Step 2: Read body content
@@ -85,7 +85,9 @@ fn readBodyContent(allocator: Allocator, filepath: []const u8) ![]const u8 {
 
 /// Human-friendly output
 fn outputHuman(neurona: *const Neurona, body: []const u8, show_connections: bool, show_body: bool) !void {
-    const stdout = std.io.getStdOut().writer();
+    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
 
     // Header
     try stdout.writeAll("\n");
@@ -122,25 +124,27 @@ fn outputHuman(neurona: *const Neurona, body: []const u8, show_connections: bool
     // Body
     if (show_body) {
         try stdout.writeAll("\n");
-        try stdout.writeByteNTimes('=', 50);
+        for (0..50) |_| try stdout.writeByte('=');
         try stdout.writeAll("\n");
         try stdout.writeAll(body);
         try stdout.writeAll("\n");
-        try stdout.writeByteNTimes('=', 50);
+        for (0..50) |_| try stdout.writeByte('=');
         try stdout.writeAll("\n");
     }
 }
 
 /// JSON output for AI
 fn outputJson(neurona: *const Neurona, filepath: []const u8) !void {
-    const stdout = std.io.getStdOut().writer();
+    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
 
     try stdout.writeAll("{");
     try stdout.print("\"success\":true,", .{});
-    try stdout.print("\"id\":\"{s}\", .{neurona.id});
-    try stdout.print("\"title\":\"{s}\", .{neurona.title});
-    try stdout.print("\"type\":\"{s}\", .{@tagName(neurona.type)});
-    try stdout.print("\"filepath\":\"{s}\", .{filepath});
+    try stdout.print("\"id\":\"{s}\",", .{neurona.id});
+    try stdout.print("\"title\":\"{s}\",", .{neurona.title});
+    try stdout.print("\"type\":\"{s}\",", .{@tagName(neurona.type)});
+    try stdout.print("\"filepath\":\"{s}\",", .{filepath});
     try stdout.print("\"tags\":{d},", .{neurona.tags.items.len});
     try stdout.print("\"connections\":{d}", .{neurona.connections.count()});
     try stdout.writeAll("}\n");

@@ -7,7 +7,7 @@ const Allocator = std.mem.Allocator;
 const NeuronaType = @import("../core/neurona.zig").NeuronaType;
 const Neurona = @import("../core/neurona.zig").Neurona;
 const Graph = @import("../core/graph.zig").Graph;
-const scanNeuronas = @import("../storage/filesystem.zig").scanNeuronas;
+const storage = @import("../root.zig").storage;
 
 /// Sync configuration
 pub const SyncConfig = struct {
@@ -19,19 +19,23 @@ pub const SyncConfig = struct {
 /// Main command handler
 pub fn execute(allocator: Allocator, config: SyncConfig) !void {
     if (config.verbose) {
-        const stdout = std.io.getStdOut().writer();
+        var stdout_buffer: [512]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
         try stdout.print("Scanning directory: {s}\n", .{config.directory});
     }
 
     // Step 1: Scan all Neuronas
-    const neuronas = try scanNeuronas(allocator, config.directory);
+    const neuronas = try storage.scanNeuronas(allocator, config.directory);
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);
     }
 
     if (config.verbose) {
-        const stdout = std.io.getStdOut().writer();
+        var stdout_buffer: [512]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
         try stdout.print("Found {d} Neuronas\n", .{neuronas.len});
     }
 
@@ -43,30 +47,32 @@ pub fn execute(allocator: Allocator, config: SyncConfig) !void {
 
 /// Build graph index from Neuronas
 fn buildGraphIndex(allocator: Allocator, neuronas: []const Neurona, verbose: bool) !void {
-    var graph = try Graph.init(allocator);
+    var graph = Graph.init();
     defer graph.deinit(allocator);
 
     if (verbose) {
-        const stdout = std.io.getStdOut().writer();
+        var stdout_buffer: [512]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
         try stdout.writeAll("Building graph index...\n");
     }
 
     // Add all Neuronas to graph
     for (neuronas) |*neurona| {
-        try graph.addNode(neurona.id, neurona);
-
-        // Add connections
+        // Add connections - edges automatically create nodes
         var conn_it = neurona.connections.iterator();
         while (conn_it.next()) |entry| {
             for (entry.value_ptr.connections.items) |conn| {
-                try graph.addEdge(neurona.id, conn.target_id, conn.weight);
+                try graph.addEdge(allocator, neurona.id, conn.target_id, conn.weight);
             }
         }
     }
 
     if (verbose) {
-        const stdout = std.io.getStdOut().writer();
-        try stdout.print("Graph built: {d} nodes\n", .{graph.count()});
+        var stdout_buffer: [512]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
+        try stdout.print("Graph built: {d} nodes\n", .{graph.nodeCount()});
         try stdout.print("Index saved to .activations/graph.idx\n", .{});
     }
 
@@ -78,10 +84,12 @@ pub fn showStats(allocator: Allocator, graph: *Graph) !void {
     _ = allocator; // Used in function signature but not in this simple version
     _ = graph; // TODO: Implement full statistics
 
-    const stdout = std.io.getStdOut().writer();
+    var stdout_buffer: [512]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
 
     try stdout.writeAll("\n📊 Graph Statistics\n");
-    try stdout.writeByteNTimes('=', 20);
+    for (0..20) |_| try stdout.writeByte('=');
     try stdout.writeAll("\n");
     // TODO: Implement count() and totalEdges() on Graph
     try stdout.writeAll("  Total Nodes: [requires graph.count()]\n");

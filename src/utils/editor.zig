@@ -6,7 +6,7 @@ const Allocator = std.mem.Allocator;
 /// Open file in system's default editor
 /// Uses $EDITOR environment variable if set, otherwise uses platform default
 pub fn open(allocator: Allocator, path: []const u8) !void {
-    const editor = getEditorCommand(allocator);
+    const editor = try getEditorCommand(allocator);
     defer allocator.free(editor);
 
     const command = try buildCommand(allocator, editor, path);
@@ -70,13 +70,16 @@ fn runWindows(allocator: Allocator, command: []const u8) !void {
         allocator.free(argv);
     }
 
-    const child = try std.process.Child.run(.{
+    const result = try std.process.Child.run(.{
         .allocator = allocator,
         .argv = argv,
     });
-    defer child.deinit();
+    defer {
+        allocator.free(result.stdout);
+        allocator.free(result.stderr);
+    }
 
-    _ = child.term; // Wait for completion
+    _ = result.term; // Wait for completion
 }
 
 /// Run command on Unix (Linux, macOS)
@@ -84,13 +87,16 @@ fn runUnix(allocator: Allocator, command: []const u8) !void {
     // Use sh -c to execute command
     const argv = [_][]const u8{ "sh", "-c", command };
 
-    const child = try std.process.Child.run(.{
+    const result = try std.process.Child.run(.{
         .allocator = allocator,
         .argv = &argv,
     });
-    defer child.deinit();
+    defer {
+        allocator.free(result.stdout);
+        allocator.free(result.stderr);
+    }
 
-    _ = child.term; // Wait for completion
+    _ = result.term; // Wait for completion
 }
 
 /// Parse command string into argv array
