@@ -6,6 +6,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const editor = @import("../utils/editor.zig");
 const id_gen = @import("../utils/id_generator.zig");
+const timestamp = @import("../utils/timestamp.zig");
 
 /// ALM-specific Neurona types for Engram
 pub const NeuronaType = enum {
@@ -14,7 +15,7 @@ pub const NeuronaType = enum {
     issue,
     artifact,
     feature,
-    
+
     pub fn fromString(s: []const u8) ?NeuronaType {
         if (std.mem.eql(u8, s, "requirement")) return .requirement;
         if (std.mem.eql(u8, s, "test") or std.mem.eql(u8, s, "test_case")) return .test_case;
@@ -23,7 +24,7 @@ pub const NeuronaType = enum {
         if (std.mem.eql(u8, s, "feature")) return .feature;
         return null;
     }
-    
+
     pub fn toString(self: NeuronaType) []const u8 {
         return switch (self) {
             .requirement => "requirement",
@@ -39,7 +40,7 @@ pub const NeuronaType = enum {
 pub const NewConfig = struct {
     neurona_type: NeuronaType,
     title: []const u8,
-    
+
     // Optional fields
     tags: []const []const u8 = &[_][]const u8{},
     assignee: ?[]const u8 = null,
@@ -47,7 +48,7 @@ pub const NewConfig = struct {
     parent: ?[]const u8 = null,
     validates: ?[]const u8 = null, // For test_case
     blocks: ?[]const u8 = null, // For issue
-    
+
     // Behavior flags
     interactive: bool = true,
     json_output: bool = false,
@@ -89,12 +90,12 @@ fn getTemplate(type_str: []const u8) TemplateConfig {
             },
         };
     }
-    
+
     if (std.mem.eql(u8, type_str, "test_case")) {
         return TemplateConfig{
             .type_name = "test_case",
             .tier = 2,
-            .default_tags = &[_][]const u8{"test", "automated"},
+            .default_tags = &[_][]const u8{ "test", "automated" },
             .required_context = &[_][]const u8{
                 "framework",
                 "status",
@@ -114,7 +115,7 @@ fn getTemplate(type_str: []const u8) TemplateConfig {
             },
         };
     }
-    
+
     if (std.mem.eql(u8, type_str, "issue")) {
         return TemplateConfig{
             .type_name = "issue",
@@ -139,7 +140,7 @@ fn getTemplate(type_str: []const u8) TemplateConfig {
             },
         };
     }
-    
+
     if (std.mem.eql(u8, type_str, "artifact")) {
         return TemplateConfig{
             .type_name = "artifact",
@@ -161,7 +162,7 @@ fn getTemplate(type_str: []const u8) TemplateConfig {
             },
         };
     }
-    
+
     if (std.mem.eql(u8, type_str, "feature")) {
         return TemplateConfig{
             .type_name = "feature",
@@ -184,7 +185,7 @@ fn getTemplate(type_str: []const u8) TemplateConfig {
             },
         };
     }
-    
+
     return TemplateConfig{
         .type_name = "unknown",
         .tier = 2,
@@ -199,17 +200,13 @@ fn getTemplate(type_str: []const u8) TemplateConfig {
 pub fn execute(allocator: Allocator, config: NewConfig) !void {
     // Step 1: Generate ID with type prefix
     const prefix = getTypePrefix(config.neurona_type);
-    const neurona_id = try id_gen.fromTitleWithPrefix(
-        allocator,
-        prefix,
-        config.title
-    );
+    const neurona_id = try id_gen.fromTitleWithPrefix(allocator, prefix, config.title);
     defer allocator.free(neurona_id);
-    
+
     // Step 2: Get template config
     const type_str = config.neurona_type.toString();
     const template = getTemplate(type_str);
-    
+
     // Step 3: Gather metadata
     var context = std.StringHashMap([]const u8).init(allocator);
     defer {
@@ -219,47 +216,36 @@ pub fn execute(allocator: Allocator, config: NewConfig) !void {
         }
         context.deinit();
     }
-    
+
     if (config.interactive) {
         try gatherContextInteractive(allocator, &context, config, template);
     } else {
         try gatherContextAutomatic(allocator, &context, config, template);
     }
-    
+
     // Step 4: Build connections based on type
     var connections = std.ArrayList(Connection){};
     try connections.ensureTotalCapacity(allocator, 10);
     defer connections.deinit(allocator);
-    
+
     try buildConnections(allocator, &connections, config);
-    
+
     // Step 5: Generate file content
-    const content = try generateFileContent(
-        allocator,
-        neurona_id,
-        config,
-        template,
-        context,
-        connections.items
-    );
+    const content = try generateFileContent(allocator, neurona_id, config, template, context, connections.items);
     defer allocator.free(content);
-    
+
     // Step 6: Write to disk
-    const filename = try std.fmt.allocPrint(
-        allocator,
-        "neuronas/{s}.md",
-        .{neurona_id}
-    );
+    const filename = try std.fmt.allocPrint(allocator, "neuronas/{s}.md", .{neurona_id});
     defer allocator.free(filename);
-    
+
     try writeNeuronaFile(filename, content);
-    
+
     // Step 7: Output result
     if (config.json_output) {
         try outputJson(neurona_id, filename, config.neurona_type);
     } else {
         try outputHuman(neurona_id, filename, config, connections.items);
-        
+
         if (config.interactive) {
             _ = try editor.open(allocator, filename);
         }
@@ -274,11 +260,7 @@ const Connection = struct {
 };
 
 /// Build connections based on ALM relationships
-fn buildConnections(
-    allocator: Allocator,
-    list: *std.ArrayList(Connection),
-    config: NewConfig
-) !void {
+fn buildConnections(allocator: Allocator, list: *std.ArrayList(Connection), config: NewConfig) !void {
     switch (config.neurona_type) {
         .requirement => {
             if (config.parent) |parent_id| {
@@ -289,7 +271,7 @@ fn buildConnections(
                 });
             }
         },
-        
+
         .test_case => {
             if (config.validates) |req_id| {
                 try list.append(allocator, .{
@@ -299,7 +281,7 @@ fn buildConnections(
                 });
             }
         },
-        
+
         .issue => {
             if (config.blocks) |blocked_id| {
                 try list.append(allocator, .{
@@ -309,12 +291,12 @@ fn buildConnections(
                 });
             }
         },
-        
+
         .artifact => {
             // Artifacts typically link via --implements flag
             // Not implemented in this simplified version
         },
-        
+
         .feature => {
             // Features are typically parents, not children
         },
@@ -322,15 +304,10 @@ fn buildConnections(
 }
 
 /// Interactive context gathering for humans
-fn gatherContextInteractive(
-    allocator: Allocator,
-    context: *std.StringHashMap([]const u8),
-    config: NewConfig,
-    template: TemplateConfig
-) !void {
+fn gatherContextInteractive(allocator: Allocator, context: *std.StringHashMap([]const u8), config: NewConfig, template: TemplateConfig) !void {
     // For now, skip interactive stdin reading due to API compatibility issues
     // In production, would read from stdin here
-    
+
     // Set required context fields
     for (template.required_context) |field| {
         if (shouldAutoFill(field, config)) |value| {
@@ -339,7 +316,7 @@ fn gatherContextInteractive(
             try context.put(field, owned);
             continue;
         }
-        
+
         // Use default for now instead of interactive input
         const default = getDefaultForField(field, config.neurona_type);
         const owned = try allocator.dupe(u8, default);
@@ -348,45 +325,33 @@ fn gatherContextInteractive(
 }
 
 /// Automatic context gathering for AI/automation
-fn gatherContextAutomatic(
-    allocator: Allocator,
-    context: *std.StringHashMap([]const u8),
-    config: NewConfig,
-    template: TemplateConfig
-) !void {
+fn gatherContextAutomatic(allocator: Allocator, context: *std.StringHashMap([]const u8), config: NewConfig, template: TemplateConfig) !void {
     // Fill required fields with config or defaults
     for (template.required_context) |field| {
         const value = if (shouldAutoFill(field, config)) |v|
             v
         else
             getDefaultForField(field, config.neurona_type);
-        
+
         const owned = try allocator.dupe(u8, value);
         try context.put(field, owned);
     }
 }
 
 /// Generate complete file content with YAML frontmatter
-fn generateFileContent(
-    allocator: Allocator,
-    id: []const u8,
-    config: NewConfig,
-    template: TemplateConfig,
-    context: std.StringHashMap([]const u8),
-    connections: []const Connection
-) ![]u8 {
+fn generateFileContent(allocator: Allocator, id: []const u8, config: NewConfig, template: TemplateConfig, context: std.StringHashMap([]const u8), connections: []const Connection) ![]u8 {
     var content = std.ArrayList(u8){};
     try content.ensureTotalCapacity(allocator, 1024);
     errdefer content.deinit(allocator);
-    
+
     const writer = content.writer(allocator);
-    
+
     // Write YAML frontmatter
     try writer.writeAll("---\n");
     try writer.print("id: {s}\n", .{id});
     try writer.print("title: {s}\n", .{config.title});
     try writer.print("type: {s}\n", .{config.neurona_type.toString()});
-    
+
     // Write tags
     try writer.writeAll("tags: [");
     for (template.default_tags, 0..) |tag, i| {
@@ -398,7 +363,7 @@ fn generateFileContent(
         try writer.print("\"{s}\"", .{tag});
     }
     try writer.writeAll("]\n\n");
-    
+
     // Write connections
     if (connections.len > 0) {
         try writer.writeAll("connections:\n");
@@ -413,30 +378,30 @@ fn generateFileContent(
         }
         try writer.writeAll("\n");
     }
-    
+
     // Write context
     try writer.writeAll("context:\n");
     var ctx_it = context.iterator();
     while (ctx_it.next()) |entry| {
-        try writer.print("  {s}: {s}\n", .{entry.key_ptr.*, entry.value_ptr.*});
+        try writer.print("  {s}: {s}\n", .{ entry.key_ptr.*, entry.value_ptr.* });
     }
-    
+
     // Write metadata
-    const now = try getCurrentTimestamp(allocator);
+    const now = try timestamp.getCurrentTimestamp(allocator);
     defer allocator.free(now);
-    
+
     try writer.print("\nupdated: \"{s}\"\n", .{now});
     try writer.writeAll("language: en\n");
     try writer.writeAll("---\n\n");
-    
+
     // Write content sections
     try writer.print("# {s}\n\n", .{config.title});
-    
+
     for (template.content_sections) |section| {
         try writer.print("## {s}\n\n", .{section});
         try writer.writeAll("[Write content here]\n\n");
     }
-    
+
     return content.toOwnedSlice(allocator);
 }
 
@@ -448,38 +413,29 @@ fn writeNeuronaFile(path: []const u8, content: []const u8) !void {
 }
 
 /// Human-friendly output
-fn outputHuman(
-    id: []const u8,
-    filepath: []const u8,
-    config: NewConfig,
-    connections: []const Connection
-) !void {
+fn outputHuman(id: []const u8, filepath: []const u8, config: NewConfig, connections: []const Connection) !void {
     var stdout_buffer: [512]u8 = undefined;
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     const stdout = &stdout_writer.interface;
-    
+
     try stdout.print("✓ Created: {s}\n", .{filepath});
     try stdout.print("  ID: {s}\n", .{id});
     try stdout.print("  Type: {s}\n", .{config.neurona_type.toString()});
-    
+
     if (connections.len > 0) {
         try stdout.writeAll("  Connections:\n");
         for (connections) |conn| {
-            try stdout.print("    {s} → {s}\n", .{conn.type, conn.target});
+            try stdout.print("    {s} → {s}\n", .{ conn.type, conn.target });
         }
     }
-    
+
     if (config.interactive) {
         try stdout.writeAll("  Opening in $EDITOR...\n");
     }
 }
 
 /// JSON output for AI
-fn outputJson(
-    id: []const u8,
-    filepath: []const u8,
-    neurona_type: NeuronaType
-) !void {
+fn outputJson(id: []const u8, filepath: []const u8, neurona_type: NeuronaType) !void {
     var stdout_buffer: [512]u8 = undefined;
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     const stdout = &stdout_writer.interface;
@@ -546,13 +502,8 @@ fn getDefaultForField(field: []const u8, neurona_type: NeuronaType) []const u8 {
     if (std.mem.eql(u8, field, "created")) return "[timestamp]";
     if (std.mem.eql(u8, field, "runtime")) return "unknown";
     if (std.mem.eql(u8, field, "file_path")) return "";
-    
-    return "unspecified";
-}
 
-fn getCurrentTimestamp(allocator: Allocator) ![]u8 {
-    // Simplified - real impl would use std.time
-    return try allocator.dupe(u8, "2026-01-21");
+    return "unspecified";
 }
 
 // Example CLI usage:

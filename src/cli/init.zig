@@ -4,6 +4,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Cortex = @import("../core/cortex.zig").Cortex;
+const timestamp = @import("../utils/timestamp.zig");
 
 /// Cortex types supported
 pub const CortexType = enum {
@@ -215,9 +216,8 @@ fn writeCortexConfig(allocator: Allocator, dirs: *const DirectoryStructure, conf
     // Build JSON content
     const semantic_search_str = if (cortex.capabilities.semantic_search) "true" else "false";
     const llm_integration_str = if (cortex.capabilities.llm_integration) "true" else "false";
-    
-    const json_content = try std.fmt.allocPrint(allocator, 
-        "{{\n" ++
+
+    const json_content = try std.fmt.allocPrint(allocator, "{{\n" ++
         "  \"id\": \"{s}\",\n" ++
         "  \"name\": \"{s}\",\n" ++
         "  \"version\": \"{s}\",\n" ++
@@ -232,14 +232,9 @@ fn writeCortexConfig(allocator: Allocator, dirs: *const DirectoryStructure, conf
         "    \"strategy\": \"{s}\",\n" ++
         "    \"embedding_model\": \"{s}\"\n" ++
         "  }}\n" ++
-        "}}\n",
-        .{
-            cortex.id, cortex.name, cortex.version, cortex.spec_version,
-            cortex.capabilities.type, semantic_search_str, llm_integration_str, cortex.capabilities.default_language,
-            cortex.indices.strategy, cortex.indices.embedding_model
-        });
+        "}}\n", .{ cortex.id, cortex.name, cortex.version, cortex.spec_version, cortex.capabilities.type, semantic_search_str, llm_integration_str, cortex.capabilities.default_language, cortex.indices.strategy, cortex.indices.embedding_model });
     defer allocator.free(json_content);
-    
+
     try file.writeAll(json_content);
 
     if (verbose) {
@@ -268,7 +263,7 @@ fn writeReadme(allocator: Allocator, dirs: *const DirectoryStructure, config: In
 
     // Build README content based on type
     const type_details = switch (config.cortex_type) {
-        .zettelkasten => 
+        .zettelkasten =>
         \\This is a **Zettelkasten** Cortex, optimized for:
         \\- Personal knowledge management
         \\- Connected note-taking
@@ -311,8 +306,10 @@ fn writeReadme(allocator: Allocator, dirs: *const DirectoryStructure, config: In
         ,
     };
 
-    const readme_content = try std.fmt.allocPrint(allocator,
-        "# {s}\n\n" ++
+    const ts = try timestamp.getCurrentTimestamp(allocator);
+    defer allocator.free(ts);
+
+    const readme_content = try std.fmt.allocPrint(allocator, "# {s}\n\n" ++
         "This Cortex is managed by **Engram** - a high-performance CLI tool implementing Neurona Knowledge Protocol.\n\n" ++
         "## Overview\n\n" ++
         "**Type**: {s}\n\n" ++
@@ -347,16 +344,7 @@ fn writeReadme(allocator: Allocator, dirs: *const DirectoryStructure, config: In
         "- [Neurona Spec](https://github.com/modelcontextprotocol/)\n" ++
         "- [Engram Documentation](https://github.com/yourusername/Engram)\n\n" ++
         "---\n\n" ++
-        "Created with Engram on {s}\n\n",
-        .{
-            config.name,
-            config.cortex_type.toString(),
-            config.default_language,
-            config.name,
-            config.name,
-            type_details,
-            getCurrentTimestamp()
-        });
+        "Created with Engram on {s}\n\n", .{ config.name, config.cortex_type.toString(), config.default_language, config.name, config.name, type_details, ts });
     defer allocator.free(readme_content);
 
     try file.writeAll(readme_content);
@@ -397,13 +385,6 @@ fn outputSuccess(dirs: *const DirectoryStructure, config: InitConfig) !void {
     std.debug.print("  cd {s}\n", .{dirs.root});
     std.debug.print("  engram new concept \"Hello World\"\n", .{});
     std.debug.print("  engram show hello.world\n\n", .{});
-}
-
-/// Get current timestamp in ISO 8601 format
-fn getCurrentTimestamp() []const u8 {
-    // Simplified implementation - in production use std.time
-    const timestamp = "2026-01-22";
-    return timestamp;
 }
 
 // Unit tests
