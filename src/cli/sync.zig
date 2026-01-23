@@ -107,3 +107,34 @@ pub fn showStats(allocator: Allocator, graph: *Graph) !void {
 //
 //   engram sync --rebuild-index
 //   → Forces graph index rebuild
+
+// ==================== Tests ====================
+
+test "SyncConfig with default values" {
+    const sync_mod = @import("sync.zig");
+    
+    const config = sync_mod.SyncConfig{
+        .directory = "neuronas",
+        .verbose = false,
+        .rebuild_index = true,
+    };
+    
+    try std.testing.expectEqualStrings("neuronas", config.directory);
+    try std.testing.expectEqual(false, config.verbose);
+    try std.testing.expectEqual(true, config.rebuild_index);
+}
+
+test "SyncConfig with custom values" {
+    const sync_mod = @import("sync.zig");
+    
+    const config = sync_mod.SyncConfig{
+        .directory = "custom_neuronas",
+        .verbose = true,
+        .rebuild_index = false,
+    };
+    
+    try std.testing.expectEqualStrings("custom_neuronas", config.directory);
+    try std.testing.expectEqual(true, config.verbose);
+    try std.testing.expectEqual(false, config.rebuild_index);
+}
+

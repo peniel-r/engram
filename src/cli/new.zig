@@ -519,3 +519,80 @@ fn getDefaultForField(field: []const u8, neurona_type: NeuronaType) []const u8 {
 // Human creates issue:
 //   engram new issue "OAuth library broken" --priority 1 --assignee alice
 //   → Creates issue.auth.001.md with metadata pre-filled
+
+// ==================== Tests ====================
+
+test "NeuronaType fromString parses all types" {
+    const test_cases = [_]struct {
+        input: []const u8,
+        expected: ?NeuronaType,
+    }{
+        .{ .input = "requirement", .expected = .requirement },
+        .{ .input = "test", .expected = .test_case },
+        .{ .input = "test_case", .expected = .test_case },
+        .{ .input = "issue", .expected = .issue },
+        .{ .input = "bug", .expected = .issue },
+        .{ .input = "artifact", .expected = .artifact },
+        .{ .input = "code", .expected = .artifact },
+        .{ .input = "feature", .expected = .feature },
+        .{ .input = "invalid", .expected = null },
+    };
+
+    for (test_cases) |tc| {
+        const result = NeuronaType.fromString(tc.input);
+        try std.testing.expectEqual(tc.expected, result);
+    }
+}
+
+test "NeuronaType toString converts all types" {
+    const test_cases = [_]struct {
+        type_val: NeuronaType,
+        expected: []const u8,
+    }{
+        .{ .type_val = .requirement, .expected = "requirement" },
+        .{ .type_val = .test_case, .expected = "test_case" },
+        .{ .type_val = .issue, .expected = "issue" },
+        .{ .type_val = .artifact, .expected = "artifact" },
+        .{ .type_val = .feature, .expected = "feature" },
+    };
+
+    for (test_cases) |tc| {
+        const result = tc.type_val.toString();
+        try std.testing.expectEqualStrings(tc.expected, result);
+    }
+}
+
+test "getTypePrefix returns correct prefixes" {
+    const test_cases = [_]struct {
+        type_val: NeuronaType,
+        expected_prefix: []const u8,
+    }{
+        .{ .type_val = .requirement, .expected_prefix = "req" },
+        .{ .type_val = .test_case, .expected_prefix = "test" },
+        .{ .type_val = .issue, .expected_prefix = "issue" },
+        .{ .type_val = .artifact, .expected_prefix = "art" },
+        .{ .type_val = .feature, .expected_prefix = "feat" },
+    };
+
+    for (test_cases) |tc| {
+        const result = getTypePrefix(tc.type_val);
+        try std.testing.expectEqualStrings(tc.expected_prefix, result);
+    }
+}
+
+test "getTemplate returns correct config for each type" {
+    // Test requirement template
+    const req_template = getTemplate("requirement");
+    try std.testing.expectEqualStrings("requirement", req_template.type_name);
+    try std.testing.expectEqual(@as(usize, 2), req_template.tier);
+    try std.testing.expectEqual(@as(usize, 3), req_template.required_context.len);
+
+    // Test test_case template
+    const test_template = getTemplate("test_case");
+    try std.testing.expectEqualStrings("test_case", test_template.type_name);
+    try std.testing.expectEqual(@as(usize, 2), test_template.tier);
+
+    // Test invalid type (should return default/requirement)
+    const invalid_template = getTemplate("invalid_type");
+    try std.testing.expectEqualStrings("requirement", invalid_template.type_name);
+}

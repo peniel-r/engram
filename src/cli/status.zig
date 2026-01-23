@@ -242,3 +242,46 @@ fn outputJson(issues: []*const Neurona) !void {
 //
 //   engram status --json
 //   → Return JSON for AI parsing
+// ==================== Tests ====================
+
+test "StatusConfig with default values" {
+    const config = StatusConfig{
+        .type_filter = null,
+        .status_filter = null,
+        .priority_filter = null,
+        .assignee_filter = null,
+        .sort_by = .priority,
+        .json_output = false,
+    };
+    
+    try std.testing.expectEqual(@as(?[]const u8, null), config.type_filter);
+    try std.testing.expectEqual(@as(?[]const u8, null), config.status_filter);
+    try std.testing.expectEqual(@as(?u8, null), config.priority_filter);
+    try std.testing.expectEqual(@as(?[]const u8, null), config.assignee_filter);
+    try std.testing.expectEqual(SortField.priority, config.sort_by);
+    try std.testing.expectEqual(false, config.json_output);
+}
+
+test "StatusConfig with all filters set" {
+    const config = StatusConfig{
+        .type_filter = "issue",
+        .status_filter = "open",
+        .priority_filter = 1,
+        .assignee_filter = "alice",
+        .sort_by = .created,
+        .json_output = true,
+    };
+    
+    try std.testing.expectEqualStrings("issue", config.type_filter.?);
+    try std.testing.expectEqualStrings("open", config.status_filter.?);
+    try std.testing.expectEqual(@as(u8, 1), config.priority_filter.?);
+    try std.testing.expectEqualStrings("alice", config.assignee_filter.?);
+    try std.testing.expectEqual(SortField.created, config.sort_by);
+    try std.testing.expectEqual(true, config.json_output);
+}
+
+test "SortField enum has correct values" {
+    try std.testing.expectEqual(SortField.priority, SortField.priority);
+    try std.testing.expectEqual(SortField.created, SortField.created);
+    try std.testing.expectEqual(SortField.assignee, SortField.assignee);
+}

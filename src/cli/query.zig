@@ -342,3 +342,79 @@ fn outputJson(allocator: Allocator, neuras: []const Neurona) !void {
 //
 //   engram query --json
 //   → Return JSON for AI parsing
+
+// ==================== Tests ====================
+
+test "QueryConfig with default values" {
+    const query_mod = @import("query.zig");
+    
+    const config = query_mod.QueryConfig{
+        .filters = &[_]query_mod.QueryFilter{},
+        .limit = null,
+        .json_output = false,
+    };
+    
+    try std.testing.expectEqual(@as(usize, 0), config.filters.len);
+    try std.testing.expectEqual(@as(?usize, null), config.limit);
+    try std.testing.expectEqual(false, config.json_output);
+}
+
+test "QueryConfig with limit and JSON set" {
+    const query_mod = @import("query.zig");
+    
+    const config = query_mod.QueryConfig{
+        .filters = &[_]query_mod.QueryFilter{},
+        .limit = 10,
+        .json_output = true,
+    };
+    
+    try std.testing.expectEqual(@as(usize, 0), config.filters.len);
+    try std.testing.expectEqual(@as(usize, 10), config.limit.?);
+    try std.testing.expectEqual(true, config.json_output);
+}
+
+test "QueryFilter type_filter variant" {
+    const query_mod = @import("query.zig");
+    const allocator = std.testing.allocator;
+    
+    const types = try std.ArrayList([]const u8).initCapacity(allocator, 2);
+    defer types.deinit(allocator);
+    try types.append(allocator, "issue");
+    try types.append(allocator, "requirement");
+    
+    const filter = query_mod.QueryFilter{
+        .type_filter = query_mod.TypeFilter{
+            .types = types.toOwnedSlice(),
+            .include = true,
+        },
+    };
+    
+    const type_filter = filter.type_filter;
+    try std.testing.expectEqual(@as(usize, 2), type_filter.types.len);
+    try std.testing.expectEqual(true, type_filter.include);
+    
+    allocator.free(type_filter.types);
+}
+
+test "QueryFilter tag_filter variant" {
+    const query_mod = @import("query.zig");
+    const allocator = std.testing.allocator;
+    
+    const tags = try std.ArrayList([]const u8).initCapacity(allocator, 2);
+    defer tags.deinit(allocator);
+    try tags.append(allocator, "bug");
+    try tags.append(allocator, "feature");
+    
+    const filter = query_mod.QueryFilter{
+        .tag_filter = query_mod.TagFilter{
+            .tags = tags.toOwnedSlice(),
+            .include = true,
+        },
+    };
+    
+    const tag_filter = filter.tag_filter;
+    try std.testing.expectEqual(@as(usize, 2), tag_filter.tags.len);
+    try std.testing.expectEqual(true, tag_filter.include);
+    
+    allocator.free(tag_filter.tags);
+}

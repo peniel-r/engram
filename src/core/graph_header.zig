@@ -158,3 +158,107 @@ pub const Graph = struct {
         var result = std.ArrayList(BFSResult).init(allocator);
         errdefer {
             for (result.items) |*r| {
+
+// ==================== Tests ====================
+
+test "Edge format returns correct string" {
+    const graph_mod = @import("graph_header.zig");
+    const allocator = std.testing.allocator;
+    
+    const edge = graph_mod.Edge{
+        .target_id = "node.002",
+        .weight = 75,
+    };
+    
+    const formatted = try edge.format(allocator);
+    defer allocator.free(formatted);
+    
+    try std.testing.expect(formatted.len > 0);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "node.002") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "weight: 75") != null);
+}
+
+test "Graph init creates empty graph" {
+    const graph_mod = @import("graph_header.zig");
+    const allocator = std.testing.allocator;
+    
+    var graph = graph_mod.Graph.init();
+    defer graph.deinit(allocator);
+    
+    try std.testing.expectEqual(@as(usize, 0), graph.nodeCount());
+    try std.testing.expectEqual(@as(usize, 0), graph.edgeCount());
+}
+
+test "Graph addEdge creates forward and reverse edges" {
+    const graph_mod = @import("graph_header.zig");
+    const allocator = std.testing.allocator;
+    
+    var graph = graph_mod.Graph.init();
+    defer graph.deinit(allocator);
+    
+    try graph.addEdge(allocator, "node1", "node2", 50);
+    
+    // Check forward edge
+    const adj = graph.getAdjacent("node1");
+    try std.testing.expectEqual(@as(usize, 1), adj.len);
+    try std.testing.expectEqualStrings("node2", adj[0].target_id);
+    
+    // Check reverse edge
+    const incoming = graph.getIncoming("node2");
+    try std.testing.expectEqual(@as(usize, 1), incoming.len);
+    try std.testing.expectEqualStrings("node1", incoming[0].target_id);
+}
+
+test "Graph getAdjacent returns O(1) lookup" {
+    const graph_mod = @import("graph_header.zig");
+    const allocator = std.testing.allocator;
+    
+    var graph = graph_mod.Graph.init();
+    defer graph.deinit(allocator);
+    
+    try graph.addEdge(allocator, "node1", "node2", 50);
+    
+    // Get adjacent for node1 (should return node2)
+    const adj1 = graph.getAdjacent("node1");
+    try std.testing.expectEqual(@as(usize, 1), adj1.len);
+    
+    // Get adjacent for node2 (should return empty)
+    const adj2 = graph.getAdjacent("node2");
+    try std.testing.expectEqual(@as(usize, 0), adj2.len);
+}
+
+test "Graph hasEdge correctly detects edge existence" {
+    const graph_mod = @import("graph_header.zig");
+    const allocator = std.testing.allocator;
+    
+    var graph = graph_mod.Graph.init();
+    defer graph.deinit(allocator);
+    
+    try graph.addEdge(allocator, "node1", "node2", 50);
+    
+    // Edge should exist
+    try std.testing.expectEqual(true, graph.hasEdge("node1", "node2"));
+    
+    // Reverse edge should also exist (bidirectional)
+    try std.testing.expectEqual(true, graph.hasEdge("node2", "node1"));
+    
+    // Edge should not exist
+    try std.testing.expectEqual(false, graph.hasEdge("node1", "node3"));
+}
+
+test "Graph degree counts edges correctly" {
+    const graph_mod = @import("graph_header.zig");
+    const allocator = std.testing.allocator;
+    
+    var graph = graph_mod.Graph.init();
+    defer graph.deinit(allocator);
+    
+    try graph.addEdge(allocator, "node1", "node2", 50);
+    try graph.addEdge(allocator, "node1", "node3", 75);
+    
+    // node1 has 2 outgoing edges
+    try std.testing.expectEqual(@as(usize, 2), graph.degree("node1"));
+    
+    // node2 has 1 incoming edge
+    try std.testing.expectEqual(@as(usize, 1), graph.inDegree("node2"));
+}
