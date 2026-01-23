@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const init_cmd = @import("cli/init.zig");
+const link_cmd = @import("cli/link.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -22,6 +23,8 @@ pub fn main() !void {
     // Route to appropriate command
     if (std.mem.eql(u8, command, "init")) {
         try handleInit(allocator, args);
+    } else if (std.mem.eql(u8, command, "link")) {
+        try handleLink(allocator, args);
     } else if (std.mem.eql(u8, command, "--help") or std.mem.eql(u8, command, "-h")) {
         printHelp();
     } else if (std.mem.eql(u8, command, "--version") or std.mem.eql(u8, command, "-v")) {
@@ -97,9 +100,63 @@ fn handleInit(allocator: Allocator, args: []const []const u8) !void {
     }
 
     config.name = name.?;
-
     // Execute init command
     try init_cmd.execute(allocator, config);
+}
+
+fn handleLink(allocator: Allocator, args: []const []const u8) !void {
+    if (args.len < 5) {
+        std.debug.print("Error: Missing arguments\n", .{});
+        printLinkHelp();
+        std.process.exit(1);
+    }
+
+    var config = link_cmd.LinkConfig{
+        .source_id = undefined,
+        .target_id = undefined,
+        .connection_type = undefined,
+    };
+
+    var positionals = std.ArrayListUnmanaged([]const u8){};
+    defer positionals.deinit(allocator);
+
+    var i: usize = 2;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        if (std.mem.eql(u8, arg, "--weight") or std.mem.eql(u8, arg, "-w")) {
+             if (i + 1 >= args.len) {
+                std.debug.print("Error: --weight requires a value\n", .{});
+                std.process.exit(1);
+            }
+            i += 1;
+            config.weight = std.fmt.parseInt(u8, args[i], 10) catch {
+                std.debug.print("Error: Invalid weight '{s}'\n", .{args[i]});
+                std.process.exit(1);
+            };
+        } else if (std.mem.eql(u8, arg, "--bidirectional") or std.mem.eql(u8, arg, "-b")) {
+            config.bidirectional = true;
+        } else if (std.mem.eql(u8, arg, "--verbose") or std.mem.eql(u8, arg, "-v")) {
+            config.verbose = true;
+        } else if (std.mem.startsWith(u8, arg, "-")) {
+             std.debug.print("Error: Unknown flag '{s}'\n", .{arg});
+             printLinkHelp();
+             std.process.exit(1);
+        } else {
+            try positionals.append(allocator, arg);
+        }
+    }
+
+    if (positionals.items.len < 3) {
+        std.debug.print("Error: Missing required arguments: source_id target_id connection_type\n", .{});
+        printLinkHelp();
+        std.process.exit(1);
+    }
+
+    config.source_id = positionals.items[0];
+    config.target_id = positionals.items[1];
+    config.connection_type = positionals.items[2];
+
+    try link_cmd.execute(allocator, config);
 }
 
 fn printUsage() void {
@@ -111,6 +168,7 @@ fn printUsage() void {
         \\
         \\Commands:
         \\  init              Initialize a new Cortex
+        \\  link              Create connections between Neuronas
         \\  --help, -h        Show this help message
         \\  --version, -v     Show version information
         \\
@@ -165,6 +223,30 @@ fn printInitHelp() void {
         \\  engram init my_project --type alm
         \\  engram init knowledge_base --type knowledge --language es
         \\  engram init my_cortex --verbose
+        \\
+    , .{});
+}
+
+fn printLinkHelp() void {
+    std.debug.print(
+        \\Link two Neuronas
+        \\
+        \\Usage:
+        \\  engram link <source_id> <target_id> <type> [options]
+        \\
+        \\Arguments:
+        \\  source_id         ID of the source Neurona
+        \\  target_id         ID of the target Neurona
+        \\  type              Type of connection (e.g., parent, relates_to)
+        \\
+        \\Options:
+        \\  --weight, -w      Connection weight (0-100, default: 50)
+        \\  --bidirectional, -b  Create reverse connection
+        \\  --verbose, -v     Show verbose output
+        \\
+        \\Examples:
+        \\  engram link note.1 note.2 relates_to
+        \\  engram link req.auth test.auth validates --bidirectional
         \\
     , .{});
 }

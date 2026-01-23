@@ -44,7 +44,7 @@ pub fn readNeurona(allocator: Allocator, filepath: []const u8) !Neurona {
     defer fm.deinit(allocator);
 
     // Parse YAML
-    const yaml_data = try yaml.Parser.parse(allocator, fm.content);
+    var yaml_data = try yaml.Parser.parse(allocator, fm.content);
     defer {
         var it = yaml_data.iterator();
         while (it.next()) |entry| {
@@ -103,8 +103,28 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
 
     // Tier 2 field: connections
     if (yaml_data.get("connections")) |conn_val| {
-        // TODO: Parse connection groups by type
-        _ = conn_val;
+        const conns = try getArray(conn_val, allocator, &[_][]const u8{});
+        defer {
+            for (conns) |c| allocator.free(c);
+            allocator.free(conns);
+        }
+
+        for (conns) |conn_str| {
+            var parts = std.mem.splitScalar(u8, conn_str, ':');
+            const type_str = parts.next() orelse continue;
+            const target_id = parts.next() orelse continue;
+            const weight_str = parts.next() orelse "50";
+
+            if (ConnectionType.fromString(type_str)) |conn_type| {
+                const weight = std.fmt.parseInt(u8, weight_str, 10) catch 50;
+                const conn = Connection{
+                    .target_id = try allocator.dupe(u8, target_id),
+                    .connection_type = conn_type,
+                    .weight = weight,
+                };
+                try neurona.addConnection(allocator, conn);
+            }
+        }
     }
 
     // Tier 3 field: hash (optional)
@@ -149,9 +169,9 @@ pub fn writeNeurona(allocator: Allocator, neurona: Neurona, filepath: []const u8
 
 /// Convert Neurona struct to YAML frontmatter string
 fn neuronaToYaml(allocator: Allocator, neurona: Neurona) ![]u8 {
-    var yaml_buf = std.ArrayList(u8).init(allocator);
-    errdefer yaml_buf.deinit();
-    const writer = yaml_buf.writer();
+    var yaml_buf = std.ArrayListUnmanaged(u8){};
+    errdefer yaml_buf.deinit(allocator);
+    const writer = yaml_buf.writer(allocator);
 
     // Tier 1 fields
     try writer.print("id: {s}\n", .{neurona.id});
@@ -172,6 +192,23 @@ fn neuronaToYaml(allocator: Allocator, neurona: Neurona) ![]u8 {
         try writer.print("type: {s}\n", .{@tagName(neurona.type)});
     }
 
+    // Connections (Tier 2)
+    if (neurona.connections.count() > 0) {
+        try writer.writeAll("connections: [");
+        var first = true;
+        var it = neurona.connections.iterator();
+        while (it.next()) |entry| {
+            const type_name = entry.key_ptr.*;
+            for (entry.value_ptr.connections.items) |conn| {
+                if (!first) try writer.writeAll(", ");
+                // Format: "type:target_id:weight"
+                try writer.print("\"{s}:{s}:{d}\"", .{ type_name, conn.target_id, conn.weight });
+                first = false;
+            }
+        }
+        try writer.writeAll("]\n");
+    }
+
     if (neurona.updated.len > 0) {
         try writer.print("updated: \"{s}\"\n", .{neurona.updated});
     }
@@ -185,14 +222,14 @@ fn neuronaToYaml(allocator: Allocator, neurona: Neurona) ![]u8 {
         try writer.print("hash: {s}\n", .{hash});
     }
 
-    return yaml_buf.toOwnedSlice();
+    return try yaml_buf.toOwnedSlice(allocator);
 }
 
 /// Generate complete Markdown file content from Neurona
 fn generateMarkdown(allocator: Allocator, yaml_content: []const u8, body: []const u8) ![]u8 {
-    var content = std.ArrayList(u8).init(allocator);
-    errdefer content.deinit();
-    const writer = content.writer();
+    var content = std.ArrayListUnmanaged(u8){};
+    errdefer content.deinit(allocator);
+    const writer = content.writer(allocator);
 
     // Write frontmatter delimiters
     try writer.writeAll("---\n");
@@ -204,7 +241,7 @@ fn generateMarkdown(allocator: Allocator, yaml_content: []const u8, body: []cons
         try writer.writeAll(body);
     }
 
-    return content.toOwnedSlice();
+    return try content.toOwnedSlice(allocator);
 }
 
 // ==================== Directory Scanning Functions ====================
@@ -214,7 +251,7 @@ pub fn listNeuronaFiles(allocator: Allocator, directory: []const u8) ![][]const 
     var dir = try std.fs.cwd().openDir(directory, .{ .iterate = true });
     defer dir.close();
 
-    var files = std.ArrayList([]const u8).init(allocator);
+    var files = std.ArrayListUnmanaged([]const u8){};
     errdefer {
         for (files.items) |file| allocator.free(file);
         files.deinit(allocator);
@@ -228,7 +265,7 @@ pub fn listNeuronaFiles(allocator: Allocator, directory: []const u8) ![][]const 
         }
     }
 
-    return files.toOwnedSlice();
+    return try files.toOwnedSlice(allocator);
 }
 
 /// Scan directory and load all Neurona files
@@ -239,7 +276,7 @@ pub fn scanNeuronas(allocator: Allocator, directory: []const u8) ![]Neurona {
         allocator.free(filepaths);
     }
 
-    var neuronas = std.ArrayList(Neurona).init(allocator);
+    var neuronas = std.ArrayListUnmanaged(Neurona){};
     errdefer {
         for (neuronas.items) |*n| n.deinit(allocator);
         neuronas.deinit(allocator);
@@ -254,7 +291,47 @@ pub fn scanNeuronas(allocator: Allocator, directory: []const u8) ![]Neurona {
         try neuronas.append(allocator, neurona);
     }
 
-    return neuronas.toOwnedSlice();
+    return try neuronas.toOwnedSlice(allocator);
+}
+
+/// Find Neurona file path by ID
+pub fn findNeuronaPath(allocator: Allocator, neuronas_dir: []const u8, id: []const u8) ![]const u8 {
+    // Check for .md file directly
+    const direct_path = try std.fs.path.join(allocator, &.{ neuronas_dir, try std.fmt.allocPrint(allocator, "{s}.md", .{id}) });
+    
+    if (std.fs.cwd().access(direct_path, .{})) |_| {
+        return direct_path;
+    } else |err| {
+        // File doesn't exist, search for files starting with ID prefix
+        allocator.free(direct_path);
+        if (err != error.FileNotFound) return err;
+    }
+
+    // Search in neuronas directory
+    var dir = std.fs.cwd().openDir(neuronas_dir, .{ .iterate = true }) catch |err| {
+        if (err == error.FileNotFound) return error.NeuronaNotFound;
+        return err;
+    };
+    defer dir.close();
+
+    var iter = dir.iterate();
+    while (try iter.next()) |entry| {
+        if (entry.kind != .file) continue;
+        if (!std.mem.endsWith(u8, entry.name, ".md")) continue;
+
+        // Check if ID is in filename (before .md)
+        const base_name = entry.name[0 .. entry.name.len - 3]; // Remove .md
+        // Exact match or prefix match logic can be refined here.
+        // For now, let's assume filename IS the ID or starts with it? 
+        // show.zig logic was: if (std.mem.indexOf(u8, base_name, id) != null)
+        // That's a substring match. Might be dangerous (id "test" matches "test.001").
+        // But let's stick to what show.zig had to be consistent.
+        if (std.mem.eql(u8, base_name, id)) {
+             return try std.fs.path.join(allocator, &.{ neuronas_dir, entry.name });
+        }
+    }
+
+    return error.NeuronaNotFound;
 }
 
 // ==================== Tests ====================

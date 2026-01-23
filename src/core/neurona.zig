@@ -32,6 +32,24 @@ pub const ConnectionType = enum {
     prerequisite,
     next,
     related,
+
+    pub fn fromString(s: []const u8) ?ConnectionType {
+        if (std.mem.eql(u8, s, "parent")) return .parent;
+        if (std.mem.eql(u8, s, "child")) return .child;
+        if (std.mem.eql(u8, s, "validates")) return .validates;
+        if (std.mem.eql(u8, s, "validated_by")) return .validated_by;
+        if (std.mem.eql(u8, s, "blocks")) return .blocks;
+        if (std.mem.eql(u8, s, "blocked_by")) return .blocked_by;
+        if (std.mem.eql(u8, s, "implements")) return .implements;
+        if (std.mem.eql(u8, s, "implemented_by")) return .implemented_by;
+        if (std.mem.eql(u8, s, "tested_by")) return .tested_by;
+        if (std.mem.eql(u8, s, "tests")) return .tests;
+        if (std.mem.eql(u8, s, "relates_to")) return .relates_to;
+        if (std.mem.eql(u8, s, "prerequisite")) return .prerequisite;
+        if (std.mem.eql(u8, s, "next")) return .next;
+        if (std.mem.eql(u8, s, "related")) return .related;
+        return null;
+    }
 };
 
 /// Connection with weight
