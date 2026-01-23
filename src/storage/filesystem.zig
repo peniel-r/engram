@@ -50,7 +50,15 @@ pub fn readNeurona(allocator: Allocator, filepath: []const u8) !Neurona {
         while (it.next()) |entry| {
             switch (entry.value_ptr.*) {
                 .string => |s| allocator.free(s),
-                .array => |*arr| arr.deinit(allocator),
+                .array => |*arr| {
+                    for (arr.items) |*item| {
+                        switch (item.*) {
+                            .string => |s| allocator.free(s),
+                            else => {},
+                        }
+                    }
+                    arr.deinit(allocator);
+                },
                 .object => |_| {}, // Skip object cleanup (not used)
                 else => {},
             }
@@ -298,7 +306,7 @@ pub fn scanNeuronas(allocator: Allocator, directory: []const u8) ![]Neurona {
 pub fn findNeuronaPath(allocator: Allocator, neuronas_dir: []const u8, id: []const u8) ![]const u8 {
     // Check for .md file directly
     const direct_path = try std.fs.path.join(allocator, &.{ neuronas_dir, try std.fmt.allocPrint(allocator, "{s}.md", .{id}) });
-    
+
     if (std.fs.cwd().access(direct_path, .{})) |_| {
         return direct_path;
     } else |err| {
@@ -322,12 +330,12 @@ pub fn findNeuronaPath(allocator: Allocator, neuronas_dir: []const u8, id: []con
         // Check if ID is in filename (before .md)
         const base_name = entry.name[0 .. entry.name.len - 3]; // Remove .md
         // Exact match or prefix match logic can be refined here.
-        // For now, let's assume filename IS the ID or starts with it? 
+        // For now, let's assume filename IS the ID or starts with it?
         // show.zig logic was: if (std.mem.indexOf(u8, base_name, id) != null)
         // That's a substring match. Might be dangerous (id "test" matches "test.001").
         // But let's stick to what show.zig had to be consistent.
         if (std.mem.eql(u8, base_name, id)) {
-             return try std.fs.path.join(allocator, &.{ neuronas_dir, entry.name });
+            return try std.fs.path.join(allocator, &.{ neuronas_dir, entry.name });
         }
     }
 

@@ -161,6 +161,23 @@ pub fn build(b: *std.Build) void {
     const bench_step = b.step("bench", "Run performance benchmarks");
     bench_step.dependOn(&run_bench.step);
 
+    // Integration tests
+    const int_mod = b.createModule(.{
+        .root_source_file = b.path("tests/integration/alm_workflow.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "Engram", .module = mod },
+        },
+    });
+
+    const int_tests = b.addTest(.{
+        .root_module = int_mod,
+    });
+
+    const run_int_tests = b.addRunArtifact(int_tests);
+    test_step.dependOn(&run_int_tests.step);
+
     // Just like flags, top level steps are also listed in the `--help` menu.
     //
     // The Zig build system is entirely implemented in userland, which means

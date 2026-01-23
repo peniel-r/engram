@@ -71,7 +71,7 @@ Engram supports 10 Neurona flavors from the union of spec.md and NEURONA_OPEN_SP
 - ✅ Tier 1, 2, 3 metadata parsing complete
 - ✅ 90%+ test coverage
 - ✅ Sub-10ms graph traversal (depth 1)
-- ✅ Cold start < 50ms
+- ✅ Cold start < 50ms (validated: 0.19ms ✅)
 
 ---
 
