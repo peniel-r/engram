@@ -31,7 +31,7 @@ pub const QueryFilter = union(enum) {
 };
 
 pub const TypeFilter = struct {
-    types: std.ArrayList([]const u8),
+    types: std.ArrayListUnmanaged([]const u8),
     include: bool = true,
 
     pub fn deinit(self: *TypeFilter, allocator: Allocator) void {
@@ -43,7 +43,7 @@ pub const TypeFilter = struct {
 };
 
 pub const TagFilter = struct {
-    tags: std.ArrayList([]const u8),
+    tags: std.ArrayListUnmanaged([]const u8),
     include: bool = true,
 
     pub fn deinit(self: *TagFilter, allocator: Allocator) void {
@@ -122,11 +122,11 @@ pub fn execute(allocator: Allocator, config: QueryConfig) !void {
     // Step 4: Output - Dereference pointers for output
     var output_neuronas = std.ArrayListUnmanaged(Neurona){};
     defer output_neuronas.deinit(allocator);
-    
+
     for (sorted) |n| {
         try output_neuronas.append(allocator, n.*);
     }
-    
+
     if (config.json_output) {
         try outputJson(allocator, output_neuronas.items);
     } else {
@@ -196,7 +196,7 @@ fn matchesConnectionFilter(neurona: *const Neurona, filter: ConnectionFilter) bo
             if (conn_matches and filter.operator == .not) {
                 return false; // Found a match when we should NOT match
             }
-            
+
             if (conn_matches) has_match = true;
         }
     }
@@ -265,65 +265,58 @@ fn sortResults(allocator: Allocator, neuras: *[]*const Neurona) ![]const Neurona
 /// Output list format
 fn outputList(allocator: Allocator, neuras: []const Neurona) !void {
     _ = allocator;
-    var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-    const stdout = &stdout_writer.interface;
-
-    try stdout.writeAll("\n🔍 Search Results\n");
-    for (0..40) |_| try stdout.writeByte('=');
-    try stdout.writeAll("\n");
+    std.debug.print("\n🔍 Search Results\n", .{});
+    for (0..40) |_| std.debug.print("=", .{});
+    std.debug.print("\n", .{});
 
     if (neuras.len == 0) {
-        try stdout.writeAll("No results found matching criteria\n");
+        std.debug.print("No results found matching criteria\n", .{});
         return;
     }
 
     const display_count = @min(10, neuras.len);
     for (neuras[0..display_count]) |neurona| {
-        try stdout.print("  {s}\n", .{neurona.id});
-        try stdout.print("    Type: {s}\n", .{@tagName(neurona.type)});
-        try stdout.print("    Title: {s}\n", .{neurona.title});
+        std.debug.print("  {s}\n", .{neurona.id});
+        std.debug.print("    Type: {s}\n", .{@tagName(neurona.type)});
+        std.debug.print("    Title: {s}\n", .{neurona.title});
 
         // Show tags
         if (neurona.tags.items.len > 0) {
-            try stdout.writeAll("    Tags: ");
+            std.debug.print("    Tags: ", .{});
             for (neurona.tags.items, 0..) |tag, i| {
-                if (i > 0) try stdout.writeAll(", ");
-                try stdout.print("{s}", .{tag});
+                if (i > 0) std.debug.print(", ", .{});
+                std.debug.print("{s}", .{tag});
             }
-            try stdout.writeAll("\n");
+            std.debug.print("\n", .{});
         }
     }
 
-    try stdout.print("\n  Found {d} results\n", .{neuras.len});
+    std.debug.print("\n  Found {d} results\n", .{neuras.len});
 }
 
 /// JSON output for AI
 fn outputJson(allocator: Allocator, neuras: []const Neurona) !void {
     _ = allocator;
-    var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-    const stdout = &stdout_writer.interface;
-
-    try stdout.writeAll("[");
+    std.debug.print("[", .{});
     for (neuras, 0..) |neurona, i| {
-        if (i > 0) try stdout.writeAll(",");
-        try stdout.print("\"id\":\"{s}\",", .{neurona.id});
-        try stdout.print("\"title\":\"{s}\",", .{neurona.title});
-        try stdout.print("\"type\":\"{s}\",", .{@tagName(neurona.type)});
+        if (i > 0) std.debug.print(",", .{});
+        std.debug.print("{{", .{});
+        std.debug.print("\"id\":\"{s}\",", .{neurona.id});
+        std.debug.print("\"title\":\"{s}\",", .{neurona.title});
+        std.debug.print("\"type\":\"{s}\",", .{@tagName(neurona.type)});
 
-        try stdout.print("\"tags\":[", .{});
+        std.debug.print("\"tags\":[", .{});
 
         var tag_i: usize = 0;
         for (neurona.tags.items) |tag| {
-            if (tag_i > 0) try stdout.writeAll(",");
-            try stdout.print("\"{s}\"", .{tag});
+            if (tag_i > 0) std.debug.print(",", .{});
+            std.debug.print("\"{s}\"", .{tag});
             tag_i += 1;
         }
 
-        try stdout.writeAll("}");
+        std.debug.print("]}}", .{});
     }
-    try stdout.writeAll("]\n");
+    std.debug.print("]\n", .{});
 }
 
 // Example CLI usage:
@@ -347,13 +340,13 @@ fn outputJson(allocator: Allocator, neuras: []const Neurona) !void {
 
 test "QueryConfig with default values" {
     const query_mod = @import("query.zig");
-    
+
     const config = query_mod.QueryConfig{
         .filters = &[_]query_mod.QueryFilter{},
         .limit = null,
         .json_output = false,
     };
-    
+
     try std.testing.expectEqual(@as(usize, 0), config.filters.len);
     try std.testing.expectEqual(@as(?usize, null), config.limit);
     try std.testing.expectEqual(false, config.json_output);
@@ -361,13 +354,13 @@ test "QueryConfig with default values" {
 
 test "QueryConfig with limit and JSON set" {
     const query_mod = @import("query.zig");
-    
+
     const config = query_mod.QueryConfig{
         .filters = &[_]query_mod.QueryFilter{},
         .limit = 10,
         .json_output = true,
     };
-    
+
     try std.testing.expectEqual(@as(usize, 0), config.filters.len);
     try std.testing.expectEqual(@as(usize, 10), config.limit.?);
     try std.testing.expectEqual(true, config.json_output);
@@ -376,45 +369,84 @@ test "QueryConfig with limit and JSON set" {
 test "QueryFilter type_filter variant" {
     const query_mod = @import("query.zig");
     const allocator = std.testing.allocator;
-    
-    const types = try std.ArrayList([]const u8).initCapacity(allocator, 2);
-    defer types.deinit(allocator);
-    try types.append(allocator, "issue");
-    try types.append(allocator, "requirement");
-    
-    const filter = query_mod.QueryFilter{
+
+    var types = std.ArrayListUnmanaged([]const u8){};
+    try types.append(allocator, try allocator.dupe(u8, "issue"));
+    try types.append(allocator, try allocator.dupe(u8, "requirement"));
+
+    var filter = query_mod.QueryFilter{
         .type_filter = query_mod.TypeFilter{
-            .types = types.toOwnedSlice(),
+            .types = types,
             .include = true,
         },
     };
-    
-    const type_filter = filter.type_filter;
-    try std.testing.expectEqual(@as(usize, 2), type_filter.types.len);
+
+    const type_filter = &filter.type_filter;
+    try std.testing.expectEqual(@as(usize, 2), type_filter.types.items.len);
     try std.testing.expectEqual(true, type_filter.include);
-    
-    allocator.free(type_filter.types);
+
+    type_filter.deinit(allocator);
+}
+
+test "matchesFilters with type filter" {
+    const allocator = std.testing.allocator;
+
+    var neurona = try Neurona.init(allocator);
+    defer neurona.deinit(allocator);
+    neurona.type = .issue;
+
+    var types = std.ArrayListUnmanaged([]const u8){};
+    try types.append(allocator, try allocator.dupe(u8, "issue"));
+    defer {
+        for (types.items) |t| allocator.free(t);
+        types.deinit(allocator);
+    }
+
+    const filter = QueryFilter{
+        .type_filter = TypeFilter{
+            .types = types,
+            .include = true,
+        },
+    };
+
+    const filters = [_]QueryFilter{filter};
+    try std.testing.expect(matchesFilters(&neurona, &filters));
+
+    var types2 = std.ArrayListUnmanaged([]const u8){};
+    try types2.append(allocator, try allocator.dupe(u8, "requirement"));
+    defer {
+        for (types2.items) |t| allocator.free(t);
+        types2.deinit(allocator);
+    }
+
+    const filter2 = QueryFilter{
+        .type_filter = TypeFilter{
+            .types = types2,
+            .include = true,
+        },
+    };
+    const filters2 = [_]QueryFilter{filter2};
+    try std.testing.expect(!matchesFilters(&neurona, &filters2));
 }
 
 test "QueryFilter tag_filter variant" {
     const query_mod = @import("query.zig");
     const allocator = std.testing.allocator;
-    
-    const tags = try std.ArrayList([]const u8).initCapacity(allocator, 2);
-    defer tags.deinit(allocator);
-    try tags.append(allocator, "bug");
-    try tags.append(allocator, "feature");
-    
-    const filter = query_mod.QueryFilter{
+
+    var tags = std.ArrayListUnmanaged([]const u8){};
+    try tags.append(allocator, try allocator.dupe(u8, "bug"));
+    try tags.append(allocator, try allocator.dupe(u8, "feature"));
+
+    var filter = query_mod.QueryFilter{
         .tag_filter = query_mod.TagFilter{
-            .tags = tags.toOwnedSlice(),
+            .tags = tags,
             .include = true,
         },
     };
-    
-    const tag_filter = filter.tag_filter;
-    try std.testing.expectEqual(@as(usize, 2), tag_filter.tags.len);
+
+    const tag_filter = &filter.tag_filter;
+    try std.testing.expectEqual(@as(usize, 2), tag_filter.tags.items.len);
     try std.testing.expectEqual(true, tag_filter.include);
-    
-    allocator.free(tag_filter.tags);
+
+    tag_filter.deinit(allocator);
 }

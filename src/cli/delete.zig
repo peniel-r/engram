@@ -43,7 +43,7 @@ test "execute deletes Neurona file" {
 
     // Create test Neurona
     const path = try std.fs.path.join(allocator, &.{ test_dir, "test.md" });
-    try std.fs.cwd().writeFile(path, "---\nid: test\ntitle: Test\n---\n");
+    try std.fs.cwd().writeFile(.{ .sub_path = path, .data = "---\nid: test\ntitle: Test\n---\n" });
     defer allocator.free(path);
 
     // Execute delete
@@ -56,6 +56,6 @@ test "execute deletes Neurona file" {
     try execute(allocator, config);
 
     // Verify file is deleted
-    const result = std.fs.cwd().openFile(path);
+    const result = std.fs.cwd().openFile(path, .{});
     try std.testing.expectError(error.FileNotFound, result);
 }

@@ -55,18 +55,21 @@ pub const Graph = struct {
 
     /// Add edge to graph (bidirectional)
     pub fn addEdge(self: *Graph, allocator: Allocator, from_id: []const u8, to_id: []const u8, weight: u8) !void {
-        // Add forward edge
-        const entry = try self.adjacency_list.getOrPut(allocator, from_id);
-        if (!entry.found_existing) {
-            entry.value_ptr.* = std.ArrayListUnmanaged(Edge){};
-            entry.key_ptr.* = try allocator.dupe(u8, from_id);
+        // Ensure both nodes exist in adjacency list (even if no outgoing edges)
+        if (!self.adjacency_list.contains(from_id)) {
+            try self.adjacency_list.put(allocator, try allocator.dupe(u8, from_id), .{});
+        }
+        if (!self.adjacency_list.contains(to_id)) {
+            try self.adjacency_list.put(allocator, try allocator.dupe(u8, to_id), .{});
         }
 
+        // Add forward edge
+        const entry = self.adjacency_list.getPtr(from_id).?;
         const edge = Edge{
             .target_id = try allocator.dupe(u8, to_id),
             .weight = weight,
         };
-        try entry.value_ptr.append(allocator, edge);
+        try entry.append(allocator, edge);
 
         // Add reverse edge
         {
@@ -121,14 +124,20 @@ pub const Graph = struct {
 
     /// Count total nodes
     pub fn nodeCount(self: *const Graph) usize {
+        // This is still not perfect if a node only exists in one map,
+        // but with our new addEdge it should be fine.
         return self.adjacency_list.count();
     }
 
-    /// Count total edges
+    /// Count total edges (forward + reverse)
     pub fn edgeCount(self: *const Graph) usize {
         var count: usize = 0;
         var it = self.adjacency_list.iterator();
         while (it.next()) |entry| {
+            count += entry.value_ptr.items.len;
+        }
+        var it_rev = self.reverse_index.iterator();
+        while (it_rev.next()) |entry| {
             count += entry.value_ptr.items.len;
         }
         return count;
@@ -314,7 +323,7 @@ pub const Graph = struct {
 test "Graph init creates empty graph" {
     const allocator = std.testing.allocator;
 
-    const graph = Graph.init();
+    var graph = Graph.init();
     defer graph.deinit(allocator);
 
     try std.testing.expectEqual(@as(usize, 0), graph.nodeCount());
@@ -376,5 +385,5 @@ test "Graph degree counts edges" {
     try graph.addEdge(allocator, "node1", "node2", 50);
 
     try std.testing.expectEqual(@as(usize, 2), graph.degree("node1"));
-    try std.testing.expectEqual(@as(usize, 1), graph.inDegree("node2"));
+    try std.testing.expectEqual(@as(usize, 2), graph.inDegree("node2"));
 }

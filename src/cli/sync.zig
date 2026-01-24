@@ -19,10 +19,7 @@ pub const SyncConfig = struct {
 /// Main command handler
 pub fn execute(allocator: Allocator, config: SyncConfig) !void {
     if (config.verbose) {
-        var stdout_buffer: [512]u8 = undefined;
-        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-        const stdout = &stdout_writer.interface;
-        try stdout.print("Scanning directory: {s}\n", .{config.directory});
+        std.debug.print("Scanning directory: {s}\n", .{config.directory});
     }
 
     // Step 1: Scan all Neuronas
@@ -33,10 +30,7 @@ pub fn execute(allocator: Allocator, config: SyncConfig) !void {
     }
 
     if (config.verbose) {
-        var stdout_buffer: [512]u8 = undefined;
-        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-        const stdout = &stdout_writer.interface;
-        try stdout.print("Found {d} Neuronas\n", .{neuronas.len});
+        std.debug.print("Found {d} Neuronas\n", .{neuronas.len});
     }
 
     // Step 2: Build graph index
@@ -51,10 +45,7 @@ fn buildGraphIndex(allocator: Allocator, neuronas: []const Neurona, verbose: boo
     defer graph.deinit(allocator);
 
     if (verbose) {
-        var stdout_buffer: [512]u8 = undefined;
-        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-        const stdout = &stdout_writer.interface;
-        try stdout.writeAll("Building graph index...\n");
+        std.debug.print("Building graph index...\n", .{});
     }
 
     // Add all Neuronas to graph
@@ -69,11 +60,8 @@ fn buildGraphIndex(allocator: Allocator, neuronas: []const Neurona, verbose: boo
     }
 
     if (verbose) {
-        var stdout_buffer: [512]u8 = undefined;
-        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-        const stdout = &stdout_writer.interface;
-        try stdout.print("Graph built: {d} nodes\n", .{graph.nodeCount()});
-        try stdout.print("Index saved to .activations/graph.idx\n", .{});
+        std.debug.print("Graph built: {d} nodes\n", .{graph.nodeCount()});
+        std.debug.print("Index saved to .activations/graph.idx\n", .{});
     }
 
     // TODO: Save graph index to disk (Step 4.1 will implement)
@@ -84,17 +72,13 @@ pub fn showStats(allocator: Allocator, graph: *Graph) !void {
     _ = allocator; // Used in function signature but not in this simple version
     _ = graph; // TODO: Implement full statistics
 
-    var stdout_buffer: [512]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-    const stdout = &stdout_writer.interface;
-
-    try stdout.writeAll("\n📊 Graph Statistics\n");
-    for (0..20) |_| try stdout.writeByte('=');
-    try stdout.writeAll("\n");
+    std.debug.print("\n📊 Graph Statistics\n", .{});
+    for (0..20) |_| std.debug.print("=", .{});
+    std.debug.print("\n", .{});
     // TODO: Implement count() and totalEdges() on Graph
-    try stdout.writeAll("  Total Nodes: [requires graph.count()]\n");
-    try stdout.writeAll("  Total Edges: [requires graph.totalEdges()]\n");
-    try stdout.writeAll("\n");
+    std.debug.print("  Total Nodes: [requires graph.count()]\n", .{});
+    std.debug.print("  Total Edges: [requires graph.totalEdges()]\n", .{});
+    std.debug.print("\n", .{});
 }
 
 // Example CLI usage:
@@ -112,29 +96,52 @@ pub fn showStats(allocator: Allocator, graph: *Graph) !void {
 
 test "SyncConfig with default values" {
     const sync_mod = @import("sync.zig");
-    
+
     const config = sync_mod.SyncConfig{
         .directory = "neuronas",
         .verbose = false,
         .rebuild_index = true,
     };
-    
+
     try std.testing.expectEqualStrings("neuronas", config.directory);
     try std.testing.expectEqual(false, config.verbose);
     try std.testing.expectEqual(true, config.rebuild_index);
 }
 
+test "buildGraphIndex builds correct graph" {
+    const allocator = std.testing.allocator;
+
+    var n1 = try Neurona.init(allocator);
+    defer n1.deinit(allocator);
+    allocator.free(n1.id);
+    n1.id = try allocator.dupe(u8, "node1");
+
+    var n2 = try Neurona.init(allocator);
+    defer n2.deinit(allocator);
+    allocator.free(n2.id);
+    n2.id = try allocator.dupe(u8, "node2");
+
+    try n1.addConnection(allocator, .{
+        .target_id = try allocator.dupe(u8, "node2"),
+        .connection_type = .relates_to,
+        .weight = 50,
+    });
+
+    const neuronas = [_]Neurona{ n1, n2 };
+    try buildGraphIndex(allocator, &neuronas, false);
+    // buildGraphIndex currently doesn't return anything or save to disk in this version
+}
+
 test "SyncConfig with custom values" {
     const sync_mod = @import("sync.zig");
-    
+
     const config = sync_mod.SyncConfig{
         .directory = "custom_neuronas",
         .verbose = true,
         .rebuild_index = false,
     };
-    
+
     try std.testing.expectEqualStrings("custom_neuronas", config.directory);
     try std.testing.expectEqual(true, config.verbose);
     try std.testing.expectEqual(false, config.rebuild_index);
 }
-

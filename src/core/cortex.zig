@@ -86,6 +86,7 @@ pub const Cortex = struct {
                 embedding_model: []const u8,
             },
         }, allocator, json, .{ .ignore_unknown_fields = true });
+        defer parsed.deinit();
 
         return Cortex{
             .id = try allocator.dupe(u8, parsed.value.id),

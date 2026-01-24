@@ -40,7 +40,12 @@ pub fn readNeurona(allocator: Allocator, filepath: []const u8) !Neurona {
     defer allocator.free(content);
 
     // Extract frontmatter
-    const fm = try frontmatter.parse(allocator, content);
+    const fm = frontmatter.parse(allocator, content) catch |err| {
+        switch (err) {
+            error.NoFrontmatterFound => return StorageError.InvalidNeuronaFormat,
+            else => return err,
+        }
+    };
     defer fm.deinit(allocator);
 
     // Parse YAML
@@ -48,20 +53,7 @@ pub fn readNeurona(allocator: Allocator, filepath: []const u8) !Neurona {
     defer {
         var it = yaml_data.iterator();
         while (it.next()) |entry| {
-            switch (entry.value_ptr.*) {
-                .string => |s| allocator.free(s),
-                .array => |*arr| {
-                    for (arr.items) |*item| {
-                        switch (item.*) {
-                            .string => |s| allocator.free(s),
-                            else => {},
-                        }
-                    }
-                    arr.deinit(allocator);
-                },
-                .object => |_| {}, // Skip object cleanup (not used)
-                else => {},
-            }
+            entry.value_ptr.deinit(allocator);
         }
         yaml_data.deinit();
     }
@@ -305,7 +297,9 @@ pub fn scanNeuronas(allocator: Allocator, directory: []const u8) ![]Neurona {
 /// Find Neurona file path by ID
 pub fn findNeuronaPath(allocator: Allocator, neuronas_dir: []const u8, id: []const u8) ![]const u8 {
     // Check for .md file directly
-    const direct_path = try std.fs.path.join(allocator, &.{ neuronas_dir, try std.fmt.allocPrint(allocator, "{s}.md", .{id}) });
+    const id_md = try std.fmt.allocPrint(allocator, "{s}.md", .{id});
+    defer allocator.free(id_md);
+    const direct_path = try std.fs.path.join(allocator, &.{ neuronas_dir, id_md });
 
     if (std.fs.cwd().access(direct_path, .{})) |_| {
         return direct_path;
@@ -377,13 +371,10 @@ test "readNeurona parses valid Tier 1 file" {
         \\This is test content.
     ;
 
-    std.fs.cwd().writeFile(test_path, test_content) catch |err| {
-        std.debug.print("Error writing test file: {}\n", .{err});
-        return error.TestSetupFailed;
-    };
+    try std.fs.cwd().writeFile(.{ .sub_path = test_path, .data = test_content });
     defer std.fs.cwd().deleteFile(test_path) catch {};
 
-    const neurona = try readNeurona(allocator, test_path);
+    var neurona = try readNeurona(allocator, test_path);
     defer neurona.deinit(allocator);
 
     try std.testing.expectEqualStrings("test.001", neurona.id);
@@ -399,10 +390,7 @@ test "readNeurona returns error for missing frontmatter" {
     const test_path = "test_no_frontmatter.md";
     const test_content = "# Just content";
 
-    std.fs.cwd().writeFile(test_path, test_content) catch |err| {
-        std.debug.print("Error writing test file: {}\n", .{err});
-        return error.TestSetupFailed;
-    };
+    try std.fs.cwd().writeFile(.{ .sub_path = test_path, .data = test_content });
     defer std.fs.cwd().deleteFile(test_path) catch {};
 
     const result = readNeurona(allocator, test_path);
@@ -421,10 +409,7 @@ test "readNeurona returns error for missing required fields" {
         \\# Content
     ;
 
-    std.fs.cwd().writeFile(test_path, test_content) catch |err| {
-        std.debug.print("Error writing test file: {}\n", .{err});
-        return error.TestSetupFailed;
-    };
+    try std.fs.cwd().writeFile(.{ .sub_path = test_path, .data = test_content });
     defer std.fs.cwd().deleteFile(test_path) catch {};
 
     const result = readNeurona(allocator, test_path);
@@ -445,13 +430,12 @@ test "writeNeurona writes valid Tier 1 file" {
     var neurona = try Neurona.init(allocator);
     defer neurona.deinit(allocator);
 
+    allocator.free(neurona.id);
     neurona.id = try allocator.dupe(u8, "test.001");
-    defer allocator.free(neurona.id);
+    allocator.free(neurona.title);
     neurona.title = try allocator.dupe(u8, "Test Neurona");
-    defer allocator.free(neurona.title);
 
     const tag1 = try allocator.dupe(u8, "test");
-    defer allocator.free(tag1);
     try neurona.tags.append(allocator, tag1);
 
     // Write to file
@@ -475,13 +459,13 @@ test "writeNeurona write and read roundtrip Tier 2" {
     var neurona = try Neurona.init(allocator);
     defer neurona.deinit(allocator);
 
+    allocator.free(neurona.id);
     neurona.id = try allocator.dupe(u8, "test.002");
-    defer allocator.free(neurona.id);
+    allocator.free(neurona.title);
     neurona.title = try allocator.dupe(u8, "Test Requirement");
-    defer allocator.free(neurona.title);
     neurona.type = .requirement;
+    allocator.free(neurona.updated);
     neurona.updated = try allocator.dupe(u8, "2026-01-22");
-    defer allocator.free(neurona.updated);
 
     // Write to file
     const test_path = "test_write_tier2.md";
@@ -489,7 +473,7 @@ test "writeNeurona write and read roundtrip Tier 2" {
     defer std.fs.cwd().deleteFile(test_path) catch {};
 
     // Read back
-    const loaded = try readNeurona(allocator, test_path);
+    var loaded = try readNeurona(allocator, test_path);
     defer loaded.deinit(allocator);
 
     try std.testing.expectEqualStrings(neurona.id, loaded.id);
@@ -506,9 +490,16 @@ test "listNeuronaFiles lists .md files" {
     defer std.fs.cwd().deleteTree(test_dir) catch {};
 
     // Create test files
-    try std.fs.cwd().writeFile(try std.fs.path.join(allocator, &.{ test_dir, "test1.md" }), "content");
-    try std.fs.cwd().writeFile(try std.fs.path.join(allocator, &.{ test_dir, "test2.md" }), "content");
-    try std.fs.cwd().writeFile(try std.fs.path.join(allocator, &.{ test_dir, "not_md.txt" }), "content");
+    const p1 = try std.fs.path.join(allocator, &.{ test_dir, "test1.md" });
+    defer allocator.free(p1);
+    const p2 = try std.fs.path.join(allocator, &.{ test_dir, "test2.md" });
+    defer allocator.free(p2);
+    const p3 = try std.fs.path.join(allocator, &.{ test_dir, "not_md.txt" });
+    defer allocator.free(p3);
+
+    try std.fs.cwd().writeFile(.{ .sub_path = p1, .data = "content" });
+    try std.fs.cwd().writeFile(.{ .sub_path = p2, .data = "content" });
+    try std.fs.cwd().writeFile(.{ .sub_path = p3, .data = "content" });
 
     // List files
     const files = try listNeuronaFiles(allocator, test_dir);
@@ -530,9 +521,11 @@ test "scanNeuronas loads all valid Neuronas" {
 
     // Create test Neurona files
     const path1 = try std.fs.path.join(allocator, &.{ test_dir, "test1.md" });
+    defer allocator.free(path1);
     const path2 = try std.fs.path.join(allocator, &.{ test_dir, "test2.md" });
+    defer allocator.free(path2);
 
-    try std.fs.cwd().writeFile(path1,
+    try std.fs.cwd().writeFile(.{ .sub_path = path1, .data = 
         \\---
         \\id: test.001
         \\title: Test One
@@ -540,8 +533,8 @@ test "scanNeuronas loads all valid Neuronas" {
         \\---
         \\
         \\# Content
-    );
-    try std.fs.cwd().writeFile(path2,
+    });
+    try std.fs.cwd().writeFile(.{ .sub_path = path2, .data = 
         \\---
         \\id: test.002
         \\title: Test Two
@@ -549,7 +542,16 @@ test "scanNeuronas loads all valid Neuronas" {
         \\---
         \\
         \\# Content
-    );
+    });
+    try std.fs.cwd().writeFile(.{ .sub_path = path2, .data = 
+        \\---
+        \\id: test.002
+        \\title: Test Two
+        \\tags: [test]
+        \\---
+        \\
+        \\# Content
+    });
 
     // Scan directory
     const neuronas = try scanNeuronas(allocator, test_dir);
@@ -571,16 +573,18 @@ test "scanNeuronas skips invalid files" {
 
     // Create valid and invalid files
     const valid_path = try std.fs.path.join(allocator, &.{ test_dir, "valid.md" });
+    defer allocator.free(valid_path);
     const invalid_path = try std.fs.path.join(allocator, &.{ test_dir, "invalid.md" });
+    defer allocator.free(invalid_path);
 
-    try std.fs.cwd().writeFile(valid_path,
+    try std.fs.cwd().writeFile(.{ .sub_path = valid_path, .data = 
         \\---
         \\id: test.001
         \\title: Valid
         \\---
         \\# Content
-    );
-    try std.fs.cwd().writeFile(invalid_path, "No frontmatter");
+    });
+    try std.fs.cwd().writeFile(.{ .sub_path = invalid_path, .data = "No frontmatter" });
 
     // Scan directory
     const neuronas = try scanNeuronas(allocator, test_dir);

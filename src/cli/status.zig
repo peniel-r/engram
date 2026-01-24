@@ -19,9 +19,9 @@ pub const StatusConfig = struct {
 };
 
 pub const SortField = enum {
-    priority,    // Sort by priority (high to low)
-    created,    // Sort by creation date
-    assignee,    // Sort by assignee
+    priority, // Sort by priority (high to low)
+    created, // Sort by creation date
+    assignee, // Sort by assignee
 };
 
 /// Main command handler
@@ -49,11 +49,7 @@ pub fn execute(allocator: Allocator, config: StatusConfig) !void {
 }
 
 /// Filter Neuronas by criteria
-fn filterNeuronas(
-    allocator: Allocator,
-    neuronas: []const Neurona,
-    config: StatusConfig
-) ![]*const Neurona {
+fn filterNeuronas(allocator: Allocator, neuronas: []const Neurona, config: StatusConfig) ![]*const Neurona {
     var result = std.ArrayListUnmanaged(*const Neurona){};
     defer result.deinit(allocator);
 
@@ -104,7 +100,7 @@ fn sortResults(allocator: Allocator, neuronas: *[]*const Neurona, field: SortFie
     // Access the actual slice by dereferencing
     const slice = neuronas.*;
     const count = slice.len;
-    
+
     for (0..@min(3, count - 2)) |i| {
         for (0..count - i - 1) |j| {
             if (compareNeuronas(slice[j], slice[j + 1], field) > 0) {
@@ -153,39 +149,35 @@ fn compareAssignee(a: *const Neurona, b: *const Neurona) i32 {
 
 /// Output list format
 fn outputList(issues: []*const Neurona) !void {
-    var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-    const stdout = &stdout_writer.interface;
-
-    try stdout.writeAll("\n📋 Open Issues\n");
-    for (0..40) |_| try stdout.writeByte('=');
-    try stdout.writeAll("\n");
+    std.debug.print("\n📋 Open Issues\n", .{});
+    for (0..40) |_| std.debug.print("=", .{});
+    std.debug.print("\n", .{});
 
     for (issues) |issue| {
-        try stdout.print("  [{s}] {s}\n", .{ issue.id, issue.title });
+        std.debug.print("  [{s}] {s}\n", .{ issue.id, issue.title });
 
         // Show priority
         const priority_str = try getPriorityString(issue);
-        try stdout.print("      Priority: {s}\n", .{priority_str});
+        std.debug.print("      Priority: {s}\n", .{priority_str});
 
         // Show status (from context)
         switch (issue.context) {
             .test_case => |ctx| {
-                try stdout.print("      Status: {s}\n", .{ctx.status});
+                std.debug.print("      Status: {s}\n", .{ctx.status});
             },
             else => {
-                try stdout.writeAll("      Status: [N/A]\n");
+                std.debug.print("      Status: [N/A]\n", .{});
             },
         }
 
         // Show assignee if available (would need context parsing)
-        try stdout.writeAll("      Assignee: [context-based]\n");
+        std.debug.print("      Assignee: [context-based]\n", .{});
 
-        try stdout.writeAll("\n");
+        std.debug.print("\n", .{});
     }
 
     if (issues.len == 0) {
-        try stdout.writeAll("\nNo issues found matching criteria\n");
+        std.debug.print("\nNo issues found matching criteria\n", .{});
     }
 }
 
@@ -198,50 +190,30 @@ fn getPriorityString(issue: *const Neurona) ![]const u8 {
 
 /// JSON output for AI
 fn outputJson(issues: []*const Neurona) !void {
-    var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-    const stdout = &stdout_writer.interface;
-
-    try stdout.writeAll("[");
+    std.debug.print("[", .{});
     for (issues, 0..) |issue, i| {
-        if (i > 0) try stdout.writeAll(",");
-        try stdout.writeAll("{");
-        try stdout.print("\"id\":\"{s}\",", .{issue.id});
-        try stdout.print("\"title\":\"{s}\",", .{issue.title});
-        try stdout.print("\"type\":\"{s}\",", .{@tagName(issue.type)});
-        
+        if (i > 0) std.debug.print(",", .{});
+        std.debug.print("{{", .{});
+        std.debug.print("\"id\":\"{s}\",", .{issue.id});
+        std.debug.print("\"title\":\"{s}\",", .{issue.title});
+        std.debug.print("\"type\":\"{s}\",", .{@tagName(issue.type)});
+
         // Get status from context
         switch (issue.context) {
             .test_case => |ctx| {
-                try stdout.print("\"status\":\"{s}\",", .{ctx.status});
+                std.debug.print("\"status\":\"{s}\",", .{ctx.status});
             },
             else => {
-                try stdout.writeAll("\"status\":\"[N/A]\",");
+                std.debug.print("\"status\":\"[N/A]\",", .{});
             },
         }
-        
-        try stdout.writeAll("\"priority\":\"[from context]\"");
-        try stdout.writeAll("}");
+
+        std.debug.print("\"priority\":\"[from context]\"", .{});
+        std.debug.print("}}", .{});
     }
-    try stdout.writeAll("]\n");
+    std.debug.print("]\n", .{});
 }
 
-// Example CLI usage:
-//
-//   engram status
-//   → List all open issues sorted by priority
-//
-//   engram status --filter "status:open"
-//   → Filter by status field
-//
-//   engram status --assignee alice
-//   → Filter issues assigned to alice
-//
-//   engram status --sort-by created
-//   → Sort by creation date
-//
-//   engram status --json
-//   → Return JSON for AI parsing
 // ==================== Tests ====================
 
 test "StatusConfig with default values" {
@@ -253,7 +225,7 @@ test "StatusConfig with default values" {
         .sort_by = .priority,
         .json_output = false,
     };
-    
+
     try std.testing.expectEqual(@as(?[]const u8, null), config.type_filter);
     try std.testing.expectEqual(@as(?[]const u8, null), config.status_filter);
     try std.testing.expectEqual(@as(?u8, null), config.priority_filter);
@@ -271,13 +243,34 @@ test "StatusConfig with all filters set" {
         .sort_by = .created,
         .json_output = true,
     };
-    
+
     try std.testing.expectEqualStrings("issue", config.type_filter.?);
     try std.testing.expectEqualStrings("open", config.status_filter.?);
     try std.testing.expectEqual(@as(u8, 1), config.priority_filter.?);
     try std.testing.expectEqualStrings("alice", config.assignee_filter.?);
     try std.testing.expectEqual(SortField.created, config.sort_by);
     try std.testing.expectEqual(true, config.json_output);
+}
+
+test "filterNeuronas filters by type" {
+    const allocator = std.testing.allocator;
+
+    var n1 = try Neurona.init(allocator);
+    defer n1.deinit(allocator);
+    n1.type = .issue;
+
+    var n2 = try Neurona.init(allocator);
+    defer n2.deinit(allocator);
+    n2.type = .requirement;
+
+    const neuronas = [_]Neurona{ n1, n2 };
+    const config = StatusConfig{ .type_filter = "issue" };
+
+    const filtered = try filterNeuronas(allocator, &neuronas, config);
+    defer allocator.free(filtered);
+
+    try std.testing.expectEqual(@as(usize, 1), filtered.len);
+    try std.testing.expectEqual(NeuronaType.issue, filtered[0].type);
 }
 
 test "SortField enum has correct values" {

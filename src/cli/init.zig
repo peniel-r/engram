@@ -397,13 +397,16 @@ test "CortexType fromString" {
 }
 
 test "CortexType toString" {
-    try std.testing.expectEqualStrings("zettelkasten", .zettelkasten.toString());
-    try std.testing.expectEqualStrings("alm", .alm.toString());
-    try std.testing.expectEqualStrings("knowledge", .knowledge.toString());
+    try std.testing.expectEqualStrings("zettelkasten", CortexType.zettelkasten.toString());
+    try std.testing.expectEqualStrings("alm", CortexType.alm.toString());
+    try std.testing.expectEqualStrings("knowledge", CortexType.knowledge.toString());
 }
 
 test "validateExistingCortex returns error when Cortex exists" {
     const allocator = std.testing.allocator;
+
+    // Clean up from previous runs
+    std.fs.cwd().deleteTree("test_existing_cortex") catch {};
 
     // Create a temporary Cortex
     const test_config = InitConfig{
@@ -432,6 +435,9 @@ test "validateExistingCortex returns error when Cortex exists" {
 
 test "validateExistingCortex succeeds when force is true" {
     const allocator = std.testing.allocator;
+
+    // Clean up from previous runs
+    std.fs.cwd().deleteTree("test_force_cortex") catch {};
 
     // Create a temporary Cortex
     const test_config = InitConfig{

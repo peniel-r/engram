@@ -297,13 +297,13 @@ test "fromEpoch handles leap years" {
 test "fromEpoch handles month boundaries" {
     const allocator = std.testing.allocator;
 
-    // Jan 31, 2020 00:00:00 UTC = 1580304000
-    const date1 = try fromEpoch(allocator, 1580304000);
+    // Jan 31, 2020 00:00:00 UTC = 1580428800
+    const date1 = try fromEpoch(allocator, 1580428800);
     defer allocator.free(date1);
     try std.testing.expectEqualStrings("2020-01-31", date1);
 
-    // Feb 1, 2020 00:00:00 UTC = 1580476800
-    const date2 = try fromEpoch(allocator, 1580476800);
+    // Feb 1, 2020 00:00:00 UTC = 1580515200
+    const date2 = try fromEpoch(allocator, 1580515200);
     defer allocator.free(date2);
     try std.testing.expectEqualStrings("2020-02-01", date2);
 

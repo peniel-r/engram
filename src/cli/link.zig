@@ -139,24 +139,24 @@ test "execute links two neuronas" {
     // Create source neurona
     const source_path = try std.fs.path.join(allocator, &.{ test_dir, "source.md" });
     defer allocator.free(source_path);
-    try std.fs.cwd().writeFile(source_path,
+    try std.fs.cwd().writeFile(.{ .sub_path = source_path, .data = 
         \\---
         \\id: source
         \\title: Source
         \\tags: []
         \\---
-    );
+    });
 
     // Create target neurona
     const target_path = try std.fs.path.join(allocator, &.{ test_dir, "target.md" });
     defer allocator.free(target_path);
-    try std.fs.cwd().writeFile(target_path,
+    try std.fs.cwd().writeFile(.{ .sub_path = target_path, .data = 
         \\---
         \\id: target
         \\title: Target
         \\tags: []
         \\---
-    );
+    });
 
     // Execute link
     const config = LinkConfig{
@@ -169,7 +169,7 @@ test "execute links two neuronas" {
     try execute(allocator, config);
 
     // Verify source has connection
-    const source = try fs.readNeurona(allocator, source_path);
+    var source = try fs.readNeurona(allocator, source_path);
     defer source.deinit(allocator);
 
     const conns = source.getConnections(.parent);
@@ -188,24 +188,24 @@ test "execute bidirectional link" {
     // Create source neurona
     const source_path = try std.fs.path.join(allocator, &.{ test_dir, "source.md" });
     defer allocator.free(source_path);
-    try std.fs.cwd().writeFile(source_path,
+    try std.fs.cwd().writeFile(.{ .sub_path = source_path, .data = 
         \\---
         \\id: source
         \\title: Source
         \\tags: []
         \\---
-    );
+    });
 
     // Create target neurona
     const target_path = try std.fs.path.join(allocator, &.{ test_dir, "target.md" });
     defer allocator.free(target_path);
-    try std.fs.cwd().writeFile(target_path,
+    try std.fs.cwd().writeFile(.{ .sub_path = target_path, .data = 
         \\---
         \\id: target
         \\title: Target
         \\tags: []
         \\---
-    );
+    });
 
     // Execute link
     const config = LinkConfig{
@@ -219,14 +219,14 @@ test "execute bidirectional link" {
     try execute(allocator, config);
 
     // Verify source has connection
-    const source = try fs.readNeurona(allocator, source_path);
+    var source = try fs.readNeurona(allocator, source_path);
     defer source.deinit(allocator);
     const s_conns = source.getConnections(.parent);
     try std.testing.expectEqual(@as(usize, 1), s_conns.len);
     try std.testing.expectEqualStrings("target", s_conns[0].target_id);
 
     // Verify target has reverse connection
-    const target = try fs.readNeurona(allocator, target_path);
+    var target = try fs.readNeurona(allocator, target_path);
     defer target.deinit(allocator);
     const t_conns = target.getConnections(.child);
     try std.testing.expectEqual(@as(usize, 1), t_conns.len);

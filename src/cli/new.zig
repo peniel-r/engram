@@ -456,8 +456,8 @@ fn getTypePrefix(neurona_type: NeuronaType) []const u8 {
         .requirement => "req",
         .test_case => "test",
         .issue => "issue",
-        .artifact => "artifact",
-        .feature => "feature",
+        .artifact => "art",
+        .feature => "feat",
     };
 }
 
@@ -592,7 +592,7 @@ test "getTemplate returns correct config for each type" {
     try std.testing.expectEqualStrings("test_case", test_template.type_name);
     try std.testing.expectEqual(@as(usize, 2), test_template.tier);
 
-    // Test invalid type (should return default/requirement)
+    // Test invalid type (should return unknown)
     const invalid_template = getTemplate("invalid_type");
-    try std.testing.expectEqualStrings("requirement", invalid_template.type_name);
+    try std.testing.expectEqualStrings("unknown", invalid_template.type_name);
 }

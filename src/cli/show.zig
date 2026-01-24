@@ -19,7 +19,7 @@ pub const ShowConfig = struct {
 /// Main command handler
 pub fn execute(allocator: Allocator, config: ShowConfig) !void {
     // Step1: Find and read Neurona file
-    const filepath = try findNeuronaPath(allocator, config.id);
+    const filepath = try findNeuronaPath(allocator, "neuronas", config.id);
     defer allocator.free(filepath);
 
     var neurona = try readNeurona(allocator, filepath);
@@ -38,20 +38,20 @@ pub fn execute(allocator: Allocator, config: ShowConfig) !void {
 }
 
 /// Find Neurona file by ID
-fn findNeuronaPath(allocator: Allocator, id: []const u8) ![]const u8 {
+fn findNeuronaPath(allocator: Allocator, directory: []const u8, id: []const u8) ![]const u8 {
     // Check for .md file directly
-    const direct_path = try std.fmt.allocPrint(allocator, "neuronas/{s}.md", .{id});
+    const direct_path = try std.fmt.allocPrint(allocator, "{s}/{s}.md", .{ directory, id });
     defer allocator.free(direct_path);
 
     if (std.fs.cwd().openFile(direct_path, .{})) |_| {
-        return direct_path;
+        return try allocator.dupe(u8, direct_path);
     } else |err| {
         // File doesn't exist, search for files starting with ID prefix
         if (err != error.FileNotFound) return err;
     }
 
-    // Search in neuronas directory
-    var dir = try std.fs.cwd().openDir("neuronas", .{ .iterate = true });
+    // Search in directory
+    var dir = try std.fs.cwd().openDir(directory, .{ .iterate = true });
     defer dir.close();
 
     var iter = dir.iterate();
@@ -62,7 +62,7 @@ fn findNeuronaPath(allocator: Allocator, id: []const u8) ![]const u8 {
         // Check if ID is in filename (before .md)
         const base_name = entry.name[0 .. entry.name.len - 3]; // Remove .md
         if (std.mem.indexOf(u8, base_name, id) != null) {
-            return try std.fs.path.join(allocator, &.{ "neuronas", entry.name });
+            return try std.fs.path.join(allocator, &.{ directory, entry.name });
         }
     }
 
@@ -85,69 +85,61 @@ fn readBodyContent(allocator: Allocator, filepath: []const u8) ![]const u8 {
 
 /// Human-friendly output
 fn outputHuman(neurona: *const Neurona, body: []const u8, show_connections: bool, show_body: bool) !void {
-    var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-    const stdout = &stdout_writer.interface;
-
     // Header
-    try stdout.writeAll("\n");
-    try stdout.print("  ID: {s}\n", .{neurona.id});
-    try stdout.print("  Title: {s}\n", .{neurona.title});
-    try stdout.print("  Type: {s}\n", .{@tagName(neurona.type)});
+    std.debug.print("\n", .{});
+    std.debug.print("  ID: {s}\n", .{neurona.id});
+    std.debug.print("  Title: {s}\n", .{neurona.title});
+    std.debug.print("  Type: {s}\n", .{@tagName(neurona.type)});
 
     // Tags
     if (neurona.tags.items.len > 0) {
-        try stdout.writeAll("  Tags: ");
+        std.debug.print("  Tags: ", .{});
         for (neurona.tags.items, 0..) |tag, i| {
-            if (i > 0) try stdout.writeAll(", ");
-            try stdout.print("{s}", .{tag});
+            if (i > 0) std.debug.print(", ", .{});
+            std.debug.print("{s}", .{tag});
         }
-        try stdout.writeAll("\n");
+        std.debug.print("\n", .{});
     }
 
     // Connections
     if (show_connections) {
         var conn_it = neurona.connections.iterator();
         if (conn_it.next()) |_| {
-            try stdout.writeAll("  Connections:\n");
+            std.debug.print("  Connections:\n", .{});
             conn_it = neurona.connections.iterator(); // Reset iterator
             while (conn_it.next()) |entry| {
-                try stdout.print("    {s}: {d} connection(s)\n", .{ entry.key_ptr.*, entry.value_ptr.connections.items.len });
+                std.debug.print("    {s}: {d} connection(s)\n", .{ entry.key_ptr.*, entry.value_ptr.connections.items.len });
             }
         }
     }
 
     // Metadata
-    try stdout.print("  Updated: {s}\n", .{neurona.updated});
-    try stdout.print("  Language: {s}\n", .{neurona.language});
+    std.debug.print("  Updated: {s}\n", .{neurona.updated});
+    std.debug.print("  Language: {s}\n", .{neurona.language});
 
     // Body
     if (show_body) {
-        try stdout.writeAll("\n");
-        for (0..50) |_| try stdout.writeByte('=');
-        try stdout.writeAll("\n");
-        try stdout.writeAll(body);
-        try stdout.writeAll("\n");
-        for (0..50) |_| try stdout.writeByte('=');
-        try stdout.writeAll("\n");
+        std.debug.print("\n", .{});
+        for (0..50) |_| std.debug.print("=", .{});
+        std.debug.print("\n", .{});
+        std.debug.print("{s}", .{body});
+        std.debug.print("\n", .{});
+        for (0..50) |_| std.debug.print("=", .{});
+        std.debug.print("\n", .{});
     }
 }
 
 /// JSON output for AI
 fn outputJson(neurona: *const Neurona, filepath: []const u8) !void {
-    var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-    const stdout = &stdout_writer.interface;
-
-    try stdout.writeAll("{");
-    try stdout.print("\"success\":true,", .{});
-    try stdout.print("\"id\":\"{s}\",", .{neurona.id});
-    try stdout.print("\"title\":\"{s}\",", .{neurona.title});
-    try stdout.print("\"type\":\"{s}\",", .{@tagName(neurona.type)});
-    try stdout.print("\"filepath\":\"{s}\",", .{filepath});
-    try stdout.print("\"tags\":{d},", .{neurona.tags.items.len});
-    try stdout.print("\"connections\":{d}", .{neurona.connections.count()});
-    try stdout.writeAll("}\n");
+    std.debug.print("{{", .{});
+    std.debug.print("\"success\":true,", .{});
+    std.debug.print("\"id\":\"{s}\",", .{neurona.id});
+    std.debug.print("\"title\":\"{s}\",", .{neurona.title});
+    std.debug.print("\"type\":\"{s}\",", .{@tagName(neurona.type)});
+    std.debug.print("\"filepath\":\"{s}\",", .{filepath});
+    std.debug.print("\"tags\":{d},", .{neurona.tags.items.len});
+    std.debug.print("\"connections\":{d}", .{neurona.connections.count()});
+    std.debug.print("}}\n", .{});
 }
 
 // Example CLI usage:
@@ -164,9 +156,7 @@ fn outputJson(neurona: *const Neurona, filepath: []const u8) !void {
 // ==================== Tests ====================
 
 test "ShowConfig with default values" {
-    const show_mod = @import("show.zig");
-
-    const config = show_mod.ShowConfig{
+    const config = ShowConfig{
         .id = "test.001",
         .show_connections = true,
         .show_body = true,
@@ -180,9 +170,7 @@ test "ShowConfig with default values" {
 }
 
 test "ShowConfig with flags set" {
-    const show_mod = @import("show.zig");
-
-    const config = show_mod.ShowConfig{
+    const config = ShowConfig{
         .id = "req.auth",
         .show_connections = false,
         .show_body = false,
@@ -195,7 +183,6 @@ test "ShowConfig with flags set" {
 }
 
 test "findNeuronaPath returns direct .md file" {
-    const show_mod = @import("show.zig");
     const allocator = std.testing.allocator;
 
     // Setup test file
@@ -218,7 +205,7 @@ test "findNeuronaPath returns direct .md file" {
     });
 
     // Test with full path
-    const result = show_mod.findNeuronaPath(allocator, target_path);
+    const result = try findNeuronaPath(allocator, "neuronas_test", "test.001");
     defer allocator.free(result);
 
     // Should return the path as-is since we passed full path

@@ -896,10 +896,22 @@ fn printVersion() void {
 
 // ==================== Tests ====================
 
+test {
+    _ = @import("cli/init.zig");
+    _ = @import("cli/new.zig");
+    _ = @import("cli/show.zig");
+    _ = @import("cli/link.zig");
+    _ = @import("cli/sync.zig");
+    _ = @import("cli/delete.zig");
+    _ = @import("cli/trace.zig");
+    _ = @import("cli/status.zig");
+    _ = @import("cli/query.zig");
+}
+
 test "Command registry contains all expected commands" {
     // Commands are defined in main.zig
     // We can verify the count is correct
-    
+
     const expected_commands = [_][]const u8{
         "init",
         "new",
@@ -911,7 +923,7 @@ test "Command registry contains all expected commands" {
         "status",
         "query",
     };
-    
+
     // Verify we have 9 commands
     try std.testing.expectEqual(@as(usize, 9), expected_commands.len);
 }
@@ -919,16 +931,16 @@ test "Command registry contains all expected commands" {
 test "Help functions print usage information" {
     // This test verifies help functions don't crash
     // They're tested indirectly via integration tests
-    
+
     // Verify printUsage exists (called when no args)
     const allocator = std.testing.allocator;
-    
+
     var buffer: [512]u8 = undefined;
     var stdout = std.fs.File.stdout().writer(&buffer);
     const stdout_writer = &stdout.interface;
-    
+
     // Call printUsage - should not crash
     try stdout_writer.writeAll("");
-    
+
     _ = allocator;
 }

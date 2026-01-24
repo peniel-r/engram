@@ -17,6 +17,29 @@ pub const Value = union(enum) {
     null,
     array: std.ArrayListUnmanaged(Value), // Unmanaged for manual allocator control
     object: ?std.StringHashMap(Value), // Optional object
+
+    pub fn deinit(self: *Value, allocator: Allocator) void {
+        switch (self.*) {
+            .string => |s| allocator.free(s),
+            .array => |*arr| {
+                for (arr.items) |*v| {
+                    v.deinit(allocator);
+                }
+                arr.deinit(allocator);
+            },
+            .object => |*obj_opt| {
+                if (obj_opt.*) |*obj| {
+                    var it = obj.iterator();
+                    while (it.next()) |entry| {
+                        allocator.free(entry.key_ptr.*);
+                        entry.value_ptr.deinit(allocator);
+                    }
+                    obj.deinit();
+                }
+            },
+            else => {},
+        }
+    }
 };
 
 /// Simple YAML parser
@@ -207,12 +230,7 @@ test "parse simple key-value" {
     defer {
         var it = result.iterator();
         while (it.next()) |entry| {
-            switch (entry.value_ptr.*) {
-                .string => |s| allocator.free(s),
-                .array => |*arr| arr.deinit(allocator),
-                .object => |_| {}, // Skip object cleanup (not used in tests)
-                else => {},
-            }
+            entry.value_ptr.deinit(allocator);
         }
         result.deinit();
     }
@@ -229,12 +247,7 @@ test "parse boolean values" {
     defer {
         var it = result.iterator();
         while (it.next()) |entry| {
-            switch (entry.value_ptr.*) {
-                .string => |s| allocator.free(s),
-                .array => |*arr| arr.deinit(allocator),
-                .object => |_| {}, // Skip object cleanup (not used in tests)
-                else => {},
-            }
+            entry.value_ptr.deinit(allocator);
         }
         result.deinit();
     }
@@ -254,12 +267,7 @@ test "parse integer values" {
     defer {
         var it = result.iterator();
         while (it.next()) |entry| {
-            switch (entry.value_ptr.*) {
-                .string => |s| allocator.free(s),
-                .array => |*arr| arr.deinit(allocator),
-                .object => |_| {}, // Skip object cleanup (not used in tests)
-                else => {},
-            }
+            entry.value_ptr.deinit(allocator);
         }
         result.deinit();
     }
@@ -276,12 +284,7 @@ test "parse array values" {
     defer {
         var it = result.iterator();
         while (it.next()) |entry| {
-            switch (entry.value_ptr.*) {
-                .string => |s| allocator.free(s),
-                .array => |*arr| arr.deinit(allocator),
-                .object => |_| {}, // Skip object cleanup (not used in tests)
-                else => {},
-            }
+            entry.value_ptr.deinit(allocator);
         }
         result.deinit();
     }
@@ -312,12 +315,7 @@ test "parse mixed values" {
     defer {
         var it = result.iterator();
         while (it.next()) |entry| {
-            switch (entry.value_ptr.*) {
-                .string => |s| allocator.free(s),
-                .array => |*arr| arr.deinit(allocator),
-                .object => |_| {}, // Skip object cleanup (not used in tests)
-                else => {},
-            }
+            entry.value_ptr.deinit(allocator);
         }
         result.deinit();
     }
