@@ -176,7 +176,7 @@ pub fn execute(allocator: Allocator, config: ReleaseStatusConfig) !void {
 }
 
 /// Compute release readiness status
-fn computeReleaseStatus(allocator: Allocator, neuronas: []const Neurona, graph: *Graph) !ReleaseStatus {
+pub fn computeReleaseStatus(allocator: Allocator, neuronas: []const Neurona, graph: *Graph) !ReleaseStatus {
     var status = ReleaseStatus{
         .requirements = undefined,
         .tests = undefined,
@@ -193,6 +193,8 @@ fn computeReleaseStatus(allocator: Allocator, neuronas: []const Neurona, graph: 
     defer test_map.deinit();
     var issue_map = std.StringHashMap(*const Neurona).init(allocator);
     defer issue_map.deinit();
+    var all_map = std.StringHashMap(*const Neurona).init(allocator);
+    defer all_map.deinit();
 
     for (neuronas) |*neurona| {
         switch (neurona.type) {
@@ -201,10 +203,11 @@ fn computeReleaseStatus(allocator: Allocator, neuronas: []const Neurona, graph: 
             .issue => try issue_map.put(neurona.id, neurona),
             else => {},
         }
+        try all_map.put(neurona.id, neurona);
     }
 
     // Compute requirement status
-    status.requirements = try analyzeRequirements(allocator, req_map, graph);
+    status.requirements = try analyzeRequirements(allocator, req_map, all_map, graph);
 
     // Compute test status
     status.tests = try analyzeTests(allocator, test_map);
@@ -225,7 +228,7 @@ fn computeReleaseStatus(allocator: Allocator, neuronas: []const Neurona, graph: 
 }
 
 /// Analyze requirement status
-fn analyzeRequirements(allocator: Allocator, req_map: std.StringHashMap(*const Neurona), graph: *Graph) !RequirementStatus {
+fn analyzeRequirements(allocator: Allocator, req_map: std.StringHashMap(*const Neurona), all_map: std.StringHashMap(*const Neurona), graph: *Graph) !RequirementStatus {
     var result = RequirementStatus{
         .total = req_map.count(),
         .implemented = 0,
@@ -247,7 +250,7 @@ fn analyzeRequirements(allocator: Allocator, req_map: std.StringHashMap(*const N
         const adj = graph.getAdjacent(req.id);
         var has_implementer = false;
         for (adj) |edge| {
-            const target_req = req_map.get(edge.target_id) orelse continue;
+            const target_req = all_map.get(edge.target_id) orelse continue;
             if (target_req.type == .artifact) {
                 has_implementer = true;
                 break;
@@ -257,7 +260,7 @@ fn analyzeRequirements(allocator: Allocator, req_map: std.StringHashMap(*const N
         // Check for tests (outgoing "validated_by" connections)
         var has_test = false;
         for (adj) |edge| {
-            const target_req = req_map.get(edge.target_id) orelse continue;
+            const target_req = all_map.get(edge.target_id) orelse continue;
             if (target_req.type == .test_case) {
                 has_test = true;
                 break;
@@ -268,9 +271,11 @@ fn analyzeRequirements(allocator: Allocator, req_map: std.StringHashMap(*const N
         var blocking_issues = std.ArrayListUnmanaged([]const u8){};
         const incoming = graph.getIncoming(req.id);
         for (incoming) |edge| {
-            const blocker = req_map.get(edge.target_id) orelse continue;
-            if (blocker.type == .issue) {
-                try blocking_issues.append(allocator, try allocator.dupe(u8, edge.target_id));
+            // Check if it's an issue
+            if (all_map.get(edge.target_id)) |issue| {
+                if (issue.type == .issue) {
+                    try blocking_issues.append(allocator, try allocator.dupe(u8, edge.target_id));
+                }
             }
         }
         defer {

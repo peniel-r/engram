@@ -103,27 +103,70 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
 
     // Tier 2 field: connections
     if (yaml_data.get("connections")) |conn_val| {
-        const conns = try getArray(conn_val, allocator, &[_][]const u8{});
-        defer {
-            for (conns) |c| allocator.free(c);
-            allocator.free(conns);
-        }
+        switch (conn_val) {
+            // Legacy format: ["type:target:weight"]
+            .array => |arr| {
+                for (arr.items) |item| {
+                    const conn_str = getString(item, "");
+                    var parts = std.mem.splitScalar(u8, conn_str, ':');
+                    const type_str = parts.next() orelse continue;
+                    const target_id = parts.next() orelse continue;
+                    const weight_str = parts.next() orelse "50";
 
-        for (conns) |conn_str| {
-            var parts = std.mem.splitScalar(u8, conn_str, ':');
-            const type_str = parts.next() orelse continue;
-            const target_id = parts.next() orelse continue;
-            const weight_str = parts.next() orelse "50";
+                    if (ConnectionType.fromString(type_str)) |conn_type| {
+                        const weight = std.fmt.parseInt(u8, weight_str, 10) catch 50;
+                        const conn = Connection{
+                            .target_id = try allocator.dupe(u8, target_id),
+                            .connection_type = conn_type,
+                            .weight = weight,
+                        };
+                        try neurona.addConnection(allocator, conn);
+                    }
+                }
+            },
+            // Structured format: { type: [{id: ..., weight: ...}] }
+            .object => |obj_opt| {
+                if (obj_opt) |obj| {
+                    var it = obj.iterator();
+                    while (it.next()) |entry| {
+                        const type_str = entry.key_ptr.*;
+                        const conn_type = ConnectionType.fromString(type_str) orelse continue;
 
-            if (ConnectionType.fromString(type_str)) |conn_type| {
-                const weight = std.fmt.parseInt(u8, weight_str, 10) catch 50;
-                const conn = Connection{
-                    .target_id = try allocator.dupe(u8, target_id),
-                    .connection_type = conn_type,
-                    .weight = weight,
-                };
-                try neurona.addConnection(allocator, conn);
-            }
+                        const targets_val = entry.value_ptr.*;
+                        switch (targets_val) {
+                            .array => |targets| {
+                                for (targets.items) |target_item| {
+                                    switch (target_item) {
+                                        .object => |t_obj_opt| {
+                                            if (t_obj_opt) |t_obj| {
+                                                if (t_obj.get("id")) |target_id_val| {
+                                                    const target_id = getString(target_id_val, "");
+                                                    if (target_id.len == 0) continue;
+
+                                                    var weight: u8 = 50;
+                                                    if (t_obj.get("weight")) |w_val| {
+                                                        weight = @intCast(getInt(w_val, 50));
+                                                    }
+
+                                                    const conn = Connection{
+                                                        .target_id = try allocator.dupe(u8, target_id),
+                                                        .connection_type = conn_type,
+                                                        .weight = weight,
+                                                    };
+                                                    try neurona.addConnection(allocator, conn);
+                                                }
+                                            }
+                                        },
+                                        else => {},
+                                    }
+                                }
+                            },
+                            else => {},
+                        }
+                    }
+                }
+            },
+            else => {},
         }
     }
 

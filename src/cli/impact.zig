@@ -101,7 +101,7 @@ pub fn execute(allocator: Allocator, config: ImpactConfig) !void {
 }
 
 /// Analyze impact of changes to a Neurona
-fn analyzeImpact(allocator: Allocator, graph: *Graph, neuronas: []const Neurona, config: ImpactConfig) ![]ImpactResult {
+pub fn analyzeImpact(allocator: Allocator, graph: *Graph, neuronas: []const Neurona, config: ImpactConfig) ![]ImpactResult {
     var result = std.ArrayListUnmanaged(ImpactResult){};
     errdefer {
         for (result.items) |*r| r.deinit(allocator);

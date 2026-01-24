@@ -2,8 +2,9 @@
 .zig-cache/
 zig-out/
 
-# ---> Tmp
+# ---> Opencode
 .tmp/
+.opencode/
 
 # ---> Windows
 .vscode/

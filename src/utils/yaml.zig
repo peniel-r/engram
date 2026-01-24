@@ -81,10 +81,10 @@ pub const Parser = struct {
         if (colon_idx == 0) return;
 
         // Extract key
-        const key = std.mem.trim(u8, line[0..colon_idx], " \t");
+        const key = std.mem.trim(u8, line[0..colon_idx], " \t\r");
 
         // Extract value
-        const value_str = std.mem.trim(u8, line[colon_idx + 1 ..], " \t");
+        const value_str = std.mem.trim(u8, line[colon_idx + 1 ..], " \t\r");
 
         // Parse value
         const value = try self.parseValue(value_str);

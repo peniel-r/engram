@@ -91,7 +91,7 @@ pub fn execute(allocator: Allocator, config: TraceConfig) !void {
 }
 
 /// Trace dependencies from target node
-fn trace(allocator: Allocator, graph: *Graph, directory: []const u8, config: TraceConfig) ![]TraceNode {
+pub fn trace(allocator: Allocator, graph: *Graph, directory: []const u8, config: TraceConfig) ![]TraceNode {
     // Load starting Neurona to verify it exists
     const filepath = try findNeuronaPath(allocator, directory, config.id);
     defer allocator.free(filepath);

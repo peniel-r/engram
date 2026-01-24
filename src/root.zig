@@ -27,6 +27,13 @@ pub const utils = struct {
     pub const state_filters = @import("utils/state_filters.zig");
 };
 
+// Re-export CLI (for integration tests)
+pub const cli = struct {
+    pub const impact = @import("cli/impact.zig");
+    pub const release_status = @import("cli/release_status.zig");
+    pub const trace = @import("cli/trace.zig");
+};
+
 pub fn bufferedPrint() !void {
     // Stdout is for actual output of your application, for example if you
     // are implementing gzip, then only the compressed bytes should be sent to
