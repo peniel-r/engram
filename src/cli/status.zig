@@ -1,12 +1,14 @@
 // File: src/cli/status.zig
 // The `engram status` command for listing and filtering open issues
 // Sorts by priority, assignee, status
+// Supports EQL filtering: --filter "state:open AND priority:1"
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Neurona = @import("../core/neurona.zig").Neurona;
 const NeuronaType = @import("../core/neurona.zig").NeuronaType;
 const storage = @import("../root.zig").storage;
+const state_filters = @import("../utils/state_filters.zig");
 
 /// Status configuration
 pub const StatusConfig = struct {
@@ -14,6 +16,7 @@ pub const StatusConfig = struct {
     status_filter: ?[]const u8 = null,
     priority_filter: ?u8 = null,
     assignee_filter: ?[]const u8 = null,
+    filter_str: ?[]const u8 = null, // EQL filter string: "state:open AND priority:1"
     sort_by: SortField = .priority,
     json_output: bool = false,
 };
@@ -26,21 +29,31 @@ pub const SortField = enum {
 
 /// Main command handler
 pub fn execute(allocator: Allocator, config: StatusConfig) !void {
-    // Step 1: Scan all Neuronas
+    // Step 1: Parse EQL filter if provided
+    var filter_expr: ?state_filters.FilterExpression = null;
+    defer {
+        if (filter_expr) |*expr| expr.deinit(allocator);
+    }
+
+    if (config.filter_str) |filter| {
+        filter_expr = try state_filters.parseFilter(allocator, filter);
+    }
+
+    // Step 2: Scan all Neuronas
     const neuronas = try storage.scanNeuronas(allocator, "neuronas");
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);
     }
 
-    // Step 2: Filter by type (issue) and status
-    const filtered = try filterNeuronas(allocator, neuronas, config);
+    // Step 3: Filter by type, status, and EQL filter
+    const filtered = try filterNeuronas(allocator, neuronas, config, filter_expr);
     defer allocator.free(filtered);
 
-    // Step 3: Sort results - skip for now due to const issues
+    // Step 4: Sort results - skip for now due to const issues
     // sortResults(allocator, &filtered, config.sort_by);
 
-    // Step 4: Output
+    // Step 5: Output
     if (config.json_output) {
         try outputJson(filtered);
     } else {
@@ -49,7 +62,7 @@ pub fn execute(allocator: Allocator, config: StatusConfig) !void {
 }
 
 /// Filter Neuronas by criteria
-fn filterNeuronas(allocator: Allocator, neuronas: []const Neurona, config: StatusConfig) ![]*const Neurona {
+fn filterNeuronas(allocator: Allocator, neuronas: []const Neurona, config: StatusConfig, filter_expr: ?state_filters.FilterExpression) ![]*const Neurona {
     var result = std.ArrayListUnmanaged(*const Neurona){};
     defer result.deinit(allocator);
 
@@ -70,18 +83,9 @@ fn filterNeuronas(allocator: Allocator, neuronas: []const Neurona, config: Statu
             }
         }
 
-        // Filter by priority
-        if (config.priority_filter) |_| {
-            // Would need to parse context.priority from neurona.context
-            // For now, skip complex context filtering
-            continue;
-        }
-
-        // Filter by assignee
-        if (config.assignee_filter) |_| {
-            // Would need to parse context.assignee from neurona.context
-            // For now, skip complex context filtering
-            continue;
+        // Filter by EQL expression
+        if (filter_expr) |expr| {
+            if (!applyFilter(allocator, neurona, &expr)) continue;
         }
 
         try result.append(allocator, neurona);
@@ -89,6 +93,149 @@ fn filterNeuronas(allocator: Allocator, neuronas: []const Neurona, config: Statu
 
     const result_slice = try result.toOwnedSlice(allocator);
     return result_slice;
+}
+
+/// Apply EQL filter expression to a Neurona
+fn applyFilter(allocator: Allocator, neurona: *const Neurona, expr: *const state_filters.FilterExpression) bool {
+    const operator = expr.operator;
+
+    // Evaluate each condition
+    for (expr.conditions.items) |cond| {
+        const matches = evaluateCondition(allocator, neurona, cond);
+
+        // Apply logical operator
+        if (operator == .@"and" and !matches) {
+            return false; // AND: all must match
+        }
+        if (operator == .@"or" and matches) {
+            return true; // OR: any match is sufficient
+        }
+    }
+
+    // If all conditions passed (AND mode) or none passed (OR mode with empty list)
+    return operator == .@"and" or expr.conditions.items.len == 0;
+}
+
+/// Evaluate a single filter condition against a Neurona
+fn evaluateCondition(allocator: Allocator, neurona: *const Neurona, cond: state_filters.FilterCondition) bool {
+    _ = allocator;
+    const field = cond.field;
+    const operator = cond.operator;
+    const value = cond.value;
+
+    // Handle direct fields
+    if (std.mem.eql(u8, field, "type")) {
+        const type_str = @tagName(neurona.type);
+        return state_filters.compareStrings(type_str, operator, value);
+    }
+
+    if (std.mem.eql(u8, field, "title")) {
+        return state_filters.compareStrings(neurona.title, operator, value);
+    }
+
+    if (std.mem.eql(u8, field, "language")) {
+        return state_filters.compareStrings(neurona.language, operator, value);
+    }
+
+    if (std.mem.eql(u8, field, "id")) {
+        return state_filters.compareStrings(neurona.id, operator, value);
+    }
+
+    // Handle context.field syntax
+    if (std.mem.startsWith(u8, field, "context.")) {
+        return evaluateContextField(neurona, field["context.".len..], operator, value);
+    }
+
+    // Handle special fields (state is alias for context.status)
+    if (std.mem.eql(u8, field, "state")) {
+        return evaluateContextField(neurona, "status", operator, value);
+    }
+
+    // Handle priority as alias for context.priority
+    if (std.mem.eql(u8, field, "priority")) {
+        return evaluateContextField(neurona, "priority", operator, value);
+    }
+
+    // Unknown field - don't match
+    return false;
+}
+
+/// Evaluate context field condition
+fn evaluateContextField(neurona: *const Neurona, context_field: []const u8, operator: state_filters.FilterOperator, expected: []const u8) bool {
+    switch (neurona.context) {
+        .test_case => |ctx| {
+            if (std.mem.eql(u8, context_field, "status")) {
+                return state_filters.compareStrings(ctx.status, operator, expected);
+            }
+            if (std.mem.eql(u8, context_field, "framework")) {
+                return state_filters.compareStrings(ctx.framework, operator, expected);
+            }
+            if (std.mem.eql(u8, context_field, "assignee")) {
+                if (ctx.assignee) |a| {
+                    return state_filters.compareStrings(a, operator, expected);
+                }
+                return false;
+            }
+            if (std.mem.eql(u8, context_field, "priority")) {
+                const priority_val = std.fmt.parseInt(u8, expected, 10) catch return false;
+                return state_filters.compareIntegers(ctx.priority, operator, priority_val);
+            }
+        },
+        .issue => |ctx| {
+            if (std.mem.eql(u8, context_field, "status")) {
+                return state_filters.compareStrings(ctx.status, operator, expected);
+            }
+            if (std.mem.eql(u8, context_field, "assignee")) {
+                if (ctx.assignee) |a| {
+                    return state_filters.compareStrings(a, operator, expected);
+                }
+                return false;
+            }
+            if (std.mem.eql(u8, context_field, "priority")) {
+                const priority_val = std.fmt.parseInt(u8, expected, 10) catch return false;
+                return state_filters.compareIntegers(ctx.priority, operator, priority_val);
+            }
+        },
+        .requirement => |ctx| {
+            if (std.mem.eql(u8, context_field, "status")) {
+                return state_filters.compareStrings(ctx.status, operator, expected);
+            }
+            if (std.mem.eql(u8, context_field, "assignee")) {
+                if (ctx.assignee) |a| {
+                    return state_filters.compareStrings(a, operator, expected);
+                }
+                return false;
+            }
+            if (std.mem.eql(u8, context_field, "priority")) {
+                const priority_val = std.fmt.parseInt(u8, expected, 10) catch return false;
+                return state_filters.compareIntegers(ctx.priority, operator, priority_val);
+            }
+        },
+        .artifact => |ctx| {
+            if (std.mem.eql(u8, context_field, "runtime")) {
+                return state_filters.compareStrings(ctx.runtime, operator, expected);
+            }
+            if (std.mem.eql(u8, context_field, "file_path")) {
+                return state_filters.compareStrings(ctx.file_path, operator, expected);
+            }
+        },
+        .state_machine => |ctx| {
+            if (std.mem.eql(u8, context_field, "entry_action")) {
+                return state_filters.compareStrings(ctx.entry_action, operator, expected);
+            }
+            if (std.mem.eql(u8, context_field, "exit_action")) {
+                return state_filters.compareStrings(ctx.exit_action, operator, expected);
+            }
+        },
+        .custom => |ctx| {
+            if (ctx.get(context_field)) |v| {
+                return state_filters.compareStrings(v, operator, expected);
+            }
+        },
+        .none => {},
+    }
+
+    return false;
 }
 
 /// Sort results by specified field
@@ -222,6 +369,7 @@ test "StatusConfig with default values" {
         .status_filter = null,
         .priority_filter = null,
         .assignee_filter = null,
+        .filter_str = null,
         .sort_by = .priority,
         .json_output = false,
     };
@@ -230,6 +378,7 @@ test "StatusConfig with default values" {
     try std.testing.expectEqual(@as(?[]const u8, null), config.status_filter);
     try std.testing.expectEqual(@as(?u8, null), config.priority_filter);
     try std.testing.expectEqual(@as(?[]const u8, null), config.assignee_filter);
+    try std.testing.expectEqual(@as(?[]const u8, null), config.filter_str);
     try std.testing.expectEqual(SortField.priority, config.sort_by);
     try std.testing.expectEqual(false, config.json_output);
 }
@@ -240,6 +389,7 @@ test "StatusConfig with all filters set" {
         .status_filter = "open",
         .priority_filter = 1,
         .assignee_filter = "alice",
+        .filter_str = "state:open AND priority:1",
         .sort_by = .created,
         .json_output = true,
     };
@@ -248,6 +398,7 @@ test "StatusConfig with all filters set" {
     try std.testing.expectEqualStrings("open", config.status_filter.?);
     try std.testing.expectEqual(@as(u8, 1), config.priority_filter.?);
     try std.testing.expectEqualStrings("alice", config.assignee_filter.?);
+    try std.testing.expectEqualStrings("state:open AND priority:1", config.filter_str.?);
     try std.testing.expectEqual(SortField.created, config.sort_by);
     try std.testing.expectEqual(true, config.json_output);
 }
@@ -266,11 +417,60 @@ test "filterNeuronas filters by type" {
     const neuronas = [_]Neurona{ n1, n2 };
     const config = StatusConfig{ .type_filter = "issue" };
 
-    const filtered = try filterNeuronas(allocator, &neuronas, config);
+    const filtered = try filterNeuronas(allocator, &neuronas, config, null);
     defer allocator.free(filtered);
 
     try std.testing.expectEqual(@as(usize, 1), filtered.len);
     try std.testing.expectEqual(NeuronaType.issue, filtered[0].type);
+}
+
+test "applyFilter with simple type condition" {
+    const allocator = std.testing.allocator;
+
+    var n1 = try Neurona.init(allocator);
+    defer n1.deinit(allocator);
+    n1.type = .issue;
+
+    var expr = state_filters.FilterExpression{
+        .conditions = .{},
+        .operator = .@"and",
+    };
+    defer {
+        // Manual cleanup to avoid const qualifier issues
+        for (expr.conditions.items) |*cond| {
+            allocator.free(cond.field);
+            allocator.free(cond.value);
+        }
+        expr.conditions.deinit(allocator);
+    }
+
+    try expr.conditions.append(allocator, .{
+        .field = try allocator.dupe(u8, "type"),
+        .operator = .eq,
+        .value = try allocator.dupe(u8, "issue"),
+    });
+
+    try std.testing.expect(applyFilter(allocator, &n1, &expr));
+}
+
+test "evaluateCondition matches type field" {
+    const allocator = std.testing.allocator;
+
+    var n1 = try Neurona.init(allocator);
+    defer n1.deinit(allocator);
+    n1.type = .issue;
+
+    const cond = state_filters.FilterCondition{
+        .field = try allocator.dupe(u8, "type"),
+        .operator = .eq,
+        .value = try allocator.dupe(u8, "issue"),
+    };
+    defer {
+        allocator.free(cond.field);
+        allocator.free(cond.value);
+    }
+
+    try std.testing.expect(evaluateCondition(allocator, &n1, cond));
 }
 
 test "SortField enum has correct values" {

@@ -12,6 +12,7 @@ const readNeurona = @import("../storage/filesystem.zig").readNeurona;
 const writeNeurona = @import("../storage/filesystem.zig").writeNeurona;
 const findNeuronaPath = @import("../storage/filesystem.zig").findNeuronaPath;
 const timestamp_mod = @import("../utils/timestamp.zig");
+const state_machine = @import("../core/state_machine.zig");
 
 /// Update configuration
 pub const UpdateConfig = struct {
@@ -154,6 +155,14 @@ fn applyContextUpdate(allocator: Allocator, neurona: *Neurona, context_field: []
     switch (neurona.context) {
         .test_case => |*ctx| {
             if (std.mem.eql(u8, context_field, "status")) {
+                // Validate state transition
+                const current = ctx.status;
+                if (!state_machine.isValidTransitionByType("test_case", current, value)) {
+                    const err_msg = state_machine.getTransitionError("test_case", current, value);
+                    std.debug.print("Error: {s}\n", .{err_msg});
+                    return false;
+                }
+
                 allocator.free(ctx.status);
                 ctx.status = try allocator.dupe(u8, value);
                 return true;
@@ -201,6 +210,92 @@ fn applyContextUpdate(allocator: Allocator, neurona: *Neurona, context_field: []
             if (std.mem.eql(u8, context_field, "exit_action")) {
                 allocator.free(ctx.exit_action);
                 ctx.exit_action = try allocator.dupe(u8, value);
+                return true;
+            }
+        },
+        .issue => |*ctx| {
+            if (std.mem.eql(u8, context_field, "status")) {
+                // Validate state transition
+                const current = ctx.status;
+                if (!state_machine.isValidTransitionByType("issue", current, value)) {
+                    const err_msg = state_machine.getTransitionError("issue", current, value);
+                    std.debug.print("Error: {s}\n", .{err_msg});
+                    return false;
+                }
+
+                allocator.free(ctx.status);
+                ctx.status = try allocator.dupe(u8, value);
+                return true;
+            }
+            if (std.mem.eql(u8, context_field, "priority")) {
+                ctx.priority = std.fmt.parseInt(u8, value, 10) catch {
+                    std.debug.print("Error: Invalid priority '{s}'\n", .{value});
+                    return false;
+                };
+                return true;
+            }
+            if (std.mem.eql(u8, context_field, "assignee")) {
+                if (ctx.assignee) |a| allocator.free(a);
+                ctx.assignee = try allocator.dupe(u8, value);
+                return true;
+            }
+            if (std.mem.eql(u8, context_field, "created")) {
+                allocator.free(ctx.created);
+                ctx.created = try allocator.dupe(u8, value);
+                return true;
+            }
+            if (std.mem.eql(u8, context_field, "resolved")) {
+                if (ctx.resolved) |r| allocator.free(r);
+                ctx.resolved = try allocator.dupe(u8, value);
+                return true;
+            }
+            if (std.mem.eql(u8, context_field, "closed")) {
+                if (ctx.closed) |c| allocator.free(c);
+                ctx.closed = try allocator.dupe(u8, value);
+                return true;
+            }
+        },
+        .requirement => |*ctx| {
+            if (std.mem.eql(u8, context_field, "status")) {
+                // Validate state transition
+                const current = ctx.status;
+                if (!state_machine.isValidTransitionByType("requirement", current, value)) {
+                    const err_msg = state_machine.getTransitionError("requirement", current, value);
+                    std.debug.print("Error: {s}\n", .{err_msg});
+                    return false;
+                }
+
+                allocator.free(ctx.status);
+                ctx.status = try allocator.dupe(u8, value);
+                return true;
+            }
+            if (std.mem.eql(u8, context_field, "verification_method")) {
+                allocator.free(ctx.verification_method);
+                ctx.verification_method = try allocator.dupe(u8, value);
+                return true;
+            }
+            if (std.mem.eql(u8, context_field, "priority")) {
+                ctx.priority = std.fmt.parseInt(u8, value, 10) catch {
+                    std.debug.print("Error: Invalid priority '{s}'\n", .{value});
+                    return false;
+                };
+                return true;
+            }
+            if (std.mem.eql(u8, context_field, "assignee")) {
+                if (ctx.assignee) |a| allocator.free(a);
+                ctx.assignee = try allocator.dupe(u8, value);
+                return true;
+            }
+            if (std.mem.eql(u8, context_field, "effort_points")) {
+                ctx.effort_points = std.fmt.parseInt(u16, value, 10) catch {
+                    std.debug.print("Error: Invalid effort_points '{s}'\n", .{value});
+                    return false;
+                };
+                return true;
+            }
+            if (std.mem.eql(u8, context_field, "sprint")) {
+                if (ctx.sprint) |s| allocator.free(s);
+                ctx.sprint = try allocator.dupe(u8, value);
                 return true;
             }
         },

@@ -523,6 +523,7 @@ fn handleStatus(allocator: Allocator, args: []const []const u8) !void {
         .status_filter = null,
         .priority_filter = null,
         .assignee_filter = null,
+        .filter_str = null,
         .sort_by = .priority,
         .json_output = false,
     };
@@ -548,6 +549,14 @@ fn handleStatus(allocator: Allocator, args: []const []const u8) !void {
             }
             i += 1;
             config.status_filter = args[i];
+        } else if (std.mem.eql(u8, arg, "--filter") or std.mem.eql(u8, arg, "-f")) {
+            if (i + 1 >= args.len) {
+                std.debug.print("Error: --filter requires a value\n", .{});
+                printStatusHelp();
+                std.process.exit(1);
+            }
+            i += 1;
+            config.filter_str = args[i];
         } else if (std.mem.eql(u8, arg, "--sort-by") or std.mem.eql(u8, arg, "-s")) {
             if (i + 1 >= args.len) {
                 std.debug.print("Error: --sort-by requires a value\n", .{});
@@ -1078,12 +1087,25 @@ fn printStatusHelp() void {
         \\Options:
         \\  --type, -t       Filter by type
         \\  --status         Filter by status
+        \\  --filter, -f     EQL filter expression (e.g., "state:open AND priority:1")
         \\  --sort-by, -s    Sort by: priority, created, assignee (default: priority)
         \\  --json, -j       Output as JSON
+        \\
+        \\Filter Syntax:
+        \\  field:value                    Match field equals value
+        \\  field:operator:value           Use specific operator (eq, neq, gt, lt, gte, lte, contains)
+        \\  "condition1 AND condition2"    Both must match
+        \\  "condition1 OR condition2"     Either must match
+        \\
+        \\  Supported Fields:
+        \\    type, id, title, language, state (alias for context.status),
+        \\    context.status, context.priority, context.assignee, etc.
         \\
         \\Examples:
         \\  engram status
         \\  engram status --type issue
+        \\  engram status --filter "state:open AND priority:1"
+        \\  engram status --filter "type:test_case AND context.status:passing"
         \\  engram status --status open --sort-by created
         \\
     , .{});

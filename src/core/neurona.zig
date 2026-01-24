@@ -214,6 +214,47 @@ pub const Context = union(enum) {
         }
     },
 
+    /// Issue context (ALM)
+    issue: struct {
+        status: []const u8, // open, in_progress, resolved, closed
+        priority: u8, // 1-5 (1=highest)
+        assignee: ?[]const u8,
+        created: []const u8,
+        resolved: ?[]const u8,
+        closed: ?[]const u8,
+        blocked_by: std.ArrayListUnmanaged([]const u8),
+        related_to: std.ArrayListUnmanaged([]const u8),
+
+        pub fn deinit(self: *@This(), allocator: Allocator) void {
+            allocator.free(self.status);
+            allocator.free(self.created);
+            if (self.assignee) |a| allocator.free(a);
+            if (self.resolved) |r| allocator.free(r);
+            if (self.closed) |c| allocator.free(c);
+            for (self.blocked_by.items) |b| allocator.free(b);
+            self.blocked_by.deinit(allocator);
+            for (self.related_to.items) |r| allocator.free(r);
+            self.related_to.deinit(allocator);
+        }
+    },
+
+    /// Requirement context (ALM)
+    requirement: struct {
+        status: []const u8, // draft, approved, implemented
+        verification_method: []const u8, // test, analysis, inspection
+        priority: u8, // 1-5 (1=highest)
+        assignee: ?[]const u8,
+        effort_points: ?u16,
+        sprint: ?[]const u8,
+
+        pub fn deinit(self: *@This(), allocator: Allocator) void {
+            allocator.free(self.status);
+            allocator.free(self.verification_method);
+            if (self.assignee) |a| allocator.free(a);
+            if (self.sprint) |s| allocator.free(s);
+        }
+    },
+
     /// Custom context (any key-value pairs)
     custom: std.StringHashMap([]const u8),
 
@@ -285,6 +326,8 @@ pub const Neurona = struct {
             .state_machine => |*ctx| ctx.deinit(allocator),
             .artifact => |*ctx| ctx.deinit(allocator),
             .test_case => |*ctx| ctx.deinit(allocator),
+            .issue => |*ctx| ctx.deinit(allocator),
+            .requirement => |*ctx| ctx.deinit(allocator),
             .custom => |*ctx| {
                 var it = ctx.iterator();
                 while (it.next()) |entry| {

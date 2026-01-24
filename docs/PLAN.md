@@ -2,7 +2,7 @@
 
 **Version**: 1.0.0
 **Status**: Phase 1 Complete - Phase 2 In Progress
-**Last Updated**: 2026-01-23
+**Last Updated**: 2026-01-24
 
 ---
 
@@ -114,24 +114,25 @@ Engram supports 10 Neurona flavors from the union of spec.md and NEURONA_OPEN_SP
   - Compute completion percentage
 
 #### 2.3 State Management
-- [ ] Enforced state transitions
+- [x] Enforced state transitions
   - Issues: open → in_progress → resolved → closed
   - Tests: not_run → running → passing → failing
   - Requirements: draft → approved → implemented
-- [ ] Validation rules for connections
+- [x] Validation rules for connections
   - Type-specific allowed connections
   - Cardinality constraints (e.g., binary_node: left/right max 1)
-- [ ] Orphan detection (unconnected Neuronas)
-- [ ] State filtering (e.g., `engram status --filter "state:open AND priority:1"`)
+- [x] Orphan detection (unconnected Neuronas)
+- [x] State filtering (e.g., `engram status --filter "state:open AND priority:1"`)
 
 ### Success Criteria
 - ✅ Trace arbitrary depth dependencies
 - ✅ Filter Neuronas by type, tag, connections
-- [ ] Enforce ALM workflow states
-- [ ] 4 additional commands implemented (update, impact, link-artifact, release-status)
-- [ ] State management enforced (issues, tests, requirements)
-- [ ] Impact analysis functional
-- [ ] Release readiness checks working
+- ✅ Enforce ALM workflow states
+- ✅ 4 additional commands implemented (update, impact, link-artifact, release-status)
+- ✅ State management enforced (issues, tests, requirements)
+- ✅ Impact analysis functional
+- ✅ Release readiness checks working
+- ✅ State filtering with EQL support
 - ✅ Sub-10ms pathfinding (depth 5)
 - [ ] 90%+ test coverage (Phase 2 features)
 
@@ -441,12 +442,10 @@ zig build -Dtarget=aarch64-macos
 - [x] Tier 1, 2, 3 metadata parsing complete
 - [x] 90%+ test coverage (Phase 1 complete, Phase 2 partial)
 - [x] Performance targets met (sub-10ms pathfinding)
-
-### Phase 2: The Axon 🔄 IN PROGRESS
 - [x] Graph traversal engine complete
 - [x] ALM workflow support (trace, status, query)
 - [x] 4 additional commands implemented (update, impact, link-artifact, release-status)
-- [ ] State management enforced (issues, tests, requirements)
+- [x] State management enforced (issues, tests, requirements)
 - [x] Impact analysis functional
 - [x] Release readiness checks working
 - [x] Sub-10ms pathfinding (depth 5)

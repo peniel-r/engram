@@ -8,6 +8,7 @@ const NeuronaType = @import("../core/neurona.zig").NeuronaType;
 const Neurona = @import("../core/neurona.zig").Neurona;
 const Graph = @import("../core/graph.zig").Graph;
 const storage = @import("../root.zig").storage;
+const validator = @import("../core/validator.zig");
 
 /// Sync configuration
 pub const SyncConfig = struct {
@@ -62,6 +63,21 @@ fn buildGraphIndex(allocator: Allocator, neuronas: []const Neurona, verbose: boo
     if (verbose) {
         std.debug.print("Graph built: {d} nodes\n", .{graph.nodeCount()});
         std.debug.print("Index saved to .activations/graph.idx\n", .{});
+    }
+
+    // Step 2.5: Detect and report orphans
+    const orphans = try validator.findOrphans(neuronas, &graph, allocator);
+    defer allocator.free(orphans);
+
+    if (orphans.len > 0) {
+        std.debug.print("\n⚠️  Warning: Found {d} orphaned Neurona(s):\n", .{orphans.len});
+        for (orphans) |orphan_id| {
+            std.debug.print("  - {s}\n", .{orphan_id});
+        }
+        std.debug.print("  Orphaned Neuronas have no connections in or out.\n", .{});
+        std.debug.print("  Consider linking them to the graph.\n\n", .{});
+    } else if (verbose) {
+        std.debug.print("✓ No orphaned Neuronas found\n\n", .{});
     }
 
     // TODO: Save graph index to disk (Step 4.1 will implement)

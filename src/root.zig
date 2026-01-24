@@ -24,6 +24,7 @@ pub const frontmatter = @import("utils/frontmatter.zig").Frontmatter;
 pub const yaml = @import("utils/yaml.zig").Parser;
 pub const utils = struct {
     pub const timestamp = @import("utils/timestamp.zig");
+    pub const state_filters = @import("utils/state_filters.zig");
 };
 
 pub fn bufferedPrint() !void {
