@@ -17,6 +17,10 @@ pub const storage = struct {
     pub const readNeurona = @import("storage/filesystem.zig").readNeurona;
     pub const writeNeurona = @import("storage/filesystem.zig").writeNeurona;
     pub const scanNeuronas = @import("storage/filesystem.zig").scanNeuronas;
+    pub const BM25Index = @import("storage/tfidf.zig").BM25Index;
+    pub const VectorIndex = @import("storage/vectors.zig").VectorIndex;
+    pub const SearchResult = @import("storage/vectors.zig").SearchResult;
+    pub const BM25Result = @import("storage/tfidf.zig").SearchResult;
 };
 
 // Re-export utils
