@@ -147,10 +147,10 @@ Engram supports 10 Neurona flavors from the union of spec.md and NEURONA_OPEN_SP
 ### Milestones
 
 #### 3.1 Semantic Search
-- [ ] Vector embeddings integration (C-interop with llama.cpp or similar)
-- [ ] `.activations/vectors.bin` index format
-- [ ] Hybrid search (BM25 + vector similarity)
-- [ ] Neural Activation algorithm implementation
+- [x] Vector embeddings integration (C-interop with llama.cpp or similar)
+- [x] `.activations/vectors.bin` index format
+- [x] Hybrid search (BM25 + vector similarity)
+- [x] Neural Activation algorithm implementation
   - Stimulus: Text match + vector match
   - Propagation: Signal decay across weighted links
   - Response: Ranked results with relevance scores
