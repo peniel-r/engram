@@ -204,15 +204,11 @@ fn createArtifact(allocator: Allocator, config: LinkArtifactConfig, source_file:
 
 /// Generate artifact ID from filename
 fn generateArtifactId(allocator: Allocator, filename: []const u8) ![]const u8 {
-    // Remove extension
-    const ext = std.fs.path.extension(filename);
-    const base = if (ext.len > 0) filename[0 .. filename.len - ext.len] else filename;
-
     // Sanitize: replace dots and spaces with dashes
     var sanitized = std.ArrayListUnmanaged(u8){};
     defer sanitized.deinit(allocator);
 
-    for (base) |c| {
+    for (filename) |c| {
         if (c == '.' or c == ' ') {
             try sanitized.append(allocator, '-');
         } else if (std.ascii.isAlphanumeric(c)) {
@@ -220,8 +216,8 @@ fn generateArtifactId(allocator: Allocator, filename: []const u8) ![]const u8 {
         }
     }
 
-    // Generate artifact ID: art.<sanitized-filename>
-    return std.fmt.allocPrint(allocator, "art.{s}", .{sanitized.items});
+    // Generate artifact ID: art-<sanitized-filename>
+    return std.fmt.allocPrint(allocator, "art-{s}", .{sanitized.items});
 }
 
 /// Output results in human-readable format
@@ -308,7 +304,7 @@ test "generateArtifactId generates valid ID" {
 test "LinkResult stores correctly" {
     const allocator = std.testing.allocator;
 
-    const result = LinkResult{
+    var result = LinkResult{
         .artifact_id = try allocator.dupe(u8, "art.main-zig"),
         .source_file = try allocator.dupe(u8, "src/main.zig"),
         .requirement_id = try allocator.dupe(u8, "req.auth"),

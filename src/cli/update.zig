@@ -374,7 +374,7 @@ test "applyUpdate updates title" {
     defer neurona.deinit(allocator);
     neurona.title = try allocator.dupe(u8, "Old Title");
 
-    const update = FieldUpdate{
+    var update = FieldUpdate{
         .field = try allocator.dupe(u8, "title"),
         .value = try allocator.dupe(u8, "New Title"),
         .operator = .set,

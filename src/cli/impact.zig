@@ -445,7 +445,7 @@ test "generateRecommendation returns correct action" {
     defer neurona.deinit(allocator);
     neurona.type = .test_case;
 
-    const rec = try generateRecommendation(allocator, neurona, null, 1);
+    var rec = try generateRecommendation(allocator, neurona, null, 1);
     try std.testing.expect(rec != null);
     defer if (rec) |*r| r.deinit(allocator);
 

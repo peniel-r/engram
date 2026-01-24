@@ -194,7 +194,7 @@ test "FilterOperator fromString parses operators" {
 test "parseFilter parses simple filter" {
     const allocator = std.testing.allocator;
 
-    const expr = try parseFilter(allocator, "state:open");
+    var expr = try parseFilter(allocator, "state:open");
     defer expr.deinit(allocator);
 
     try std.testing.expectEqual(@as(usize, 1), expr.conditions.items.len);
@@ -206,7 +206,7 @@ test "parseFilter parses simple filter" {
 test "parseFilter parses complex filter with AND" {
     const allocator = std.testing.allocator;
 
-    const expr = try parseFilter(allocator, "state:open AND priority:1");
+    var expr = try parseFilter(allocator, "state:open AND priority:1");
     defer expr.deinit(allocator);
 
     try std.testing.expectEqual(@as(usize, 2), expr.conditions.items.len);
@@ -218,7 +218,7 @@ test "parseFilter parses complex filter with AND" {
 test "parseFilter parses context field" {
     const allocator = std.testing.allocator;
 
-    const expr = try parseFilter(allocator, "context.status:passing");
+    var expr = try parseFilter(allocator, "context.status:passing");
     defer expr.deinit(allocator);
 
     try std.testing.expectEqual(@as(usize, 1), expr.conditions.items.len);
