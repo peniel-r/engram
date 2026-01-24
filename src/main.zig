@@ -11,6 +11,10 @@ const delete_cmd = @import("cli/delete.zig");
 const trace_cmd = @import("cli/trace.zig");
 const status_cmd = @import("cli/status.zig");
 const query_cmd = @import("cli/query.zig");
+const update_cmd = @import("cli/update.zig");
+const impact_cmd = @import("cli/impact.zig");
+const link_artifact_cmd = @import("cli/link_artifact.zig");
+const release_status_cmd = @import("cli/release_status.zig");
 
 // Command registry
 const Command = struct {
@@ -74,6 +78,30 @@ const commands = [_]Command{
         .description = "Query interface",
         .handler = handleQuery,
         .help_fn = printQueryHelp,
+    },
+    .{
+        .name = "update",
+        .description = "Update Neurona fields",
+        .handler = handleUpdate,
+        .help_fn = printUpdateHelp,
+    },
+    .{
+        .name = "impact",
+        .description = "Impact analysis for code changes",
+        .handler = handleImpact,
+        .help_fn = printImpactHelp,
+    },
+    .{
+        .name = "link-artifact",
+        .description = "Link source files to requirements",
+        .handler = handleLinkArtifact,
+        .help_fn = printLinkArtifactHelp,
+    },
+    .{
+        .name = "release-status",
+        .description = "Release readiness check",
+        .handler = handleReleaseStatus,
+        .help_fn = printReleaseStatusHelp,
     },
 };
 
@@ -638,6 +666,209 @@ fn handleQuery(allocator: Allocator, args: []const []const u8) !void {
     try query_cmd.execute(allocator, config);
 }
 
+fn handleUpdate(allocator: Allocator, args: []const []const u8) !void {
+    if (args.len < 3) {
+        std.debug.print("Error: Missing Neurona ID\n", .{});
+        printUpdateHelp();
+        std.process.exit(1);
+    }
+
+    var config = update_cmd.UpdateConfig{
+        .id = args[2],
+        .sets = std.ArrayListUnmanaged(update_cmd.FieldUpdate){},
+        .verbose = false,
+        .neuronas_dir = "neuronas",
+    };
+    defer {
+        for (config.sets.items) |*s| s.deinit(allocator);
+        config.sets.deinit(allocator);
+    }
+
+    // Parse options
+    var i: usize = 3;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+
+        if (std.mem.eql(u8, arg, "--set")) {
+            if (i + 1 >= args.len) {
+                std.debug.print("Error: --set requires a value (format: field=value)\n", .{});
+                printUpdateHelp();
+                std.process.exit(1);
+            }
+            i += 1;
+            const set_value = args[i];
+
+            // Parse field=value format
+            var parts = std.mem.splitSequence(u8, set_value, "=");
+            const field = parts.next() orelse {
+                std.debug.print("Error: Invalid --set format. Use field=value\n", .{});
+                printUpdateHelp();
+                std.process.exit(1);
+            };
+            const value = parts.rest();
+
+            const update = update_cmd.FieldUpdate{
+                .field = try allocator.dupe(u8, field),
+                .value = try allocator.dupe(u8, value),
+                .operator = .set,
+            };
+            try config.sets.append(allocator, update);
+        } else if (std.mem.eql(u8, arg, "--verbose") or std.mem.eql(u8, arg, "-v")) {
+            config.verbose = true;
+        } else if (std.mem.startsWith(u8, arg, "-")) {
+            std.debug.print("Error: Unknown flag '{s}'\n", .{arg});
+            printUpdateHelp();
+            std.process.exit(1);
+        }
+    }
+
+    try update_cmd.execute(allocator, config);
+}
+
+fn handleImpact(allocator: Allocator, args: []const []const u8) !void {
+    if (args.len < 3) {
+        std.debug.print("Error: Missing Neurona ID\n", .{});
+        printImpactHelp();
+        std.process.exit(1);
+    }
+
+    var config = impact_cmd.ImpactConfig{
+        .id = args[2],
+        .direction = .both,
+        .max_depth = 10,
+        .include_recommendations = true,
+        .json_output = false,
+        .neuronas_dir = "neuronas",
+    };
+
+    // Parse options
+    var i: usize = 3;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+
+        if (std.mem.eql(u8, arg, "--up") or std.mem.eql(u8, arg, "-u")) {
+            config.direction = .upstream;
+        } else if (std.mem.eql(u8, arg, "--down") or std.mem.eql(u8, arg, "-d")) {
+            config.direction = .downstream;
+        } else if (std.mem.eql(u8, arg, "--depth")) {
+            if (i + 1 >= args.len) {
+                std.debug.print("Error: --depth requires a value\n", .{});
+                printImpactHelp();
+                std.process.exit(1);
+            }
+            i += 1;
+            const depth_val = std.fmt.parseInt(usize, args[i], 10) catch {
+                std.debug.print("Error: Invalid depth '{s}'\n", .{args[i]});
+                printImpactHelp();
+                std.process.exit(1);
+            };
+            config.max_depth = depth_val;
+        } else if (std.mem.eql(u8, arg, "--json") or std.mem.eql(u8, arg, "-j")) {
+            config.json_output = true;
+        } else if (std.mem.startsWith(u8, arg, "-")) {
+            std.debug.print("Error: Unknown flag '{s}'\n", .{arg});
+            printImpactHelp();
+            std.process.exit(1);
+        }
+    }
+
+    try impact_cmd.execute(allocator, config);
+}
+
+fn handleLinkArtifact(allocator: Allocator, args: []const []const u8) !void {
+    if (args.len < 4) {
+        std.debug.print("Error: Missing required arguments\n", .{});
+        printLinkArtifactHelp();
+        std.process.exit(1);
+    }
+
+    var config = link_artifact_cmd.LinkArtifactConfig{
+        .requirement_id = args[2],
+        .source_files = std.ArrayListUnmanaged([]const u8){},
+        .runtime = args[3],
+        .auto_create = true,
+        .language_version = null,
+        .safe_to_exec = false,
+        .verbose = false,
+        .neuronas_dir = "neuronas",
+    };
+    defer {
+        for (config.source_files.items) |f| allocator.free(f);
+        config.source_files.deinit(allocator);
+    }
+
+    // Parse options
+    var i: usize = 4;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+
+        if (std.mem.eql(u8, arg, "--runtime") or std.mem.eql(u8, arg, "-r")) {
+            if (i + 1 >= args.len) {
+                std.debug.print("Error: --runtime requires a value\n", .{});
+                printLinkArtifactHelp();
+                std.process.exit(1);
+            }
+            i += 1;
+            config.runtime = args[i];
+        } else if (std.mem.eql(u8, arg, "--file") or std.mem.eql(u8, arg, "-f")) {
+            if (i + 1 >= args.len) {
+                std.debug.print("Error: --file requires a value\n", .{});
+                printLinkArtifactHelp();
+                std.process.exit(1);
+            }
+            i += 1;
+            try config.source_files.append(allocator, try allocator.dupe(u8, args[i]));
+        } else if (std.mem.eql(u8, arg, "--version")) {
+            if (i + 1 >= args.len) {
+                std.debug.print("Error: --version requires a value\n", .{});
+                printLinkArtifactHelp();
+                std.process.exit(1);
+            }
+            i += 1;
+            config.language_version = args[i];
+        } else if (std.mem.eql(u8, arg, "--safe")) {
+            config.safe_to_exec = true;
+        } else if (std.mem.eql(u8, arg, "--verbose") or std.mem.eql(u8, arg, "-v")) {
+            config.verbose = true;
+        } else if (std.mem.startsWith(u8, arg, "-")) {
+            std.debug.print("Error: Unknown flag '{s}'\n", .{arg});
+            printLinkArtifactHelp();
+            std.process.exit(1);
+        }
+    }
+
+    try link_artifact_cmd.execute(allocator, config);
+}
+
+fn handleReleaseStatus(allocator: Allocator, args: []const []const u8) !void {
+    var config = release_status_cmd.ReleaseStatusConfig{
+        .requirements_filter = null,
+        .include_tests = true,
+        .include_issues = true,
+        .json_output = false,
+        .verbose = false,
+        .neuronas_dir = "neuronas",
+    };
+
+    // Parse options
+    var i: usize = 2;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+
+        if (std.mem.eql(u8, arg, "--json") or std.mem.eql(u8, arg, "-j")) {
+            config.json_output = true;
+        } else if (std.mem.eql(u8, arg, "--verbose") or std.mem.eql(u8, arg, "-v")) {
+            config.verbose = true;
+        } else if (std.mem.startsWith(u8, arg, "-")) {
+            std.debug.print("Error: Unknown flag '{s}'\n", .{arg});
+            printReleaseStatusHelp();
+            std.process.exit(1);
+        }
+    }
+
+    try release_status_cmd.execute(allocator, config);
+}
+
 // Help functions
 
 fn printUsage() void {
@@ -652,6 +883,10 @@ fn printUsage() void {
         \\  trace             Trace dependencies
         \\  status            List status
         \\  query             Query interface
+        \\  update            Update Neurona fields
+        \\  impact            Impact analysis
+        \\  link-artifact     Link source files
+        \\  release-status    Release readiness check
         \\  --help, -h        Show this help message
         \\  --version, -v     Show version information
         \\
@@ -677,6 +912,10 @@ fn printHelp() void {
         \\  trace             Trace dependencies
         \\  status            List status
         \\  query             Query interface
+        \\  update            Update Neurona fields
+        \\  impact            Impact analysis
+        \\  link-artifact     Link source files
+        \\  release-status    Release readiness check
         \\  --help, -h        Show this help message
         \\  --version, -v     Show version information
         \\
@@ -890,6 +1129,98 @@ fn printDeleteHelp() void {
     , .{});
 }
 
+fn printUpdateHelp() void {
+    std.debug.print(
+        \\Update Neurona fields programmatically
+        \\
+        \\Usage:
+        \\  engram update <id> [options]
+        \\
+        \\Arguments:
+        \\  id                Neurona ID to update (required)
+        \\
+        \\Options:
+        \\  --set <field=value> Set field to value (can be repeated)
+        \\                    Examples: --set title="New Title"
+        \\                              --set context.status=passing
+        \\                              --set tag=bug
+        \\  --verbose, -v    Show verbose output
+        \\
+        \\Examples:
+        \\  engram update test.001 --set context.status=passing
+        \\  engram update req.auth --set title="OAuth 2.0 Support"
+        \\  engram update issue.001 --set context.status=resolved
+        \\
+    , .{});
+}
+
+fn printImpactHelp() void {
+    std.debug.print(
+        \\Perform impact analysis for code changes
+        \\
+        \\Usage:
+        \\  engram impact <neurona_id> [options]
+        \\
+        \\Arguments:
+        \\  neurona_id       ID of Neurona to analyze (required)
+        \\
+        \\Options:
+        \\  --up, -u         Trace upstream (dependencies) only
+        \\  --down, -d        Trace downstream (dependents) only
+        \\  --depth           Maximum trace depth (default: 10)
+        \\  --json, -j       Output as JSON
+        \\
+        \\Examples:
+        \\  engram impact req.auth
+        \\  engram impact src.main.zig --down
+        \\  engram impact test.auth.login --depth 3
+        \\
+    , .{});
+}
+
+fn printLinkArtifactHelp() void {
+    std.debug.print(
+        \\Link source files to requirements
+        \\
+        \\Usage:
+        \\  engram link-artifact <requirement_id> <runtime> [options]
+        \\
+        \\Arguments:
+        \\  requirement_id    Requirement ID to link artifact to (required)
+        \\  runtime          Programming runtime (e.g., zig, python, node) (required)
+        \\
+        \\Options:
+        \\  --file, -f       Source file path (can be repeated)
+        \\  --version         Language version
+        \\  --safe            Mark artifact as safe to execute
+        \\  --verbose, -v    Show verbose output
+        \\
+        \\Examples:
+        \\  engram link-artifact req.auth zig --file src/auth.zig
+        \\  engram link-artifact req.oauth2 node --file src/oauth2.ts --safe
+        \\
+    , .{});
+}
+
+fn printReleaseStatusHelp() void {
+    std.debug.print(
+        \\Check release readiness
+        \\
+        \\Usage:
+        \\  engram release-status [options]
+        \\
+        \\Options:
+        \\  --verbose, -v    Show detailed breakdown
+        \\  --json, -j       Output as JSON
+        \\
+        \\Examples:
+        \\  engram release-status
+        \\  engram release-status --verbose
+        \\  engram release-status --json
+        \\
+    , .{});
+}
+
 fn printVersion() void {
     std.debug.print("Engram version 0.1.0\n", .{});
 }
@@ -906,6 +1237,10 @@ test {
     _ = @import("cli/trace.zig");
     _ = @import("cli/status.zig");
     _ = @import("cli/query.zig");
+    _ = @import("cli/update.zig");
+    _ = @import("cli/impact.zig");
+    _ = @import("cli/link_artifact.zig");
+    _ = @import("cli/release_status.zig");
 }
 
 test "Command registry contains all expected commands" {
@@ -922,10 +1257,14 @@ test "Command registry contains all expected commands" {
         "trace",
         "status",
         "query",
+        "update",
+        "impact",
+        "link-artifact",
+        "release-status",
     };
 
-    // Verify we have 9 commands
-    try std.testing.expectEqual(@as(usize, 9), expected_commands.len);
+    // Verify we have 13 commands
+    try std.testing.expectEqual(@as(usize, 13), expected_commands.len);
 }
 
 test "Help functions print usage information" {
