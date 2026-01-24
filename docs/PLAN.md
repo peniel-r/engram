@@ -169,10 +169,6 @@ Engram supports 10 Neurona flavors from the union of spec.md and NEURONA_OPEN_SP
   - Invalidation on content changes
 
 #### 3.3 Advanced Features
-- [ ] `engram run` - Execute code artifacts (sandboxed)
-  - Validate `context.safe_to_exec: true`
-  - Spawn subprocess with timeout
-  - Capture output for logging
 - [ ] `engram metrics` - Analytics and statistics
   - Requirements: total, validated, blocked, coverage
   - Issues: open, resolved, avg resolution time
@@ -190,7 +186,6 @@ Engram supports 10 Neurona flavors from the union of spec.md and NEURONA_OPEN_SP
 - [ ] Semantic search over 10K Neuronas < 50ms
 - [ ] Neural Activation algorithm complete
 - [ ] LLM-optimized Neurona representation
-- [ ] Safe code artifact execution
 - [ ] Analytics and metrics functional
 - [ ] 90%+ test coverage
 
@@ -455,7 +450,6 @@ zig build -Dtarget=aarch64-macos
 ### Phase 3: The Cortex ⏳ PENDING
 - [ ] Semantic search implemented
 - [ ] LLM optimization complete
-- [ ] Code execution sandboxed
 - [ ] Analytics and metrics functional
 - [ ] Neural Activation algorithm working
 - [ ] 90%+ test coverage
