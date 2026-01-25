@@ -2,13 +2,15 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-pub const CacheError = error{IoError, InvalidFormat};
+pub const CacheError = error{ IoError, InvalidFormat };
 
-fn cacheDir() []const u8 { return ".activations/cache"; }
+fn cacheDir() []const u8 {
+    return ".activations/cache";
+}
 
 pub fn getCachePath(allocator: Allocator, neurona_id: []const u8) ![]const u8 {
     // Ensure cache directory exists
-    _ = try std.fs.cwd().createDirAll(cacheDir(), 0o755);
+    _ = try std.fs.cwd().makePath(cacheDir());
 
     // Build filename: {id}.json
     const filename = try std.fmt.allocPrint(allocator, "{s}.json", .{neurona_id});
@@ -47,7 +49,7 @@ pub fn saveSummary(allocator: Allocator, neurona_id: []const u8, hash: []const u
     var buf = std.ArrayListUnmanaged(u8){};
     defer buf.deinit(allocator);
     const w = buf.writer(allocator);
-    try w.print("{{\"version\":1,\"neurona_id\":\"{s}\",\"hash\":\"{s}\",\"summary\":\"{s}\"}}", .{esc_id, esc_hash, esc_summary});
+    try w.print("{{\"version\":1,\"neurona_id\":\"{s}\",\"hash\":\"{s}\",\"summary\":\"{s}\"}}", .{ esc_id, esc_hash, esc_summary });
 
     const data = try buf.toOwnedSlice(allocator);
     defer allocator.free(data);
@@ -95,13 +97,14 @@ pub fn loadSummary(allocator: Allocator, neurona_id: []const u8) !?[]const u8 {
 pub fn invalidateSummary(allocator: Allocator, neurona_id: []const u8) !void {
     const path = try getCachePath(allocator, neurona_id);
     defer allocator.free(path);
-    _ = std.fs.cwd().removeFile(path) catch {};
+    _ = std.fs.cwd().deleteFile(path) catch {};
 }
 
 pub fn summaryExists(allocator: Allocator, neurona_id: []const u8) bool {
     const path_res = getCachePath(allocator, neurona_id) catch return false;
     defer allocator.free(path_res);
-    return std.fs.cwd().access(path_res, .{}) == null;
+    std.fs.cwd().access(path_res, .{}) catch return false;
+    return true;
 }
 
 test "llm_cache save/load/invalidate" {
@@ -118,10 +121,9 @@ test "llm_cache save/load/invalidate" {
 
     const loaded = try loadSummary(allocator, id);
     defer if (loaded) |s| allocator.free(s);
-    try std.testing.expect(loaded orelse false);
-    if (loaded) try std.testing.expectEqualStrings(summary, loaded.?);
+    try std.testing.expect(loaded != null);
+    if (loaded) |s| try std.testing.expectEqualStrings(summary, s);
 
     try invalidateSummary(allocator, id);
     try std.testing.expect(!summaryExists(allocator, id));
 }
-

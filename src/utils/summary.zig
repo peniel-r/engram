@@ -37,13 +37,12 @@ fn generateSimpleSummary(allocator: Allocator, text: []const u8, max_tokens: u32
             const s = trimSpaces(sentence);
             if (s.len > 0) {
                 // Try append and check token count
+                const prev_len = out.items.len;
                 try writer.print("{s} ", .{s});
-                const current = try out.toOwnedSlice(allocator);
-                defer allocator.free(current);
-                const tokens = try token_counter.countTokens(allocator, current);
-                if (tokens >= max_tokens and max_tokens > 0) {
-                    // remove last appended sentence
-                    out.items.len = out.items.len - (end - start + 1);
+                const tokens = try token_counter.countTokens(allocator, out.items);
+                if (tokens > max_tokens and max_tokens > 0) {
+                    // Remove last appended sentence by truncating to previous length
+                    out.shrinkAndFree(allocator, prev_len);
                     break;
                 }
             }
@@ -57,7 +56,14 @@ fn generateSimpleSummary(allocator: Allocator, text: []const u8, max_tokens: u32
         return try allocator.dupe(u8, text[0..take]);
     }
 
-    return try out.toOwnedSlice(allocator);
+    // Trim trailing space before returning
+    const result = try out.toOwnedSlice(allocator);
+    if (result.len > 0 and result[result.len - 1] == ' ') {
+        const trimmed = try allocator.dupe(u8, result[0 .. result.len - 1]);
+        allocator.free(result);
+        return trimmed;
+    }
+    return result;
 }
 
 fn generateHierarchicalSummary(allocator: Allocator, text: []const u8, max_tokens: u32) ![]u8 {
@@ -129,6 +135,7 @@ test "generateSummary summary returns shorter or equal" {
     const out = try generateSummary(allocator, txt, "summary", 2);
     defer allocator.free(out);
     const tokens = try @import("./token_counter.zig").countTokens(allocator, out);
+    std.debug.print("\nSummary: '{s}', Tokens: {d}\n", .{ out, tokens });
     try std.testing.expect(tokens <= 2);
 }
 
@@ -139,4 +146,3 @@ test "generateSummary hierarchical extracts headings" {
     defer allocator.free(out);
     try std.testing.expect(std.mem.indexOf(u8, out, "Title") != null);
 }
-
