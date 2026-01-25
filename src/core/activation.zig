@@ -70,7 +70,7 @@ pub const NeuralActivation = struct {
         }
 
         // Propagate signal across graph
-        const activations = try self.propagateSignal(allocator, &initial_stimuli, self.propagation_depth);
+        var activations = try self.propagateSignal(allocator, &initial_stimuli, self.propagation_depth);
         defer {
             var act_it = activations.iterator();
             while (act_it.next()) |entry| {
@@ -80,7 +80,8 @@ pub const NeuralActivation = struct {
         }
 
         // Build results
-        var results = std.ArrayList(ActivationResult).init(allocator);
+        var results = std.ArrayList(ActivationResult){};
+        try results.ensureTotalCapacity(allocator, 50);
 
         var act_it = activations.iterator();
         while (act_it.next()) |entry| {
@@ -88,7 +89,7 @@ pub const NeuralActivation = struct {
             const activation_score = entry.value_ptr.*;
 
             if (activation_score > 0.0) {
-                try results.append(.{
+                try results.append(allocator, .{
                     .node_id = try allocator.dupe(u8, node_id),
                     .stimulus_score = initial_stimuli.get(node_id) orelse 0.0,
                     .activation_score = activation_score,
@@ -104,7 +105,7 @@ pub const NeuralActivation = struct {
             }
         }.lessThan);
 
-        return results.toOwnedSlice();
+        return results.toOwnedSlice(allocator);
     }
 
     /// Compute stimulus for a node
@@ -114,8 +115,9 @@ pub const NeuralActivation = struct {
         // BM25 score
         if (self.text_weight > 0.0) {
             const bm25_results = self.bm25_index.search(std.heap.page_allocator, query, 10) catch &[_]BM25Result{};
+            defer std.heap.page_allocator.free(bm25_results);
+
             for (bm25_results) |r| {
-                defer r.deinit(std.heap.page_allocator);
                 if (std.mem.eql(u8, r.doc_id, node_id)) {
                     stimulus += self.text_weight * r.score;
                     break;
@@ -170,7 +172,7 @@ pub const NeuralActivation = struct {
 
                     // Add to new activations (accumulate)
                     const existing = new_activations.getPtr(target_id);
-                    if (existing) |*val| {
+                    if (existing) |val| {
                         val.* += propagated;
                     } else {
                         const key = try allocator.dupe(u8, target_id);

@@ -630,8 +630,10 @@ fn handleDelete(allocator: Allocator, args: []const []const u8) !void {
 }
 
 fn handleQuery(allocator: Allocator, args: []const []const u8) !void {
-    // Simple query implementation
+    // Default query configuration
     var config = query_cmd.QueryConfig{
+        .mode = .filter,
+        .query_text = "",
         .filters = &[_]query_cmd.QueryFilter{},
         .limit = null,
         .json_output = false,
@@ -639,17 +641,36 @@ fn handleQuery(allocator: Allocator, args: []const []const u8) !void {
 
     // Parse options
     var i: usize = 2;
+    var query_arg: ?[]const u8 = null;
+
     while (i < args.len) : (i += 1) {
         const arg = args[i];
 
-        if (std.mem.eql(u8, arg, "--type") or std.mem.eql(u8, arg, "-t")) {
+        if (std.mem.eql(u8, arg, "--mode") or std.mem.eql(u8, arg, "-m")) {
             if (i + 1 >= args.len) {
-                std.debug.print("Error: --type requires a value\n", .{});
+                std.debug.print("Error: --mode requires a value\n", .{});
                 printQueryHelp();
                 std.process.exit(1);
             }
             i += 1;
-            _ = args[i]; // Would build filter in full implementation
+            const mode_str = args[i];
+
+            // Parse mode
+            if (std.mem.eql(u8, mode_str, "filter")) {
+                config.mode = .filter;
+            } else if (std.mem.eql(u8, mode_str, "text")) {
+                config.mode = .text;
+            } else if (std.mem.eql(u8, mode_str, "vector")) {
+                config.mode = .vector;
+            } else if (std.mem.eql(u8, mode_str, "hybrid")) {
+                config.mode = .hybrid;
+            } else if (std.mem.eql(u8, mode_str, "activation")) {
+                config.mode = .activation;
+            } else {
+                std.debug.print("Error: Unknown mode '{s}'. Use: filter, text, vector, hybrid, activation\n", .{mode_str});
+                printQueryHelp();
+                std.process.exit(1);
+            }
         } else if (std.mem.eql(u8, arg, "--limit") or std.mem.eql(u8, arg, "-l")) {
             if (i + 1 >= args.len) {
                 std.debug.print("Error: --limit requires a value\n", .{});
@@ -669,7 +690,15 @@ fn handleQuery(allocator: Allocator, args: []const []const u8) !void {
             std.debug.print("Error: Unknown flag '{s}'\n", .{arg});
             printQueryHelp();
             std.process.exit(1);
+        } else {
+            // Treat as query string
+            query_arg = arg;
         }
+    }
+
+    // Set query text (if provided)
+    if (query_arg) |qa| {
+        config.query_text = qa;
     }
 
     try query_cmd.execute(allocator, config);
@@ -1116,16 +1145,28 @@ fn printQueryHelp() void {
         \\Query interface
         \\
         \\Usage:
-        \\  engram query [options]
+        \\  engram query [options] [query_string]
         \\
         \\Options:
-        \\  --type, -t       Filter by type
-        \\  --limit, -l      Limit results (default: unlimited)
+        \\  --mode, -m      Query mode: filter, text, vector, hybrid, activation (default: filter)
+        \\  --type, -t       Filter by type (filter mode only)
+        \\  --limit, -l      Limit results (default: 50)
         \\  --json, -j       Output as JSON
+        \\
+        \\Query Modes:
+        \\  filter            Filter by type, tags, connections (default)
+        \\  text              BM25 full-text search
+        \\  vector            Vector similarity search
+        \\  hybrid             Combined BM25 + vector search
+        \\  activation         Neural propagation across graph
         \\
         \\Examples:
         \\  engram query
         \\  engram query --type issue --limit 10
+        \\  engram query --mode text "authentication"
+        \\  engram query --mode vector "user login"
+        \\  engram query --mode hybrid "login failure"
+        \\  engram query --mode activation "critical bug"
         \\
     , .{});
 }

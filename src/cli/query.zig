@@ -7,9 +7,33 @@ const Allocator = std.mem.Allocator;
 const Neurona = @import("../core/neurona.zig").Neurona;
 const NeuronaType = @import("../core/neurona.zig").NeuronaType;
 const storage = @import("../root.zig").storage;
+const Graph = @import("../core/graph.zig").Graph;
+const NeuralActivation = @import("../root.zig").core.NeuralActivation;
+
+/// Query mode for different search algorithms
+pub const QueryMode = enum {
+    /// Filter by type, tags, connections (default)
+    filter,
+    /// BM25 full-text search
+    text,
+    /// Vector similarity search
+    vector,
+    /// Combined BM25 + vector with fusion
+    hybrid,
+    /// Neural propagation across graph
+    activation,
+};
+
+/// Fused search result (for hybrid search)
+pub const FusedResult = struct {
+    id: []const u8,
+    score: f32,
+};
 
 /// Query configuration
 pub const QueryConfig = struct {
+    mode: QueryMode = .filter,
+    query_text: []const u8 = "",
     filters: []QueryFilter,
     limit: ?usize = null,
     json_output: bool = false,
@@ -79,8 +103,19 @@ pub const FieldFilter = struct {
     };
 };
 
-/// Main command handler
+/// Main command handler - routes to mode-specific handler
 pub fn execute(allocator: Allocator, config: QueryConfig) !void {
+    switch (config.mode) {
+        .filter => try executeFilterQuery(allocator, config),
+        .text => try executeBM25Query(allocator, config),
+        .vector => try executeVectorQuery(allocator, config),
+        .hybrid => try executeHybridQuery(allocator, config),
+        .activation => try executeActivationQuery(allocator, config),
+    }
+}
+
+/// Filter mode: Filter by type, tags, connections
+fn executeFilterQuery(allocator: Allocator, config: QueryConfig) !void {
     // Step 1: Scan all Neuronas
     const neuronas = try storage.scanNeuronas(allocator, "neuronas");
     defer {
@@ -224,6 +259,570 @@ fn matchesSingleConnection(conn: *const @import("../core/neurona.zig").Connectio
     }
 
     return false;
+}
+
+/// BM25 text search mode
+fn executeBM25Query(allocator: Allocator, config: QueryConfig) !void {
+    if (config.query_text.len == 0) {
+        std.debug.print("Error: Text search requires a query string\n", .{});
+        return error.MissingQueryText;
+    }
+
+    // Step 1: Scan all Neuronas
+    const neuronas = try storage.scanNeuronas(allocator, "neuronas");
+    defer {
+        for (neuronas) |*n| n.deinit(allocator);
+        allocator.free(neuronas);
+    }
+
+    // Step 2: Build BM25 index
+    var bm25_index = storage.BM25Index.init();
+    defer bm25_index.deinit(allocator);
+
+    for (neuronas) |*neurona| {
+        // Combine title and tags for indexing
+        var content = std.ArrayList(u8){};
+        try content.ensureTotalCapacity(allocator, neurona.title.len + 200); // Reserve space for title + tags
+        defer content.deinit(allocator);
+
+        try content.appendSlice(allocator, neurona.title);
+
+        // Add tags to search content
+        for (neurona.tags.items) |tag| {
+            try content.appendSlice(allocator, " ");
+            try content.appendSlice(allocator, tag);
+        }
+
+        try bm25_index.addDocument(allocator, neurona.id, content.items);
+    }
+
+    bm25_index.build();
+
+    // Step 3: Search
+    const limit = config.limit orelse 50;
+    const results = try bm25_index.search(allocator, config.query_text, limit);
+    defer {
+        for (results) |*r| r.deinit(allocator);
+        allocator.free(results);
+    }
+
+    // Step 4: Output results with scores
+    if (config.json_output) {
+        try outputJsonWithScores(results, neuronas);
+    } else {
+        try outputListWithScores(results, neuronas, "BM25 Score");
+    }
+}
+
+/// Vector similarity search mode
+fn executeVectorQuery(allocator: Allocator, config: QueryConfig) !void {
+    if (config.query_text.len == 0) {
+        std.debug.print("Error: Vector search requires a query string\n", .{});
+        return error.MissingQueryText;
+    }
+
+    // Step 1: Scan all Neuronas
+    const neuronas = try storage.scanNeuronas(allocator, "neuronas");
+    defer {
+        for (neuronas) |*n| n.deinit(allocator);
+        allocator.free(neuronas);
+    }
+
+    // Step 2: Build vector index (simple embedding: word count vectors)
+    // Note: In production, you'd use actual embeddings from a model
+    const dimension = 100; // Fixed dimension for this example
+    var vector_index = storage.VectorIndex.init(allocator, dimension);
+    defer vector_index.deinit(allocator);
+
+    var doc_vec_map = std.StringHashMap([]const f32).init(allocator);
+    defer {
+        var it = doc_vec_map.iterator();
+        while (it.next()) |entry| {
+            allocator.free(entry.value_ptr.*);
+        }
+        doc_vec_map.deinit();
+    }
+
+    for (neuronas) |*neurona| {
+        // Create simple embedding: word frequency vector
+        const embedding = try createSimpleEmbedding(allocator, neurona, dimension);
+        try doc_vec_map.put(neurona.id, embedding);
+        try vector_index.addVector(allocator, neurona.id, embedding);
+    }
+
+    // Step 3: Create query vector
+    const query_embedding = try createQueryEmbedding(allocator, config.query_text, dimension);
+    defer allocator.free(query_embedding);
+
+    // Step 4: Search
+    const limit = config.limit orelse 50;
+    const results = try vector_index.search(allocator, query_embedding, limit);
+    defer {
+        for (results) |*r| r.deinit(allocator);
+        allocator.free(results);
+    }
+
+    // Step 5: Output results with scores
+    if (config.json_output) {
+        try outputJsonWithScores(results, neuronas);
+    } else {
+        try outputListWithScores(results, neuronas, "Similarity");
+    }
+}
+
+/// Hybrid search mode: BM25 + Vector + Fusion
+fn executeHybridQuery(allocator: Allocator, config: QueryConfig) !void {
+    if (config.query_text.len == 0) {
+        std.debug.print("Error: Hybrid search requires a query string\n", .{});
+        return error.MissingQueryText;
+    }
+
+    // Step 1: Scan all Neuronas
+    const neuronas = try storage.scanNeuronas(allocator, "neuronas");
+    defer {
+        for (neuronas) |*n| n.deinit(allocator);
+        allocator.free(neuronas);
+    }
+
+    // Step 2: Build BM25 index
+    var bm25_index = storage.BM25Index.init();
+    defer bm25_index.deinit(allocator);
+
+    for (neuronas) |*neurona| {
+        var content = std.ArrayList(u8){};
+        try content.ensureTotalCapacity(allocator, neurona.title.len + 200);
+        defer content.deinit(allocator);
+        try content.appendSlice(allocator, neurona.title);
+        for (neurona.tags.items) |tag| {
+            try content.appendSlice(allocator, " ");
+            try content.appendSlice(allocator, tag);
+        }
+        try bm25_index.addDocument(allocator, neurona.id, content.items);
+    }
+    bm25_index.build();
+
+    // Step 3: Build vector index
+    const dimension = 100;
+    var vector_index = storage.VectorIndex.init(allocator, dimension);
+    defer vector_index.deinit(allocator);
+
+    for (neuronas) |*neurona| {
+        const embedding = try createSimpleEmbedding(allocator, neurona, dimension);
+        defer allocator.free(embedding);
+        try vector_index.addVector(allocator, neurona.id, embedding);
+    }
+
+    // Step 4: Run both searches
+    const limit = config.limit orelse 50;
+    const bm25_results = try bm25_index.search(allocator, config.query_text, limit);
+    defer {
+        for (bm25_results) |*r| r.deinit(allocator);
+        allocator.free(bm25_results);
+    }
+
+    const query_embedding = try createQueryEmbedding(allocator, config.query_text, dimension);
+    defer allocator.free(query_embedding);
+    const vector_results = try vector_index.search(allocator, query_embedding, limit);
+    defer {
+        for (vector_results) |*r| r.deinit(allocator);
+        allocator.free(vector_results);
+    }
+
+    // Step 5: Fusion: Combine scores (0.6 * BM25 + 0.4 * Vector)
+    var fused_scores = std.StringHashMap(f32).init(allocator);
+    defer {
+        var it = fused_scores.iterator();
+        while (it.next()) |entry| {
+            allocator.free(entry.key_ptr.*);
+        }
+        fused_scores.deinit();
+    }
+
+    // Add BM25 scores
+    for (bm25_results) |r| {
+        const key = try allocator.dupe(u8, r.doc_id);
+        try fused_scores.put(key, r.score * 0.6);
+    }
+
+    // Add vector scores and merge
+    for (vector_results) |r| {
+        if (fused_scores.getPtr(r.doc_id)) |score| {
+            score.* += r.score * 0.4;
+        } else {
+            const key = try allocator.dupe(u8, r.doc_id);
+            try fused_scores.put(key, r.score * 0.4);
+        }
+    }
+
+    // Step 6: Sort by fused score
+    var sorted_results = std.ArrayList(FusedResult){};
+    try sorted_results.ensureTotalCapacity(allocator, 50);
+    defer {
+        for (sorted_results.items) |*r| allocator.free(r.id);
+        sorted_results.deinit(allocator);
+    }
+
+    var it = fused_scores.iterator();
+    while (it.next()) |entry| {
+        try sorted_results.append(allocator, .{
+            .id = try allocator.dupe(u8, entry.key_ptr.*),
+            .score = entry.value_ptr.*,
+        });
+    }
+
+    std.sort.insertion(@TypeOf(sorted_results.items[0]), sorted_results.items, {}, struct {
+        fn lessThan(_: void, a: @TypeOf(sorted_results.items[0]), b: @TypeOf(sorted_results.items[0])) bool {
+            return a.score > b.score;
+        }
+    }.lessThan);
+
+    // Limit results
+    if (sorted_results.items.len > limit) {
+        for (sorted_results.items[limit..]) |*r| allocator.free(r.id);
+        sorted_results.items.len = limit;
+    }
+
+    // Step 7: Output results
+    if (config.json_output) {
+        try outputJsonWithFusedScores(sorted_results.items, neuronas);
+    } else {
+        try outputListWithFusedScores(sorted_results.items, neuronas, "Fused Score");
+    }
+}
+
+/// Neural activation search mode
+fn executeActivationQuery(allocator: Allocator, config: QueryConfig) !void {
+    if (config.query_text.len == 0) {
+        std.debug.print("Error: Activation search requires a query string\n", .{});
+        return error.MissingQueryText;
+    }
+
+    // Step 1: Scan all Neuronas
+    const neuronas = try storage.scanNeuronas(allocator, "neuronas");
+    defer {
+        for (neuronas) |*n| n.deinit(allocator);
+        allocator.free(neuronas);
+    }
+
+    // Step 2: Build Graph
+    var graph = Graph.init();
+    defer graph.deinit(allocator);
+
+    for (neuronas) |*neurona| {
+        var conn_it = neurona.connections.iterator();
+        while (conn_it.next()) |entry| {
+            const conn_list = entry.value_ptr.*;
+            for (conn_list.connections.items) |*conn| {
+                try graph.addEdge(allocator, neurona.id, conn.target_id, conn.weight);
+            }
+        }
+    }
+
+    // Step 3: Build BM25 index
+    var bm25_index = storage.BM25Index.init();
+    defer bm25_index.deinit(allocator);
+
+    for (neuronas) |*neurona| {
+        var content = std.ArrayList(u8){};
+        try content.ensureTotalCapacity(allocator, neurona.title.len + 200);
+        defer content.deinit(allocator);
+        try content.appendSlice(allocator, neurona.title);
+        for (neurona.tags.items) |tag| {
+            try content.appendSlice(allocator, " ");
+            try content.appendSlice(allocator, tag);
+        }
+        try bm25_index.addDocument(allocator, neurona.id, content.items);
+    }
+    bm25_index.build();
+
+    // Step 4: Build vector index (simplified - just use dummy vectors)
+    const dimension = 100;
+    var vector_index = storage.VectorIndex.init(allocator, dimension);
+    defer vector_index.deinit(allocator);
+
+    for (neuronas) |*neurona| {
+        const embedding = try createSimpleEmbedding(allocator, neurona, dimension);
+        defer allocator.free(embedding);
+        try vector_index.addVector(allocator, neurona.id, embedding);
+    }
+
+    // Step 5: Initialize neural activation
+    var activation = NeuralActivation.init(&graph, &bm25_index, &vector_index);
+
+    // Step 6: Run activation
+    const results = try activation.activate(allocator, config.query_text, null);
+    defer {
+        for (results) |*r| r.deinit(allocator);
+        allocator.free(results);
+    }
+
+    // Step 7: Output results
+    if (config.json_output) {
+        try outputJsonWithActivation(results, neuronas);
+    } else {
+        try outputListWithActivation(results, neuronas);
+    }
+}
+
+/// Create a simple word frequency embedding for a Neurona
+fn createSimpleEmbedding(allocator: Allocator, neurona: *const Neurona, dimension: usize) ![]f32 {
+    const embedding = try allocator.alloc(f32, dimension);
+    @memset(embedding, 0.0);
+
+    var content = std.ArrayList(u8){};
+    try content.ensureTotalCapacity(allocator, neurona.title.len + 200);
+    defer content.deinit(allocator);
+
+    try content.appendSlice(allocator, neurona.title);
+    for (neurona.tags.items) |tag| {
+        try content.appendSlice(allocator, " ");
+        try content.appendSlice(allocator, tag);
+    }
+
+    // Tokenize and create simple hash-based embedding
+    const lower = try allocator.alloc(u8, content.items.len);
+    defer allocator.free(lower);
+    for (content.items, 0..) |c, i| {
+        lower[i] = std.ascii.toLower(c);
+    }
+
+    var start: usize = 0;
+    var in_word = false;
+    for (lower, 0..) |c, i| {
+        const is_alpha = std.ascii.isAlphanumeric(c);
+        if (is_alpha and !in_word) {
+            start = i;
+            in_word = true;
+        } else if (!is_alpha and in_word) {
+            const word = lower[start..i];
+            if (word.len >= 2) {
+                // Simple hash to map words to dimensions
+                const hash = @rem(std.hash.Wyhash.hash(0, word), dimension);
+                embedding[hash] += 1.0;
+            }
+            in_word = false;
+        }
+    }
+    return embedding;
+}
+
+/// Create a simple embedding for a query string
+fn createQueryEmbedding(allocator: Allocator, query: []const u8, dimension: usize) ![]f32 {
+    const embedding = try allocator.alloc(f32, dimension);
+    @memset(embedding, 0.0);
+
+    const lower = try allocator.alloc(u8, query.len);
+    defer allocator.free(lower);
+    for (query, 0..) |c, i| {
+        lower[i] = std.ascii.toLower(c);
+    }
+
+    var start: usize = 0;
+    var in_word = false;
+    for (lower, 0..) |c, i| {
+        const is_alpha = std.ascii.isAlphanumeric(c);
+        if (is_alpha and !in_word) {
+            start = i;
+            in_word = true;
+        } else if (!is_alpha and in_word) {
+            const word = lower[start..i];
+            if (word.len >= 2) {
+                const hash = @rem(std.hash.Wyhash.hash(0, word), dimension);
+                embedding[hash] += 1.0;
+            }
+            in_word = false;
+        }
+    }
+    return embedding;
+}
+
+/// Output list with scores
+fn outputListWithScores(results: anytype, neuronas: []const Neurona, score_label: []const u8) !void {
+    std.debug.print("\n🔍 Search Results\n", .{});
+    for (0..40) |_| std.debug.print("=", .{});
+    std.debug.print("\n", .{});
+
+    if (results.len == 0) {
+        std.debug.print("No results found\n", .{});
+        return;
+    }
+
+    // Create lookup map
+    const page_allocator = std.heap.page_allocator;
+    var neurona_map = std.StringHashMap(*const Neurona).init(page_allocator);
+    defer neurona_map.deinit();
+    for (neuronas) |*n| {
+        try neurona_map.put(n.id, n);
+    }
+
+    for (results) |result| {
+        if (neurona_map.get(result.doc_id)) |neurona| {
+            std.debug.print("  {s}\n", .{neurona.id});
+            std.debug.print("    Type: {s}\n", .{@tagName(neurona.type)});
+            std.debug.print("    Title: {s}\n", .{neurona.title});
+            std.debug.print("    {s}: {d:.3}\n", .{ score_label, result.score });
+
+            if (neurona.tags.items.len > 0) {
+                std.debug.print("    Tags: ", .{});
+                for (neurona.tags.items, 0..) |tag, i| {
+                    if (i > 0) std.debug.print(", ", .{});
+                    std.debug.print("{s}", .{tag});
+                }
+                std.debug.print("\n", .{});
+            }
+            std.debug.print("\n", .{});
+        }
+    }
+
+    std.debug.print("  Found {d} results\n", .{results.len});
+}
+
+/// Output list with fused scores
+fn outputListWithFusedScores(results: []const FusedResult, neuronas: []const Neurona, score_label: []const u8) !void {
+    std.debug.print("\n🔍 Hybrid Search Results\n", .{});
+    for (0..40) |_| std.debug.print("=", .{});
+    std.debug.print("\n", .{});
+
+    if (results.len == 0) {
+        std.debug.print("No results found\n", .{});
+        return;
+    }
+
+    const page_allocator = std.heap.page_allocator;
+    var neurona_map = std.StringHashMap(*const Neurona).init(page_allocator);
+    defer neurona_map.deinit();
+    for (neuronas) |*n| {
+        try neurona_map.put(n.id, n);
+    }
+
+    for (results) |result| {
+        if (neurona_map.get(result.id)) |neurona| {
+            std.debug.print("  {s}\n", .{neurona.id});
+            std.debug.print("    Type: {s}\n", .{@tagName(neurona.type)});
+            std.debug.print("    Title: {s}\n", .{neurona.title});
+            std.debug.print("    {s}: {d:.3}\n", .{ score_label, result.score });
+
+            if (neurona.tags.items.len > 0) {
+                std.debug.print("    Tags: ", .{});
+                for (neurona.tags.items, 0..) |tag, i| {
+                    if (i > 0) std.debug.print(", ", .{});
+                    std.debug.print("{s}", .{tag});
+                }
+                std.debug.print("\n", .{});
+            }
+            std.debug.print("\n", .{});
+        }
+    }
+
+    std.debug.print("  Found {d} results\n", .{results.len});
+}
+
+/// Output list with activation scores
+fn outputListWithActivation(results: []const @import("../root.zig").core.ActivationResult, neuronas: []const Neurona) !void {
+    std.debug.print("\n🧠 Neural Activation Results\n", .{});
+    for (0..40) |_| std.debug.print("=", .{});
+    std.debug.print("\n", .{});
+
+    if (results.len == 0) {
+        std.debug.print("No results found\n", .{});
+        return;
+    }
+
+    const page_allocator = std.heap.page_allocator;
+    var neurona_map = std.StringHashMap(*const Neurona).init(page_allocator);
+    defer neurona_map.deinit();
+    for (neuronas) |*n| {
+        try neurona_map.put(n.id, n);
+    }
+
+    for (results) |result| {
+        if (neurona_map.get(result.node_id)) |neurona| {
+            std.debug.print("  {s}\n", .{neurona.id});
+            std.debug.print("    Type: {s}\n", .{@tagName(neurona.type)});
+            std.debug.print("    Title: {s}\n", .{neurona.title});
+            std.debug.print("    Stimulus: {d:.3}\n", .{result.stimulus_score});
+            std.debug.print("    Activation: {d:.3}\n", .{result.activation_score});
+            std.debug.print("    Depth: {d}\n", .{result.depth});
+
+            if (neurona.tags.items.len > 0) {
+                std.debug.print("    Tags: ", .{});
+                for (neurona.tags.items, 0..) |tag, i| {
+                    if (i > 0) std.debug.print(", ", .{});
+                    std.debug.print("{s}", .{tag});
+                }
+                std.debug.print("\n", .{});
+            }
+            std.debug.print("\n", .{});
+        }
+    }
+
+    std.debug.print("  Found {d} results\n", .{results.len});
+}
+
+/// JSON output with scores
+fn outputJsonWithScores(results: anytype, neuronas: []const Neurona) !void {
+    std.debug.print("[", .{});
+    for (results, 0..) |result, i| {
+        if (i > 0) std.debug.print(",", .{});
+        std.debug.print("{{", .{});
+        std.debug.print("\"id\":\"{s}\",", .{result.doc_id});
+        std.debug.print("\"score\":{d:.3}", .{result.score});
+
+        // Find neurona by id
+        for (neuronas) |n| {
+            if (std.mem.eql(u8, n.id, result.doc_id)) {
+                std.debug.print(",\"title\":\"{s}\",", .{n.title});
+                std.debug.print("\"type\":\"{s}\"", .{@tagName(n.type)});
+                break;
+            }
+        }
+        std.debug.print("}}", .{});
+    }
+    std.debug.print("]\n", .{});
+}
+
+/// JSON output with fused scores
+fn outputJsonWithFusedScores(results: []const FusedResult, neuronas: []const Neurona) !void {
+    std.debug.print("[", .{});
+    for (results, 0..) |result, i| {
+        if (i > 0) std.debug.print(",", .{});
+        std.debug.print("{{", .{});
+        std.debug.print("\"id\":\"{s}\",", .{result.id});
+        std.debug.print("\"score\":{d:.3}", .{result.score});
+
+        for (neuronas) |n| {
+            if (std.mem.eql(u8, n.id, result.id)) {
+                std.debug.print(",\"title\":\"{s}\",", .{n.title});
+                std.debug.print("\"type\":\"{s}\"", .{@tagName(n.type)});
+                break;
+            }
+        }
+        std.debug.print("}}", .{});
+    }
+    std.debug.print("]\n", .{});
+}
+
+/// JSON output with activation scores
+fn outputJsonWithActivation(results: []const @import("../root.zig").core.ActivationResult, neuronas: []const Neurona) !void {
+    std.debug.print("[", .{});
+    for (results, 0..) |result, i| {
+        if (i > 0) std.debug.print(",", .{});
+        std.debug.print("{{", .{});
+        std.debug.print("\"id\":\"{s}\",", .{result.node_id});
+        std.debug.print("\"stimulus\":{d:.3},", .{result.stimulus_score});
+        std.debug.print("\"activation\":{d:.3},", .{result.activation_score});
+        std.debug.print("\"depth\":{d}", .{result.depth});
+
+        for (neuronas) |n| {
+            if (std.mem.eql(u8, n.id, result.node_id)) {
+                std.debug.print(",\"title\":\"{s}\",", .{n.title});
+                std.debug.print("\"type\":\"{s}\"", .{@tagName(n.type)});
+                break;
+            }
+        }
+        std.debug.print("}}", .{});
+    }
+    std.debug.print("]\n", .{});
 }
 
 /// Match field filter
