@@ -62,6 +62,15 @@ pub fn readNeurona(allocator: Allocator, filepath: []const u8) !Neurona {
     return try yamlToNeurona(allocator, yaml_data, fm.body);
 }
 
+/// Helper: safely replace string field (free old if allocated)
+fn replaceString(allocator: Allocator, old: []const u8, new_value: []const u8) ![]const u8 {
+    // Free old if it was a valid allocated pointer
+    if (@intFromPtr(old.ptr) != 0 and old.len > 0) {
+        allocator.free(old);
+    }
+    return allocator.dupe(u8, new_value);
+}
+
 /// Convert parsed YAML frontmatter to Neurona struct
 fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value), body: []const u8) !Neurona {
     _ = body; // TODO: Use body content for full Neurona
@@ -69,12 +78,12 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
     var neurona = try Neurona.init(allocator);
     errdefer neurona.deinit(allocator);
 
-    // Required fields: id, title
+    // Required fields: id, title (free old defaults from init first)
     const id_val = yaml_data.get("id") orelse return StorageError.MissingRequiredField;
-    neurona.id = try allocator.dupe(u8, getString(id_val, ""));
+    neurona.id = try replaceString(allocator, neurona.id, getString(id_val, ""));
 
     const title_val = yaml_data.get("title") orelse return StorageError.MissingRequiredField;
-    neurona.title = try allocator.dupe(u8, getString(title_val, ""));
+    neurona.title = try replaceString(allocator, neurona.title, getString(title_val, ""));
 
     // Tier 2 field: type
     if (yaml_data.get("type")) |type_val| {
@@ -84,12 +93,12 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
 
     // Tier 2 field: updated
     if (yaml_data.get("updated")) |updated_val| {
-        neurona.updated = try allocator.dupe(u8, getString(updated_val, ""));
+        neurona.updated = try replaceString(allocator, neurona.updated, getString(updated_val, ""));
     }
 
     // Tier 2 field: language
     if (yaml_data.get("language")) |lang_val| {
-        neurona.language = try allocator.dupe(u8, getString(lang_val, "en"));
+        neurona.language = try replaceString(allocator, neurona.language, getString(lang_val, "en"));
     }
 
     // Tier 1 field: tags
@@ -172,7 +181,10 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
 
     // Tier 3 field: hash (optional)
     if (yaml_data.get("hash")) |hash_val| {
-        neurona.hash = try allocator.dupe(u8, getString(hash_val, ""));
+        const hash_str = getString(hash_val, "");
+        if (hash_str.len > 0) {
+            neurona.hash = try allocator.dupe(u8, hash_str);
+        }
     }
 
     return neurona;
