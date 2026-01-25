@@ -9,6 +9,7 @@ const NeuronaType = @import("../core/neurona.zig").NeuronaType;
 const storage = @import("../root.zig").storage;
 const Graph = @import("../core/graph.zig").Graph;
 const NeuralActivation = @import("../root.zig").core.NeuralActivation;
+const GloVeIndex = @import("../root.zig").storage.GloVeIndex;
 
 /// Query mode for different search algorithms
 pub const QueryMode = enum {
@@ -328,9 +329,20 @@ fn executeVectorQuery(allocator: Allocator, config: QueryConfig) !void {
         allocator.free(neuronas);
     }
 
-    // Step 2: Build vector index (simple embedding: word count vectors)
-    // Note: In production, you'd use actual embeddings from a model
-    const dimension = 100; // Fixed dimension for this example
+    // Step 2: Load GloVe index
+    var glove_index = GloVeIndex.init(allocator);
+    defer glove_index.deinit(allocator);
+
+    const glove_cache_path = "glove_cache.bin";
+    if (GloVeIndex.cacheExists(glove_cache_path)) {
+        try glove_index.loadCacheZeroCopy(allocator, glove_cache_path);
+    } else {
+        std.debug.print("Error: GloVe cache not found at {s}\n", .{glove_cache_path});
+        std.debug.print("Please create a GloVe cache first using the engram index command\n", .{});
+        return error.GloVeCacheNotFound;
+    }
+
+    const dimension = glove_index.dimension;
     var vector_index = storage.VectorIndex.init(allocator, dimension);
     defer vector_index.deinit(allocator);
 
@@ -344,14 +356,14 @@ fn executeVectorQuery(allocator: Allocator, config: QueryConfig) !void {
     }
 
     for (neuronas) |*neurona| {
-        // Create simple embedding: word frequency vector
-        const embedding = try createSimpleEmbedding(allocator, neurona, dimension);
+        // Create GloVe embedding
+        const embedding = try createGloVeEmbedding(allocator, neurona, &glove_index);
         try doc_vec_map.put(neurona.id, embedding);
         try vector_index.addVector(allocator, neurona.id, embedding);
     }
 
     // Step 3: Create query vector
-    const query_embedding = try createQueryEmbedding(allocator, config.query_text, dimension);
+    const query_embedding = try createGloVeQueryEmbedding(allocator, config.query_text, &glove_index);
     defer allocator.free(query_embedding);
 
     // Step 4: Search
@@ -401,13 +413,25 @@ fn executeHybridQuery(allocator: Allocator, config: QueryConfig) !void {
     }
     bm25_index.build();
 
-    // Step 3: Build vector index
-    const dimension = 100;
+    // Step 3: Load GloVe index
+    var glove_index = GloVeIndex.init(allocator);
+    defer glove_index.deinit(allocator);
+
+    const glove_cache_path = "glove_cache.bin";
+    if (GloVeIndex.cacheExists(glove_cache_path)) {
+        try glove_index.loadCacheZeroCopy(allocator, glove_cache_path);
+    } else {
+        std.debug.print("Error: GloVe cache not found at {s}\n", .{glove_cache_path});
+        std.debug.print("Please create a GloVe cache first using engram index command\n", .{});
+        return error.GloVeCacheNotFound;
+    }
+
+    const dimension = glove_index.dimension;
     var vector_index = storage.VectorIndex.init(allocator, dimension);
     defer vector_index.deinit(allocator);
 
     for (neuronas) |*neurona| {
-        const embedding = try createSimpleEmbedding(allocator, neurona, dimension);
+        const embedding = try createGloVeEmbedding(allocator, neurona, &glove_index);
         defer allocator.free(embedding);
         try vector_index.addVector(allocator, neurona.id, embedding);
     }
@@ -420,7 +444,7 @@ fn executeHybridQuery(allocator: Allocator, config: QueryConfig) !void {
         allocator.free(bm25_results);
     }
 
-    const query_embedding = try createQueryEmbedding(allocator, config.query_text, dimension);
+    const query_embedding = try createGloVeQueryEmbedding(allocator, config.query_text, &glove_index);
     defer allocator.free(query_embedding);
     const vector_results = try vector_index.search(allocator, query_embedding, limit);
     defer {
@@ -604,6 +628,94 @@ fn createSimpleEmbedding(allocator: Allocator, neurona: *const Neurona, dimensio
         }
     }
     return embedding;
+}
+
+/// Create GloVe embedding for a neurona document
+fn createGloVeEmbedding(allocator: Allocator, neurona: *const Neurona, glove_index: *GloVeIndex) ![]f32 {
+    // Combine title and tags for embedding
+    var content = std.ArrayList(u8){};
+    try content.ensureTotalCapacity(allocator, neurona.title.len + 200);
+    defer content.deinit(allocator);
+
+    try content.appendSlice(allocator, neurona.title);
+    for (neurona.tags.items) |tag| {
+        try content.appendSlice(allocator, " ");
+        try content.appendSlice(allocator, tag);
+    }
+
+    // Tokenize and create GloVe embedding
+    const lower = try allocator.alloc(u8, content.items.len);
+    defer allocator.free(lower);
+    for (content.items, 0..) |c, i| {
+        lower[i] = std.ascii.toLower(c);
+    }
+
+    var words = std.ArrayList([]const u8){};
+    defer words.deinit(allocator);
+
+    var start: usize = 0;
+    var in_word = false;
+    for (lower, 0..) |c, i| {
+        const is_alpha = std.ascii.isAlphanumeric(c);
+        if (is_alpha and !in_word) {
+            start = i;
+            in_word = true;
+        } else if (!is_alpha and in_word) {
+            const word = lower[start..i];
+            if (word.len >= 2) {
+                try words.append(allocator, word);
+            }
+            in_word = false;
+        }
+    }
+    // Handle last word
+    if (in_word) {
+        const word = lower[start..];
+        if (word.len >= 2) {
+            try words.append(allocator, word);
+        }
+    }
+
+    // Create GloVe embedding by averaging word vectors
+    return try glove_index.computeEmbedding(allocator, words.items);
+}
+
+/// Create a GloVe embedding for a query string
+fn createGloVeQueryEmbedding(allocator: Allocator, query: []const u8, glove_index: *GloVeIndex) ![]f32 {
+    const lower = try allocator.alloc(u8, query.len);
+    defer allocator.free(lower);
+    for (query, 0..) |c, i| {
+        lower[i] = std.ascii.toLower(c);
+    }
+
+    var words = std.ArrayList([]const u8){};
+    defer words.deinit(allocator);
+
+    var start: usize = 0;
+    var in_word = false;
+    for (lower, 0..) |c, i| {
+        const is_alpha = std.ascii.isAlphanumeric(c);
+        if (is_alpha and !in_word) {
+            start = i;
+            in_word = true;
+        } else if (!is_alpha and in_word) {
+            const word = lower[start..i];
+            if (word.len >= 2) {
+                try words.append(allocator, word);
+            }
+            in_word = false;
+        }
+    }
+    // Handle last word
+    if (in_word) {
+        const word = lower[start..];
+        if (word.len >= 2) {
+            try words.append(allocator, word);
+        }
+    }
+
+    // Create GloVe embedding by averaging word vectors
+    return try glove_index.computeEmbedding(allocator, words.items);
 }
 
 /// Create a simple embedding for a query string

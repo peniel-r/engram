@@ -151,12 +151,94 @@ pub const GloVeIndex = struct {
 
     /// Load GloVe vectors from binary cache file (zero-copy)
     pub fn loadCache(self: *GloVeIndex, allocator: Allocator, path: []const u8) !void {
-        _ = allocator;
-        _ = path;
-        // TODO: Implement binary cache loading
-        // For now, mark as not loaded
-        self.loaded = false;
-        std.debug.print("Warning: Binary cache loading not yet implemented\n", .{});
+        // Step 1: Open file and get size
+        const file = try std.fs.cwd().openFile(path, .{});
+        errdefer file.close();
+        const file_size = try file.getEndPos();
+
+        // Step 2: Read entire file into memory (single allocation)
+        const data = try allocator.alloc(u8, file_size);
+        errdefer allocator.free(data);
+        const bytes_read = try file.readAll(data);
+        if (bytes_read != file_size) return error.IncompleteRead;
+        file.close(); // Close file after reading
+
+        // Step 3: Parse header (in-place, no additional allocation)
+        var offset: usize = 0;
+
+        // Validate header
+        const header = data[offset .. offset + HEADER.len];
+        offset += HEADER.len;
+        if (!std.mem.eql(u8, header, HEADER)) return error.InvalidHeader;
+
+        // Read version
+        const version = data[offset];
+        offset += 1;
+        if (version != VERSION) return error.UnsupportedVersion;
+
+        // Read dimension
+        var dim_bytes: [4]u8 = undefined;
+        @memcpy(&dim_bytes, data[offset .. offset + 4]);
+        self.dimension = std.mem.readInt(u32, &dim_bytes, .little);
+        offset += 4;
+
+        // Read word count
+        var count_bytes: [4]u8 = undefined;
+        @memcpy(&count_bytes, data[offset .. offset + 4]);
+        const word_count = std.mem.readInt(u32, &count_bytes, .little);
+        offset += 4;
+
+        // Skip header padding (4-byte alignment after header)
+        const header_size = HEADER.len + 1 + 4 + 4;
+        const header_aligned = (header_size + 3) & ~@as(usize, 3);
+        offset += header_aligned - header_size;
+
+        // Step 4: Populate regular storage
+        try self.word_vectors.ensureUnusedCapacity(allocator, word_count);
+        try self.vectors_storage.ensureTotalCapacity(allocator, word_count * self.dimension);
+
+        var i: u32 = 0;
+        while (i < word_count) : (i += 1) {
+            // 1. Skip word offset (4 bytes)
+            offset += 4;
+
+            // 2. Read word length (2 bytes)
+            var word_len_bytes: [2]u8 = undefined;
+            @memcpy(&word_len_bytes, data[offset .. offset + 2]);
+            const word_len = std.mem.readInt(u16, &word_len_bytes, .little);
+            offset += 2;
+
+            // 3. Read word string and duplicate
+            const word_slice = data[offset .. offset + word_len];
+            const word_dup = try allocator.dupe(u8, word_slice);
+            offset += word_len;
+
+            // 4. Skip word padding
+            const word_len_aligned = (@as(usize, word_len) + 3) & ~@as(usize, 3);
+            const padding = word_len_aligned - @as(usize, word_len);
+            offset += padding;
+
+            // 5. Read vector data
+            const vec_bytes = data[offset .. offset + self.dimension * 4];
+            const vec_slice = std.mem.bytesAsSlice(f32, vec_bytes);
+
+            // Copy vector data into contiguous storage (handle alignment)
+            const vec_start_index = self.vectors_storage.items.len;
+            for (vec_slice) |elem| {
+                try self.vectors_storage.append(allocator, elem);
+            }
+            const vec_ptr = self.vectors_storage.items[vec_start_index .. vec_start_index + self.dimension];
+
+            // 6. Store in hash map
+            try self.word_vectors.put(allocator, word_dup, vec_ptr);
+
+            offset += self.dimension * 4;
+        }
+
+        // Step 5: Finalize
+        allocator.free(data); // Free the temporary read buffer
+        self.loaded = true;
+        self.zero_copy = false;
     }
 
     /// Load GloVe vectors from binary cache file using zero-copy (single-read approach)
@@ -657,4 +739,180 @@ test "GloVeIndex zero-copy mode handles large vocab correctly" {
 
     // Cleanup
     defer std.fs.cwd().deleteFile(".test_glove_large.bin") catch {};
+}
+
+test "GloVeIndex loadCache loads data correctly" {
+    const allocator = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    // Create original index with test data
+    var original = GloVeIndex.init(allocator);
+    defer original.deinit(allocator);
+
+    original.dimension = 50;
+    original.loaded = true;
+
+    // Pre-allocate space for all vectors
+    try original.vectors_storage.ensureTotalCapacity(allocator, 3 * 50);
+
+    // Add hello vector
+    try original.vectors_storage.appendSlice(allocator, &[_]f32{ 0.1, 0.2, 0.3 });
+    for (0..47) |_|
+        try original.vectors_storage.append(allocator, 0.0);
+    const hello_vector = try allocator.alloc(f32, 50);
+    @memcpy(hello_vector, original.vectors_storage.items[0..50]);
+    const hello_word = try allocator.dupe(u8, "hello");
+    try original.word_vectors.put(allocator, hello_word, hello_vector);
+
+    // Add world vector
+    try original.vectors_storage.appendSlice(allocator, &[_]f32{ 0.4, 0.5, 0.6 });
+    for (0..47) |_|
+        try original.vectors_storage.append(allocator, 0.0);
+    const world_vector = try allocator.alloc(f32, 50);
+    @memcpy(world_vector, original.vectors_storage.items[50..100]);
+    const world_word = try allocator.dupe(u8, "world");
+    try original.word_vectors.put(allocator, world_word, world_vector);
+
+    // Add test vector
+    try original.vectors_storage.appendSlice(allocator, &[_]f32{ 0.7, 0.8, 0.9 });
+    for (0..47) |_|
+        try original.vectors_storage.append(allocator, 0.0);
+    const test_vector = try allocator.alloc(f32, 50);
+    @memcpy(test_vector, original.vectors_storage.items[100..150]);
+    const test_word = try allocator.dupe(u8, "test");
+    try original.word_vectors.put(allocator, test_word, test_vector);
+
+    // Save cache
+    const cache_path = ".test_glove_loadcache_new.bin";
+    try original.saveCache(cache_path);
+
+    // Load with regular loadCache
+    var loaded = GloVeIndex.init(allocator);
+    defer loaded.deinit(allocator);
+    try loaded.loadCache(allocator, cache_path);
+
+    // Verify basic properties
+    try std.testing.expectEqual(@as(usize, 3), loaded.word_vectors.count());
+    try std.testing.expectEqual(@as(usize, 50), loaded.dimension);
+    try std.testing.expect(loaded.zero_copy == false);
+
+    // Test that all words are accessible
+    const hello_check = try loaded.getVector(allocator, "hello");
+    try std.testing.expect(hello_check != null);
+
+    const world_check = try loaded.getVector(allocator, "world");
+    try std.testing.expect(world_check != null);
+
+    const test_check = try loaded.getVector(allocator, "test");
+    try std.testing.expect(test_check != null);
+
+    const nonexistent_check = try loaded.getVector(allocator, "nonexistent");
+    try std.testing.expect(nonexistent_check == null);
+
+    // Test vector retrieval
+    if (hello_check) |hello_retrieved| {
+        try std.testing.expectApproxEqAbs(@as(f32, 0.1), hello_retrieved[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 0.2), hello_retrieved[1], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 0.3), hello_retrieved[2], 0.001);
+    }
+
+    if (world_check) |world_retrieved| {
+        try std.testing.expectApproxEqAbs(@as(f32, 0.4), world_retrieved[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 0.5), world_retrieved[1], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 0.6), world_retrieved[2], 0.001);
+    }
+
+    if (test_check) |test_retrieved| {
+        try std.testing.expectApproxEqAbs(@as(f32, 0.7), test_retrieved[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 0.8), test_retrieved[1], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 0.9), test_retrieved[2], 0.001);
+    }
+
+    // Test computeEmbedding with known words
+    const query_words = [_][]const u8{ "hello", "world" };
+    const query_vec = try loaded.computeEmbedding(allocator, &query_words);
+    defer allocator.free(query_vec);
+
+    // Should be average of hello and world vectors (only first 3 dims matter)
+    const expected0 = (0.1 + 0.4) / 2.0;
+    const expected1 = (0.2 + 0.5) / 2.0;
+    const expected2 = (0.3 + 0.6) / 2.0;
+    try std.testing.expectApproxEqAbs(expected0, query_vec[0], 0.001);
+    try std.testing.expectApproxEqAbs(expected1, query_vec[1], 0.001);
+    try std.testing.expectApproxEqAbs(expected2, query_vec[2], 0.001);
+}
+
+test "GloVeIndex loadCache and loadCacheZeroCopy produce same results" {
+    const allocator = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    // Create original index
+    var original = GloVeIndex.init(allocator);
+    defer original.deinit(allocator);
+
+    original.dimension = 50;
+    original.loaded = true;
+
+    // Add apple vector
+    try original.vectors_storage.appendSlice(allocator, &[_]f32{ 0.1, 0.2, 0.3 });
+    for (0..47) |_|
+        try original.vectors_storage.append(allocator, 0.0);
+    const apple_vector = original.vectors_storage.items[0..50];
+    const apple_word = try allocator.dupe(u8, "apple");
+    try original.word_vectors.put(allocator, apple_word, apple_vector);
+
+    // Add banana vector
+    try original.vectors_storage.appendSlice(allocator, &[_]f32{ 0.4, 0.5, 0.6 });
+    for (0..47) |_|
+        try original.vectors_storage.append(allocator, 0.0);
+    const banana_vector = original.vectors_storage.items[50..100];
+    const banana_word = try allocator.dupe(u8, "banana");
+    try original.word_vectors.put(allocator, banana_word, banana_vector);
+
+    // Add cherry vector
+    try original.vectors_storage.appendSlice(allocator, &[_]f32{ 0.7, 0.8, 0.9 });
+    for (0..47) |_|
+        try original.vectors_storage.append(allocator, 0.0);
+    const cherry_vector = original.vectors_storage.items[100..150];
+    const cherry_word = try allocator.dupe(u8, "cherry");
+    try original.word_vectors.put(allocator, cherry_word, cherry_vector);
+
+    // Save cache
+    const cache_path = ".test_glove_loadcache.bin";
+    try original.saveCache(cache_path);
+
+    // Load with both methods
+    var regular = GloVeIndex.init(allocator);
+    defer regular.deinit(allocator);
+    try regular.loadCache(allocator, cache_path);
+
+    var zero_copy = GloVeIndex.init(allocator);
+    defer zero_copy.deinit(allocator);
+    try zero_copy.loadCacheZeroCopy(allocator, cache_path);
+
+    // Compare results for all words
+    const words = [_][]const u8{ "apple", "banana", "cherry" };
+    for (words) |word| {
+        const regular_vec = try regular.getVector(allocator, word);
+        const zero_copy_vec = try zero_copy.getVector(allocator, word);
+        try std.testing.expect(regular_vec != null);
+        try std.testing.expect(zero_copy_vec != null);
+        if (regular_vec) |r_vec| {
+            if (zero_copy_vec) |z_vec| {
+                try std.testing.expectEqualSlices(f32, r_vec, z_vec);
+            }
+        }
+    }
+
+    // Test computeEmbedding produces same results
+    const query_words = [_][]const u8{ "apple", "banana" };
+    const regular_query = try regular.computeEmbedding(allocator, &query_words);
+    defer allocator.free(regular_query);
+
+    const zero_copy_query = try zero_copy.computeEmbedding(allocator, &query_words);
+    defer allocator.free(zero_copy_query);
+
+    try std.testing.expectEqualSlices(f32, regular_query, zero_copy_query);
 }

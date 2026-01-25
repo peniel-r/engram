@@ -23,6 +23,7 @@ pub const storage = struct {
     pub const VectorIndex = @import("storage/vectors.zig").VectorIndex;
     pub const SearchResult = @import("storage/vectors.zig").SearchResult;
     pub const BM25Result = @import("storage/tfidf.zig").SearchResult;
+    pub const GloVeIndex = @import("storage/glove.zig").GloVeIndex;
 };
 
 // Re-export utils
