@@ -25,6 +25,7 @@ pub const storage = struct {
     pub const BM25Result = @import("storage/tfidf.zig").SearchResult;
     pub const GloVeIndex = @import("storage/glove.zig").GloVeIndex;
     pub const NeuralActivation = @import("core/activation.zig").NeuralActivation;
+    pub const llm_cache = @import("storage/llm_cache.zig");
 };
 
 // Re-export utils
@@ -33,6 +34,8 @@ pub const yaml = @import("utils/yaml.zig").Parser;
 pub const utils = struct {
     pub const timestamp = @import("utils/timestamp.zig");
     pub const state_filters = @import("utils/state_filters.zig");
+    pub const token_counter = @import("utils/token_counter.zig");
+    pub const summary = @import("utils/summary.zig");
 };
 
 // Re-export CLI (for integration tests)

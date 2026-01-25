@@ -13,3 +13,7 @@ zig-out/
 
 # Ignore System Memory (per NEURONA_OPEN_SPEC.md spec)
 .activations/
+
+# ---> Testing
+test_existing_cortex/
+test_force_cortex/
