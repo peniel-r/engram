@@ -24,6 +24,7 @@ pub const storage = struct {
     pub const SearchResult = @import("storage/vectors.zig").SearchResult;
     pub const BM25Result = @import("storage/tfidf.zig").SearchResult;
     pub const GloVeIndex = @import("storage/glove.zig").GloVeIndex;
+    pub const NeuralActivation = @import("core/activation.zig").NeuralActivation;
 };
 
 // Re-export utils

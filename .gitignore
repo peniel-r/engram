@@ -10,3 +10,6 @@ zig-out/
 .vscode/
 .idea/
 .DS_Store
+
+# Ignore System Memory (per NEURONA_OPEN_SPEC.md spec)
+.activations/
