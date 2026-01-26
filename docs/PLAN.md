@@ -170,15 +170,15 @@ Engram supports 10 Neurona flavors from the union of spec.md and NEURONA_OPEN_SP
   - Bash and Windows test scripts
 
 #### 3.2 LLM Optimization
-- [ ] `_llm` metadata support
+- [x] `_llm` metadata support
   - `t`: Short title for token efficiency
   - `d`: Density/difficulty (1-4)
   - `k`: Top keywords
   - `c`: Token count
   - `strategy`: full, summary, hierarchical
-- [ ] Token counting and optimization
-- [ ] Summary generation (Tier 3 strategy)
-- [ ] Cache management for LLM responses
+- [x] Token counting and optimization
+- [x] Summary generation (Tier 3 strategy)
+- [x] Cache management for LLM responses
   - `.activations/cache/` directory
   - Invalidation on content changes
 
@@ -204,7 +204,7 @@ Engram supports 10 Neurona flavors from the union of spec.md and NEURONA_OPEN_SP
 - [x] Hybrid search combines BM25 + vector with 0.6/0.4 fusion weights
 - [x] Neural activation propagates across graph connections
 - [x] Integration test suite for all query modes (9 tests passing)
-- [ ] LLM-optimized Neurona representation
+- [x] LLM-optimized Neurona representation
 - [ ] Analytics and metrics functional
 - [ ] 90%+ test coverage
 
