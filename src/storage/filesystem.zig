@@ -6,6 +6,7 @@ const Neurona = @import("../core/neurona.zig").Neurona;
 const NeuronaType = @import("../core/neurona.zig").NeuronaType;
 const Connection = @import("../core/neurona.zig").Connection;
 const ConnectionType = @import("../core/neurona.zig").ConnectionType;
+const LLMMetadata = @import("../core/neurona.zig").LLMMetadata;
 const frontmatter = @import("../utils/frontmatter.zig").Frontmatter;
 const yaml = @import("../utils/yaml.zig");
 const getString = yaml.getString;
@@ -187,6 +188,59 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
         }
     }
 
+    // Tier 3 field: _llm (optional) - check for flattened _llm_ fields
+    const llm_t = yaml_data.get("_llm_t");
+    const llm_d = yaml_data.get("_llm_d");
+    const llm_k = yaml_data.get("_llm_k");
+    const llm_c = yaml_data.get("_llm_c");
+    const llm_strategy = yaml_data.get("_llm_strategy");
+
+    // If any _llm_ field exists, parse_as metadata
+    if (llm_t != null or llm_d != null or llm_k != null or llm_c != null or llm_strategy != null) {
+        var metadata = LLMMetadata{
+            .short_title = try allocator.dupe(u8, ""),
+            .density = 2,
+            .keywords = .{},
+            .token_count = 0,
+            .strategy = try allocator.dupe(u8, "summary"),
+        };
+
+        if (llm_t) |t_val| {
+            const short_title = getString(t_val, "");
+            if (short_title.len > 0) {
+                allocator.free(metadata.short_title);
+                metadata.short_title = try allocator.dupe(u8, short_title);
+            }
+        }
+
+        if (llm_d) |d_val| {
+            metadata.density = @intCast(getInt(d_val, 2));
+        }
+
+        if (llm_k) |k_val| {
+            const keywords = try getArray(k_val, allocator, &[_][]const u8{});
+            for (keywords) |kw| {
+                const kw_duped = try allocator.dupe(u8, kw);
+                try metadata.keywords.append(allocator, kw_duped);
+            }
+            allocator.free(keywords);
+        }
+
+        if (llm_c) |c_val| {
+            metadata.token_count = @intCast(getInt(c_val, 0));
+        }
+
+        if (llm_strategy) |s_val| {
+            const strategy = getString(s_val, "summary");
+            if (strategy.len > 0) {
+                allocator.free(metadata.strategy);
+                metadata.strategy = try allocator.dupe(u8, strategy);
+            }
+        }
+
+        neurona.llm_metadata = metadata;
+    }
+
     return neurona;
 }
 
@@ -223,7 +277,7 @@ pub fn writeNeurona(allocator: Allocator, neurona: Neurona, filepath: []const u8
 }
 
 /// Convert Neurona struct to YAML frontmatter string
-fn neuronaToYaml(allocator: Allocator, neurona: Neurona) ![]u8 {
+pub fn neuronaToYaml(allocator: Allocator, neurona: Neurona) ![]u8 {
     var yaml_buf = std.ArrayListUnmanaged(u8){};
     errdefer yaml_buf.deinit(allocator);
     const writer = yaml_buf.writer(allocator);
@@ -275,6 +329,22 @@ fn neuronaToYaml(allocator: Allocator, neurona: Neurona) ![]u8 {
     // Tier 3 fields (optional)
     if (neurona.hash) |hash| {
         try writer.print("hash: {s}\n", .{hash});
+    }
+
+    // Tier 3 field: _llm (optional) - serialize as flattened fields
+    if (neurona.llm_metadata) |*meta| {
+        try writer.print("_llm_t: {s}\n", .{meta.short_title});
+        try writer.print("_llm_d: {d}\n", .{meta.density});
+        if (meta.keywords.items.len > 0) {
+            try writer.writeAll("_llm_k: [");
+            for (meta.keywords.items, 0..) |kw, i| {
+                if (i > 0) try writer.writeAll(", ");
+                try writer.print("\"{s}\"", .{kw});
+            }
+            try writer.writeAll("]\n");
+        }
+        try writer.print("_llm_c: {d}\n", .{meta.token_count});
+        try writer.print("_llm_strategy: {s}\n", .{meta.strategy});
     }
 
     return try yaml_buf.toOwnedSlice(allocator);

@@ -59,14 +59,15 @@ pub const Parser = struct {
 
         // Parse line by line
         while (parser.pos < parser.input.len) {
-            parser.skipWhitespace();
-            if (parser.pos >= parser.input.len) break;
-
             const line = parser.readLine() orelse break;
             if (line.len == 0) continue;
 
             // Skip comment lines
             if (line[0] == '#') continue;
+
+            // Skip fully empty/whitespace lines
+            const trimmed_line = std.mem.trim(u8, line, " \t\r");
+            if (trimmed_line.len == 0) continue;
 
             try parser.parseLine(line, &result);
         }
@@ -80,15 +81,125 @@ pub const Parser = struct {
         const colon_idx = std.mem.indexOfScalar(u8, line, ':') orelse return;
         if (colon_idx == 0) return;
 
-        // Extract key
+        // Extract key (trim whitespace)
         const key = std.mem.trim(u8, line[0..colon_idx], " \t\r");
 
-        // Extract value
-        const value_str = std.mem.trim(u8, line[colon_idx + 1 ..], " \t\r");
+        // Extract value (without trimming, to detect empty properly)
+        const value_part = line[colon_idx + 1 ..];
+        const value_str = std.mem.trim(u8, value_part, " \t\r");
+
+        // Check if value is empty after trimming (indented object start)
+        if (value_str.len == 0) {
+            // Look ahead to parse indented block as nested object
+            const nested_obj = try self.parseNestedObject();
+            try result.put(key, Value{ .object = nested_obj });
+            return;
+        }
 
         // Parse value
         const value = try self.parseValue(value_str);
         try result.put(key, value);
+    }
+
+    /// Parse nested object from indented lines
+    fn parseNestedObject(self: *Parser) !?std.StringHashMap(Value) {
+        // Save position before reading
+        const save_pos = self.pos;
+
+        // Read first indented line (position is currently after the colon line)
+        var line = self.readLine() orelse {
+            self.pos = save_pos;
+            return null;
+        };
+
+        // Skip blank lines
+        while (line.len == 0 and self.pos < self.input.len) {
+            line = self.readLine() orelse {
+                self.pos = save_pos;
+                return null;
+            };
+        }
+
+        if (line.len == 0) {
+            self.pos = save_pos;
+            return null;
+        }
+
+        // Calculate base indentation
+        var base_indent: usize = 0;
+        while (base_indent < line.len and (line[base_indent] == ' ' or line[base_indent] == '\t')) : (base_indent += 1) {}
+
+        if (base_indent == 0) {
+            // No indentation, treat as empty object
+            return null;
+        }
+
+        // Parse nested lines
+        var nested_result = std.StringHashMap(Value).init(self.allocator);
+
+        // Process first line (already read)
+        {
+            const content = line[base_indent..];
+            const colon_idx = std.mem.indexOfScalar(u8, content, ':');
+
+            // Skip lines without colon
+            if (colon_idx == null or colon_idx.? == 0) return null;
+
+            const key = std.mem.trim(u8, content[0..colon_idx.?], " \t");
+            const value_str = std.mem.trim(u8, content[colon_idx.? + 1 ..], " \t\r");
+
+            if (value_str.len == 0) {
+                const nested_nested = try self.parseNestedObject();
+                try nested_result.put(key, Value{ .object = nested_nested });
+            } else {
+                const value = try self.parseValue(value_str);
+                try nested_result.put(key, value);
+            }
+        }
+
+        while (self.pos < self.input.len) {
+            const check_line = self.readLine() orelse break;
+
+            // Skip blank lines and comments
+            if (check_line.len == 0) continue;
+            if (check_line[0] == '#') continue;
+
+            // Check indentation
+            var indent: usize = 0;
+            while (indent < check_line.len and (check_line[indent] == ' ' or check_line[indent] == '\t')) : (indent += 1) {}
+
+            // If indentation is less than base, we're done
+            if (indent < base_indent) {
+                // This line belongs to parent, put it back
+                self.pos -= (check_line.len + 1); // +1 for newline
+                break;
+            }
+
+            // Remove base indentation from line
+            const content = if (indent >= base_indent) check_line[base_indent..] else check_line;
+
+            // Parse key: value
+            const colon_idx = std.mem.indexOfScalar(u8, content, ':');
+
+            // Skip lines without colon
+            if (colon_idx == null or colon_idx.? == 0) continue;
+
+            const key = std.mem.trim(u8, content[0..colon_idx.?], " \t");
+            const value_str = std.mem.trim(u8, content[colon_idx.? + 1 ..], " \t\r");
+
+            // Handle nested objects within nested objects
+            if (value_str.len == 0) {
+                const nested_nested = try self.parseNestedObject();
+                try nested_result.put(key, Value{ .object = nested_nested });
+                continue;
+            }
+
+            // Parse value
+            const value = try self.parseValue(value_str);
+            try nested_result.put(key, value);
+        }
+
+        return nested_result;
     }
 
     /// Parse a YAML value
@@ -209,12 +320,35 @@ pub fn getBool(value: Value, default: bool) bool {
 }
 
 /// Helper to get array from Value (with default)
+/// NOTE: For integer/float array items, we use the provided allocator directly to avoid page_allocator leaks.
+/// This is a known limitation of the simple YAML parser that was fixed for _llm metadata support.
 pub fn getArray(value: Value, allocator: Allocator, default: []const []const u8) ![]const []const u8 {
     return switch (value) {
         .array => |arr| {
             var result = try allocator.alloc([]const u8, arr.items.len);
-            for (arr.items, 0..) |item, i| {
-                result[i] = try allocator.dupe(u8, getString(item, ""));
+            for (arr.items, 0..) |item, idx| {
+                // Direct dupe for string items to avoid page_allocator leaks
+                switch (item) {
+                    .string => |s| {
+                        result[idx] = try allocator.dupe(u8, s);
+                    },
+                    .integer => |i| {
+                        const str = try std.fmt.allocPrint(allocator, "{d}", .{i});
+                        result[idx] = str;
+                    },
+                    .float => |f| {
+                        const str = try std.fmt.allocPrint(allocator, "{d}", .{f});
+                        result[idx] = str;
+                    },
+                    .boolean => |b| {
+                        const str = if (b) "true" else "false";
+                        result[idx] = try allocator.dupe(u8, str);
+                    },
+                    else => {
+                        const str = getString(item, "");
+                        result[idx] = try allocator.dupe(u8, str);
+                    },
+                }
             }
             return result;
         },
