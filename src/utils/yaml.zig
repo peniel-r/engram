@@ -31,10 +31,14 @@ pub const Value = union(enum) {
                 if (obj_opt.*) |*obj| {
                     var it = obj.iterator();
                     while (it.next()) |entry| {
-                        allocator.free(entry.key_ptr.*);
+                        // CRITICAL: Don't free keys - HashMap.deinit() handles them
+                        // Don't free keys here - they're owned by the HashMap
+                        // Just deinit the values
                         entry.value_ptr.deinit(allocator);
                     }
-                    obj.deinit();
+                    // CRITICAL: Don't call obj.deinit() here!
+                    // It would free keys and internal storage that might still be in use
+                    // The parent HashMap will call deinit() when it's done
                 }
             },
             else => {},
