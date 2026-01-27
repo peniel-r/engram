@@ -53,25 +53,33 @@ echo.
 
 REM Test 4: Vector mode
 echo Test 4: Vector mode...
-"%ENGRAM%" query --mode vector "login" --limit 5 >nul 2>&1
-if errorlevel 1 (
-    echo ❌ FAILED: Vector mode crashed
-    set /a TESTS_FAILED+=1
+if not exist "glove_cache.bin" (
+    echo ⏭️  SKIPPED: glove_cache.bin not found
 ) else (
-    echo ✅ PASSED: Vector mode executes
-    set /a TESTS_PASSED+=1
+    "%ENGRAM%" query --mode vector "login" --limit 5 >nul 2>&1
+    if errorlevel 1 (
+        echo ❌ FAILED: Vector mode crashed
+        set /a TESTS_FAILED+=1
+    ) else (
+        echo ✅ PASSED: Vector mode executes
+        set /a TESTS_PASSED+=1
+    )
 )
 echo.
 
 REM Test 5: Hybrid mode
 echo Test 5: Hybrid mode...
-"%ENGRAM%" query --mode hybrid "login performance" --limit 5 2>&1 | findstr "Fused Score" >nul
-if errorlevel 1 (
-    echo ⚠️  WARNING: Hybrid mode may not show expected output
-    "%ENGRAM%" query --mode hybrid "login performance" --limit 5
+if not exist "glove_cache.bin" (
+    echo ⏭️  SKIPPED: glove_cache.bin not found
 ) else (
-    echo ✅ PASSED: Hybrid mode shows fused scores
-    set /a TESTS_PASSED+=1
+    "%ENGRAM%" query --mode hybrid "login performance" --limit 5 2>&1 | findstr "Fused Score" >nul
+    if errorlevel 1 (
+        echo ⚠️  WARNING: Hybrid mode may not show expected output
+        "%ENGRAM%" query --mode hybrid "login performance" --limit 5
+    ) else (
+        echo ✅ PASSED: Hybrid mode shows fused scores
+        set /a TESTS_PASSED+=1
+    )
 )
 echo.
 
