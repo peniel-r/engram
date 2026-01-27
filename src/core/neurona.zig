@@ -283,15 +283,14 @@ pub const Neurona = struct {
 
     /// Initialize empty Neurona (uninitialized - caller must set all required fields)
     pub fn init(allocator: Allocator) !Neurona {
-        _ = allocator; // Use allocator for consistency, but defer actual allocation
         return Neurona{
-            .id = undefined,
-            .title = undefined,
+            .id = try allocator.dupe(u8, ""),
+            .title = try allocator.dupe(u8, ""),
             .tags = .{},
             .type = .concept,
             .connections = .{},
-            .updated = undefined,
-            .language = undefined,
+            .updated = try allocator.dupe(u8, ""),
+            .language = try allocator.dupe(u8, "en"),
             .hash = null,
             .llm_metadata = null,
             .context = .none,
@@ -300,13 +299,13 @@ pub const Neurona = struct {
 
     /// Free all allocated memory
     pub fn deinit(self: *Neurona, allocator: Allocator) void {
-        // Free basic fields (safely check for null pointers)
-        if (@intFromPtr(self.id.ptr) != 0) allocator.free(self.id);
-        if (@intFromPtr(self.title.ptr) != 0) allocator.free(self.title);
+        // Free basic fields (safely check for null pointers and empty strings)
+        if (@intFromPtr(self.id.ptr) != 0 and self.id.len > 0) allocator.free(self.id);
+        if (@intFromPtr(self.title.ptr) != 0 and self.title.len > 0) allocator.free(self.title);
         for (self.tags.items) |tag| allocator.free(tag);
         self.tags.deinit(allocator);
-        if (@intFromPtr(self.updated.ptr) != 0) allocator.free(self.updated);
-        if (@intFromPtr(self.language.ptr) != 0) allocator.free(self.language);
+        if (@intFromPtr(self.updated.ptr) != 0 and self.updated.len > 0) allocator.free(self.updated);
+        if (@intFromPtr(self.language.ptr) != 0 and self.language.len > 0) allocator.free(self.language);
 
         // Free connections (including target_id strings)
         var conn_it = self.connections.iterator();

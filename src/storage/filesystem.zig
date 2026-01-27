@@ -220,8 +220,7 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
         if (llm_k) |k_val| {
             const keywords = try getArray(k_val, allocator, &[_][]const u8{});
             for (keywords) |kw| {
-                const kw_duped = try allocator.dupe(u8, kw);
-                try metadata.keywords.append(allocator, kw_duped);
+                try metadata.keywords.append(allocator, kw);
             }
             allocator.free(keywords);
         }

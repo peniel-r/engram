@@ -31,14 +31,11 @@ pub const Value = union(enum) {
                 if (obj_opt.*) |*obj| {
                     var it = obj.iterator();
                     while (it.next()) |entry| {
-                        // CRITICAL: Don't free keys - HashMap.deinit() handles them
-                        // Don't free keys here - they're owned by the HashMap
-                        // Just deinit the values
+                        // Just deinit the values recursively
                         entry.value_ptr.deinit(allocator);
                     }
-                    // CRITICAL: Don't call obj.deinit() here!
-                    // It would free keys and internal storage that might still be in use
-                    // The parent HashMap will call deinit() when it's done
+                    // Free the internal bucket array of the nested HashMap
+                    obj.deinit();
                 }
             },
             else => {},

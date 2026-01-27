@@ -48,21 +48,29 @@ echo ""
 
 # Test 4: Vector mode
 echo "Test 4: Vector mode..."
-if ! $ENGRAM query --mode vector "login" --limit 5 > /dev/null 2>&1; then
-    echo "❌ FAILED: Vector mode crashed"
-    exit 1
+if [ ! -f "glove_cache.bin" ]; then
+    echo "⏭️  SKIPPED: glove_cache.bin not found"
+else
+    if ! $ENGRAM query --mode vector "login" --limit 5 > /dev/null 2>&1; then
+        echo "❌ FAILED: Vector mode crashed"
+        exit 1
+    fi
+    echo "✅ PASSED: Vector mode executes"
 fi
-echo "✅ PASSED: Vector mode executes"
 echo ""
 
 # Test 5: Hybrid mode
 echo "Test 5: Hybrid mode..."
-OUTPUT=$($ENGRAM query --mode hybrid "login performance" --limit 5 2>&1)
-if echo "$OUTPUT" | grep -q "Fused Score"; then
-    echo "✅ PASSED: Hybrid mode shows fused scores"
+if [ ! -f "glove_cache.bin" ]; then
+    echo "⏭️  SKIPPED: glove_cache.bin not found"
 else
-    echo "⚠️  WARNING: Hybrid mode may not show expected output"
-    echo "$OUTPUT" | head -20
+    OUTPUT=$($ENGRAM query --mode hybrid "login performance" --limit 5 2>&1)
+    if echo "$OUTPUT" | grep -q "Fused Score"; then
+        echo "✅ PASSED: Hybrid mode shows fused scores"
+    else
+        echo "⚠️  WARNING: Hybrid mode may not show expected output"
+        echo "$OUTPUT" | head -20
+    fi
 fi
 echo ""
 
