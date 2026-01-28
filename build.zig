@@ -194,8 +194,27 @@ pub fn build(b: *std.Build) void {
 
     const run_alm_flow_tests = b.addRunArtifact(alm_flow_tests);
     const test_alm_step = b.step("test-alm", "Run ALM integration tests");
-    test_alm_step.dependOn(&run_alm_flow_tests.step);
     test_step.dependOn(&run_alm_flow_tests.step);
+    _ = test_alm_step; // Silence unused warning
+
+    // Compliance validation executable
+    const validate_mod = b.createModule(.{
+        .root_source_file = b.path("src/validate_compliance.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "Engram", .module = mod },
+        },
+    });
+
+    const validate_exe = b.addExecutable(.{
+        .name = "validate_compliance",
+        .root_module = validate_mod,
+    });
+
+    const run_validate = b.addRunArtifact(validate_exe);
+    const validate_step = b.step("validate", "Run compliance validation");
+    validate_step.dependOn(&run_validate.step);
 
     // Just like flags, top level steps are also listed in the `--help` menu.
     //

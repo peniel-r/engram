@@ -67,7 +67,6 @@ The CLI uses a `noun-verb` or `verb-object` syntax optimized for speed.
 | :--- | :--- |
 | `engram trace <id> --up/--down` | Visualizes the dependency tree (e.g., Requirement $\to$ Test). |
 | `engram status` | Lists open issues (`type: issue`) sorted by graph weight/priority. |
-| `engram run <id>` | (Tier 3) Executes the context of an artifact (e.g., runs the test script). |
 
 ### 4.3 Query Language (EQL)
 A simple query interface for the graph.
