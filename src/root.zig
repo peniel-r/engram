@@ -38,6 +38,7 @@ pub const utils = struct {
     pub const state_filters = @import("utils/state_filters.zig");
     pub const token_counter = @import("utils/token_counter.zig");
     pub const summary = @import("utils/summary.zig");
+    pub const benchmark = @import("benchmark.zig");
 };
 
 // Re-export CLI (for integration tests)

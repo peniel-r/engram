@@ -149,7 +149,7 @@ pub const Graph = struct {
     pub const BFSResult = struct {
         node_id: []const u8,
         level: usize,
-        path: std.ArrayList([]const u8),
+        path: []const []const u8,
     };
 
     /// Breadth-First Search traversal
@@ -158,23 +158,23 @@ pub const Graph = struct {
         var visited = std.StringHashMap(void).init(allocator);
         defer visited.deinit();
 
-        var queue = std.ArrayList([]const u8).init(allocator);
-        defer queue.deinit();
+        var queue = std.ArrayListUnmanaged([]const u8){};
+        defer queue.deinit(allocator);
 
         var levels = std.StringHashMap(usize).init(allocator);
         defer levels.deinit();
 
-        var result = std.ArrayList(BFSResult).init(allocator);
+        var result = std.ArrayListUnmanaged(BFSResult){};
         errdefer {
             for (result.items) |*r| {
-                r.path.deinit(allocator);
+                allocator.free(r.path);
             }
             result.deinit(allocator);
         }
 
         // Start with initial node
         try visited.put(start_id, {});
-        try queue.append(start_id);
+        try queue.append(allocator, start_id);
         try levels.put(start_id, 0);
 
         while (queue.items.len > 0) {
@@ -187,45 +187,45 @@ pub const Graph = struct {
             for (adj) |edge| {
                 if (visited.get(edge.target_id) == null) {
                     try visited.put(edge.target_id, {});
-                    try queue.append(edge.target_id);
+                    try queue.append(allocator, edge.target_id);
                     try levels.put(edge.target_id, current_level + 1);
 
                     // Build path from start to current
-                    var path = std.ArrayList([]const u8).init(allocator);
-                    try path.append(start_id);
+                    var path = std.ArrayListUnmanaged([]const u8){};
+                    try path.append(allocator, start_id);
                     // Reconstruct path from previous BFS results
                     for (result.items) |r| {
                         if (r.level == current_level and
                             std.mem.eql(u8, r.node_id, current_id))
                         {
-                            for (r.path.items) |p| {
-                                try path.append(p);
+                            for (r.path) |p| {
+                                try path.append(allocator, p);
                             }
                         }
                         break;
                     }
-                    try path.append(edge.target_id);
+                    try path.append(allocator, edge.target_id);
 
-                    try result.append(.{
+                    try result.append(allocator, .{
                         .node_id = edge.target_id,
                         .level = current_level + 1,
-                        .path = try path.toOwnedSlice(),
+                        .path = try path.toOwnedSlice(allocator),
                     });
                 }
             }
         }
 
-        return result.toOwnedSlice();
+        return try result.toOwnedSlice(allocator);
     }
 
     /// DFS traversal
     /// Visit all reachable nodes using depth-first search
-    pub fn dfs(self: *const Graph, allocator: Allocator, start_id: []const u8) !std.ArrayList([]const u8) {
+    pub fn dfs(self: *const Graph, allocator: Allocator, start_id: []const u8) !std.ArrayListUnmanaged([]const u8) {
         var visited = std.StringHashMap(void).init(allocator);
         defer visited.deinit();
 
-        var result = std.ArrayList([]const u8).init(allocator);
-        defer result.deinit();
+        var result = std.ArrayListUnmanaged([]const u8){};
+        errdefer result.deinit(allocator);
 
         try visited.put(start_id, {});
         try dfsRecursive(allocator, self, start_id, &visited, &result);
@@ -234,12 +234,12 @@ pub const Graph = struct {
     }
 
     /// Recursive DFS helper (called from DFS traversal)
-    fn dfsRecursive(allocator: Allocator, graph: *const Graph, node_id: []const u8, visited: *std.StringHashMap(void), result: *std.ArrayList([]const u8)) !void {
+    fn dfsRecursive(allocator: Allocator, graph: *const Graph, node_id: []const u8, visited: *std.StringHashMap(void), result: *std.ArrayListUnmanaged([]const u8)) !void {
         const adj = graph.getAdjacent(node_id);
         for (adj) |edge| {
             if (visited.get(edge.target_id) == null) {
                 try visited.put(edge.target_id, {});
-                try result.append(edge.target_id);
+                try result.append(allocator, edge.target_id);
                 try dfsRecursive(allocator, graph, edge.target_id, visited, result);
             }
         }
@@ -247,22 +247,16 @@ pub const Graph = struct {
 
     /// Shortest path finding (BFS-based, unweighted)
     /// Returns list of node IDs in shortest path from start to end
-    pub fn shortestPath(self: *const Graph, allocator: Allocator, start_id: []const u8, end_id: []const u8) !std.ArrayList([]const u8) {
+    pub fn shortestPath(self: *const Graph, allocator: Allocator, start_id: []const u8, end_id: []const u8) !std.ArrayListUnmanaged([]const u8) {
         var visited = std.StringHashMap(struct { prev: ?[]const u8 }).init(allocator);
-        defer {
-            var it = visited.iterator();
-            while (it.next()) |entry| {
-                allocator.free(entry.key_ptr.*);
-            }
-            visited.deinit();
-        }
+        defer visited.deinit();
 
-        var queue = std.ArrayList([]const u8).init(allocator);
-        defer queue.deinit();
+        var queue = std.ArrayListUnmanaged([]const u8){};
+        defer queue.deinit(allocator);
 
         // Start BFS
         try visited.put(start_id, .{ .prev = null });
-        try queue.append(start_id);
+        try queue.append(allocator, start_id);
 
         while (queue.items.len > 0) {
             const current_id = queue.orderedRemove(0);
@@ -279,21 +273,21 @@ pub const Graph = struct {
             for (adj) |edge| {
                 if (visited.get(edge.target_id) == null) {
                     try visited.put(edge.target_id, .{ .prev = current_id });
-                    try queue.append(edge.target_id);
+                    try queue.append(allocator, edge.target_id);
                 }
             }
         }
 
         // Check if path was found
-        if (visited.get(end_id)) |_| {
+        if (visited.get(end_id) != null) {
             // Reconstruct path backwards
-            var path = std.ArrayList([]const u8).init(allocator);
-            defer path.deinit();
+            var path = std.ArrayListUnmanaged([]const u8){};
+            errdefer path.deinit(allocator);
 
             var current_id: []const u8 = end_id;
             while (true) {
                 const entry = visited.get(current_id).?;
-                try path.append(current_id);
+                try path.append(allocator, current_id);
 
                 if (entry.prev) |prev| {
                     current_id = prev;

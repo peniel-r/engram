@@ -9,6 +9,7 @@ const Neurona = @import("../core/neurona.zig").Neurona;
 const Graph = @import("../core/graph.zig").Graph;
 const storage = @import("../root.zig").storage;
 const validator = @import("../core/validator.zig");
+const benchmark = @import("../root.zig").utils.benchmark;
 
 /// Sync configuration
 pub const SyncConfig = struct {
@@ -20,6 +21,11 @@ pub const SyncConfig = struct {
 
 /// Main command handler
 pub fn execute(allocator: Allocator, config: SyncConfig) !void {
+    var reports = std.ArrayListUnmanaged(benchmark.BenchmarkReport){};
+    defer reports.deinit(allocator);
+
+    // Step 0: Cold Start Timer
+    var cold_start_timer = try benchmark.Timer.start();
     const index_path = try storage.index.getGraphIndexPath(allocator);
     defer allocator.free(index_path);
 
@@ -33,8 +39,21 @@ pub fn execute(allocator: Allocator, config: SyncConfig) !void {
                 std.debug.print("Graph nodes: {d}, edges: {d}\n", .{ g.nodeCount(), g.edgeCount() / 2 });
             }
 
+            try reports.append(allocator, .{
+                .operation = "Cold Start (Index Load)",
+                .iterations = 1,
+                .total_ms = cold_start_timer.readMs(),
+                .avg_ms = cold_start_timer.readMs(),
+                .min_ms = cold_start_timer.readMs(),
+                .max_ms = cold_start_timer.readMs(),
+                .passes_10ms_rule = cold_start_timer.readMs() < 50.0, // Cold start target is 50ms
+            });
+
             // If we only wanted to load the index, we are done
-            if (!config.rebuild_index) return;
+            if (!config.rebuild_index) {
+                printPerformanceSummary(reports.items);
+                return;
+            }
         } else |_| {
             if (config.verbose) {
                 std.debug.print("No graph index cache found (or corrupt), rebuilding...\n", .{});
@@ -47,24 +66,86 @@ pub fn execute(allocator: Allocator, config: SyncConfig) !void {
     }
 
     // Step 1: Scan all Neuronas
+    var scan_timer = try benchmark.Timer.start();
     const neuronas = try storage.scanNeuronas(allocator, config.directory);
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);
     }
+    const scan_ms = scan_timer.readMs();
+    try reports.append(allocator, .{
+        .operation = "Neurona Scanning",
+        .iterations = 1,
+        .total_ms = scan_ms,
+        .avg_ms = scan_ms,
+        .min_ms = scan_ms,
+        .max_ms = scan_ms,
+        .passes_10ms_rule = scan_ms < 1000.0, // Scan target is 1000ms for 10k
+    });
 
     if (config.verbose) {
         std.debug.print("Found {d} Neuronas\n", .{neuronas.len});
     }
 
     // Step 2: Build graph index
+    var graph_timer = try benchmark.Timer.start();
     try buildGraphIndex(allocator, neuronas, config.verbose);
+    const graph_ms = graph_timer.readMs();
+    try reports.append(allocator, .{
+        .operation = "Graph Build",
+        .iterations = 1,
+        .total_ms = graph_ms,
+        .avg_ms = graph_ms,
+        .min_ms = graph_ms,
+        .max_ms = graph_ms,
+        .passes_10ms_rule = graph_ms < 1000.0, // Graph target is 1000ms
+    });
 
     // Step 3: Manage LLM Cache (Issue 1.3)
+    var cache_timer = try benchmark.Timer.start();
     try syncLLMCache(allocator, neuronas, config.verbose);
+    const cache_ms = cache_timer.readMs();
+    try reports.append(allocator, .{
+        .operation = "LLM Cache Sync",
+        .iterations = 1,
+        .total_ms = cache_ms,
+        .avg_ms = cache_ms,
+        .min_ms = cache_ms,
+        .max_ms = cache_ms,
+        .passes_10ms_rule = true, // No strict limit in compliance plan for cache
+    });
 
     // Step 4: Build/Load Vector Index (Issue 1.2)
+    var vector_timer = try benchmark.Timer.start();
     try syncVectors(allocator, neuronas, config.verbose, config.force_rebuild, config.directory);
+    const vector_ms = vector_timer.readMs();
+    try reports.append(allocator, .{
+        .operation = "Vector Sync",
+        .iterations = 1,
+        .total_ms = vector_ms,
+        .avg_ms = vector_ms,
+        .min_ms = vector_ms,
+        .max_ms = vector_ms,
+        .passes_10ms_rule = vector_ms < 1000.0, // Vector target depends on embeddings
+    });
+
+    printPerformanceSummary(reports.items);
+}
+
+/// Print performance summary table
+fn printPerformanceSummary(reports: []const benchmark.BenchmarkReport) void {
+    std.debug.print("\nPerformance Summary (10ms Rule Validation)\n", .{});
+    std.debug.print("------------------------------------------------------------\n", .{});
+    std.debug.print("{s: <30} | {s: >14} | {s}\n", .{ "Operation", "Duration", "Status" });
+    std.debug.print("------------------------------------------------------------\n", .{});
+    for (reports) |r| {
+        const threshold: f64 = if (std.mem.indexOf(u8, r.operation, "Cold Start") != null) 50.0 else 1000.0;
+        const status = if (r.avg_ms < threshold) "✅ PASS" else "❌ FAIL";
+        // Special 10ms rule mention for traversals would go here if we were doing them
+        // For sync, we use the targets from Issue 1.4
+        std.debug.print("{s: <30} | {d: >11.3} ms | {s}\n", .{ r.operation, r.avg_ms, status });
+    }
+    std.debug.print("------------------------------------------------------------\n\n", .{});
 }
 
 /// Sync LLM Cache (Issue 1.3)

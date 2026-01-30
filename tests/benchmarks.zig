@@ -8,44 +8,60 @@ const Engram = @import("Engram");
 const fs = Engram.storage;
 const cortex = Engram.Cortex;
 const graph_module = Engram.core.graph;
-
-const BenchmarkResult = struct {
-    name: []const u8,
-    duration_ns: u64,
-    duration_ms: f64,
-    passes: bool,
-};
+const benchmark = Engram.utils.benchmark;
 
 /// Run all benchmarks and print results
 pub fn runAll(allocator: Allocator) !void {
-    std.debug.print("\n=== Engram Phase 1 Performance Benchmarks ===\n\n", .{});
+    std.debug.print("\n=== Engram Performance Benchmarks ===\n\n", .{});
 
-    var results = std.ArrayListUnmanaged(BenchmarkResult){};
+    var reports = std.ArrayListUnmanaged(benchmark.BenchmarkReport){};
     defer {
-        for (results.items) |r| allocator.free(r.name);
-        results.deinit(allocator);
+        // No strings to free in BenchmarkReport currently
+        reports.deinit(allocator);
     }
 
-    // Run all benchmarks
-    try results.append(allocator, try benchmarkColdStart(allocator));
-    try results.append(allocator, try benchmarkFileRead(allocator));
-    try results.append(allocator, try benchmarkGraphTraversal(allocator));
-    try results.append(allocator, try benchmarkIndexBuild(allocator));
+    const runner = benchmark.Benchmark.init(allocator, "Engram Benchmarks");
+
+    // 1. Cold Start
+    try reports.append(allocator, try runner.run("Cold Start (cortex.json load)", 10, benchmarkColdStart, .{allocator}));
+
+    // 2. File Read
+    try reports.append(allocator, try runner.run("File Read (simple md)", 20, benchmarkFileRead, .{allocator}));
+
+    // 3. Graph Traversal Depth 1
+    try reports.append(allocator, try runner.run("Graph Traversal (Depth 1)", 1000, benchmarkGraphTraversalD1, .{allocator}));
+
+    // 4. Graph Traversal Depth 3
+    try reports.append(allocator, try runner.run("Graph Traversal (Depth 3)", 100, benchmarkGraphTraversalD3, .{allocator}));
+
+    // 5. Graph Traversal Depth 5
+    try reports.append(allocator, try runner.run("Graph Traversal (Depth 5)", 50, benchmarkGraphTraversalD5, .{allocator}));
+
+    // 6. Index Build (100 files)
+    try reports.append(allocator, try runner.run("Index Build (100 files scan)", 5, benchmarkIndexBuild, .{allocator}));
 
     // Print summary
-    printResults(results.items);
+    printResults(reports.items);
 }
 
-/// Benchmark 1: Cold Start - Load cortex.json in < 50ms
-fn benchmarkColdStart(allocator: Allocator) !BenchmarkResult {
-    std.debug.print("Benchmark: Cold Start (cortex.json load)\n", .{});
-
+/// Helper for cold start measurement
+fn benchmarkColdStart(allocator: Allocator) !void {
     // Setup test cortex
     const test_dir = "bench_cortex";
     try std.fs.cwd().makePath(test_dir);
     defer std.fs.cwd().deleteTree(test_dir) catch {};
 
     const cortex_config = try cortex.default(allocator, "test_cortex", "Test Cortex");
+    defer {
+        allocator.free(cortex_config.id);
+        allocator.free(cortex_config.name);
+        allocator.free(cortex_config.version);
+        allocator.free(cortex_config.spec_version);
+        allocator.free(cortex_config.capabilities.type);
+        allocator.free(cortex_config.capabilities.default_language);
+        allocator.free(cortex_config.indices.strategy);
+        allocator.free(cortex_config.indices.embedding_model);
+    }
 
     const cortex_path = try std.fs.path.join(allocator, &.{ test_dir, "cortex.json" });
     defer allocator.free(cortex_path);
@@ -75,14 +91,7 @@ fn benchmarkColdStart(allocator: Allocator) !BenchmarkResult {
         .data = cortex_json,
     });
 
-    // Measure time
-    var timer = try std.time.Timer.start();
-    const start = timer.read();
-
     const loaded = try cortex.fromFile(allocator, cortex_path);
-
-    const elapsed_ns = timer.read() - start;
-    const elapsed_ms = @as(f64, @floatFromInt(elapsed_ns)) / 1_000_000.0;
 
     // Manual cleanup for const return
     allocator.free(loaded.id);
@@ -93,36 +102,10 @@ fn benchmarkColdStart(allocator: Allocator) !BenchmarkResult {
     allocator.free(loaded.capabilities.default_language);
     allocator.free(loaded.indices.strategy);
     allocator.free(loaded.indices.embedding_model);
-
-    // Manual cleanup for cortex_config
-    allocator.free(cortex_config.id);
-    allocator.free(cortex_config.name);
-    allocator.free(cortex_config.version);
-    allocator.free(cortex_config.spec_version);
-    allocator.free(cortex_config.capabilities.type);
-    allocator.free(cortex_config.capabilities.default_language);
-    allocator.free(cortex_config.indices.strategy);
-    allocator.free(cortex_config.indices.embedding_model);
-
-    const name = try allocator.dupe(u8, "Cold Start (cortex.json load)");
-    const passes = elapsed_ms < 50.0;
-
-    std.debug.print("  Result: {d:.3}ms {s}\n", .{ elapsed_ms, if (passes) "✅" else "❌" });
-    std.debug.print("  Target: < 50ms\n\n", .{});
-
-    return BenchmarkResult{
-        .name = name,
-        .duration_ns = elapsed_ns,
-        .duration_ms = elapsed_ms,
-        .passes = passes,
-    };
 }
 
-/// Benchmark 2: File Read - Simple file read < 10ms
-fn benchmarkFileRead(allocator: Allocator) !BenchmarkResult {
-    std.debug.print("Benchmark: File Read (simple read)\n", .{});
-
-    // Setup test file
+fn benchmarkFileRead(allocator: Allocator) !void {
+    _ = allocator;
     const test_file = "bench_neurona.md";
     try std.fs.cwd().writeFile(.{
         .sub_path = test_file,
@@ -130,103 +113,70 @@ fn benchmarkFileRead(allocator: Allocator) !BenchmarkResult {
     });
     defer std.fs.cwd().deleteFile(test_file) catch {};
 
-    // Measure time (average of 10 reads)
-    var total_ns: u64 = 0;
-    const iterations = 10;
-
-    for (0..iterations) |_| {
-        var timer = try std.time.Timer.start();
-        const start = timer.read();
-
-        // Use direct file read to avoid allocator issues
-        var buffer: [4096]u8 = undefined;
-        const file = try std.fs.cwd().openFile(test_file, .{});
-        defer file.close();
-        _ = try file.readAll(&buffer);
-
-        total_ns += (timer.read() - start);
-    }
-
-    const avg_ns = total_ns / iterations;
-    const avg_ms = @as(f64, @floatFromInt(avg_ns)) / 1_000_000.0;
-
-    const name = try allocator.dupe(u8, "File Read (simple read)");
-    const passes = avg_ms < 10.0;
-
-    const checkmark: []const u8 = if (passes) "✅" else "❌";
-
-    std.debug.print("  Result: {d:.3}ms (avg of {d}) {s}\n", .{ avg_ms, iterations, checkmark });
-    std.debug.print("  Target: < 10ms\n\n", .{});
-
-    return BenchmarkResult{
-        .name = name,
-        .duration_ns = avg_ns,
-        .duration_ms = avg_ms,
-        .passes = passes,
-    };
+    var buffer: [4096]u8 = undefined;
+    const file = try std.fs.cwd().openFile(test_file, .{});
+    defer file.close();
+    _ = try file.readAll(&buffer);
 }
 
-/// Benchmark 3: Graph Traversal - Depth 1 (adjacent nodes) < 5ms (O(1))
-fn benchmarkGraphTraversal(allocator: Allocator) !BenchmarkResult {
-    std.debug.print("Benchmark: Graph Traversal (depth 1, O(1))\n", .{});
-
-    // Setup test graph
+fn benchmarkGraphTraversalD1(allocator: Allocator) !void {
     var test_graph = graph_module.Graph.init();
     defer test_graph.deinit(allocator);
 
-    // Add 100 nodes with connections
     for (0..100) |i| {
         const from_id = try std.fmt.allocPrint(allocator, "node.{d}", .{i});
         defer allocator.free(from_id);
         const to_id = try std.fmt.allocPrint(allocator, "node.{d}", .{(i + 1) % 100});
         defer allocator.free(to_id);
-
         try test_graph.addEdge(allocator, from_id, to_id, 50);
     }
 
-    // Measure time (average of 1000 lookups)
-    var total_ns: u64 = 0;
-    const iterations = 1000;
-
-    for (0..iterations) |_| {
-        var timer = try std.time.Timer.start();
-        const start = timer.read();
-
-        const adj = test_graph.getAdjacent("node.50");
-        _ = adj; // Prevent optimization
-
-        total_ns += (timer.read() - start);
-    }
-
-    const avg_ns = total_ns / iterations;
-    const avg_ms = @as(f64, @floatFromInt(avg_ns)) / 1_000_000.0;
-
-    const name = try allocator.dupe(u8, "Graph Traversal (depth 1)");
-    const passes = avg_ms < 5.0;
-
-    const checkmark: []const u8 = if (passes) "✅" else "❌";
-
-    std.debug.print("  Result: {d:.6}ms (avg of {d}) {s}\n", .{ avg_ms, iterations, checkmark });
-    std.debug.print("  Target: < 5ms (O(1) lookup)\n\n", .{});
-
-    return BenchmarkResult{
-        .name = name,
-        .duration_ns = avg_ns,
-        .duration_ms = avg_ms,
-        .passes = passes,
-    };
+    const adj = test_graph.getAdjacent("node.50");
+    _ = adj;
 }
 
-/// Benchmark 4: Index Build - 100 files scan < 100ms
-fn benchmarkIndexBuild(allocator: Allocator) !BenchmarkResult {
-    std.debug.print("Benchmark: Index Build (100 files scan)\n", .{});
+fn benchmarkGraphTraversalD3(allocator: Allocator) !void {
+    var test_graph = graph_module.Graph.init();
+    defer test_graph.deinit(allocator);
 
-    // Setup test directory
+    // Build a small grid/chain for depth search
+    for (0..200) |i| {
+        const from_id = try std.fmt.allocPrint(allocator, "node.{d}", .{i});
+        defer allocator.free(from_id);
+        const to_id = try std.fmt.allocPrint(allocator, "node.{d}", .{i + 1});
+        defer allocator.free(to_id);
+        try test_graph.addEdge(allocator, from_id, to_id, 50);
+    }
+
+    const bfs_results = try test_graph.bfs(allocator, "node.0");
+    defer {
+        for (bfs_results) |r| allocator.free(r.path);
+        allocator.free(bfs_results);
+    }
+}
+
+fn benchmarkGraphTraversalD5(allocator: Allocator) !void {
+    var test_graph = graph_module.Graph.init();
+    defer test_graph.deinit(allocator);
+
+    // Chain of 500 nodes
+    for (0..500) |i| {
+        const from_id = try std.fmt.allocPrint(allocator, "node.{d}", .{i});
+        defer allocator.free(from_id);
+        const to_id = try std.fmt.allocPrint(allocator, "node.{d}", .{i + 1});
+        defer allocator.free(to_id);
+        try test_graph.addEdge(allocator, from_id, to_id, 50);
+    }
+
+    var path = try test_graph.shortestPath(allocator, "node.0", "node.100");
+    path.deinit(allocator);
+}
+
+fn benchmarkIndexBuild(allocator: Allocator) !void {
     const test_dir = "bench_index";
     try std.fs.cwd().makePath(test_dir);
     defer std.fs.cwd().deleteTree(test_dir) catch {};
 
-    // Create 100 simple files
     for (0..100) |i| {
         const id = try std.fmt.allocPrint(allocator, "bench.{d:0>3}", .{i});
         defer allocator.free(id);
@@ -248,47 +198,31 @@ fn benchmarkIndexBuild(allocator: Allocator) !BenchmarkResult {
         });
     }
 
-    // Measure time
-    var timer = try std.time.Timer.start();
-    const start = timer.read();
-
     const neuronas = try fs.scanNeuronas(allocator, test_dir);
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);
     }
-
-    const elapsed_ns = timer.read() - start;
-    const elapsed_ms = @as(f64, @floatFromInt(elapsed_ns)) / 1_000_000.0;
-
-    const name = try allocator.dupe(u8, "Index Build (100 files scan)");
-    const passes = elapsed_ms < 100.0;
-
-    const checkmark: []const u8 = if (passes) "✅" else "❌";
-
-    std.debug.print("  Result: {d:.3}ms ({d} files) {s}\n", .{ elapsed_ms, 100, checkmark });
-    std.debug.print("  Target: < 100ms\n\n", .{});
-
-    return BenchmarkResult{
-        .name = name,
-        .duration_ns = elapsed_ns,
-        .duration_ms = elapsed_ms,
-        .passes = passes,
-    };
 }
 
 /// Print benchmark results summary
-fn printResults(results: []const BenchmarkResult) void {
+fn printResults(results: []const benchmark.BenchmarkReport) void {
     std.debug.print("=== Results Summary ===\n\n", .{});
+    std.debug.print("{s: <35} | {s: >11} | {s: >11} | {s}\n", .{ "Name", "Avg MS", "Max MS", "Status" });
+    std.debug.print("--------------------------------------------------------------------------------\n", .{});
 
     var passed: usize = 0;
     var failed: usize = 0;
 
     for (results) |result| {
-        const status = if (result.passes) "✅ PASS" else "❌ FAIL";
-        std.debug.print("{s}: {d:.3}ms {s}\n", .{ result.name, result.duration_ms, status });
+        const threshold: f64 = if (std.mem.indexOf(u8, result.operation, "Cold Start") != null) 50.0 else if (std.mem.indexOf(u8, result.operation, "Traversal (Depth 5)") != null) 10.0 else if (std.mem.indexOf(u8, result.operation, "Traversal (Depth 3)") != null) 5.0 else if (std.mem.indexOf(u8, result.operation, "Traversal (Depth 1)") != null) 1.0 else 100.0;
 
-        if (result.passes) passed += 1 else failed += 1;
+        const passes = result.avg_ms < threshold;
+        const status = if (passes) "✅ PASS" else "❌ FAIL";
+
+        std.debug.print("{s: <35} | {d: >8.3} ms | {d: >8.3} ms | {s}\n", .{ result.operation, result.avg_ms, result.max_ms, status });
+
+        if (passes) passed += 1 else failed += 1;
     }
 
     std.debug.print("\nTotal: {d}/{d} benchmarks passed\n", .{ passed, results.len });
@@ -296,8 +230,6 @@ fn printResults(results: []const BenchmarkResult) void {
 
 // Main entry point for standalone benchmark execution
 pub fn main() !void {
-    // Note: Use page_allocator to avoid Zig 0.15.2 GPA TypeOf bug
-    // https://github.com/ziglang/zig/issues/...
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
