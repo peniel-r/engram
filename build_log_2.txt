@@ -1,0 +1,23 @@
+install
++- install engram
+   +- compile exe engram Debug native 1 errors
+src\storage\llm_cache.zig:110:28: error: member function expected 1 argument(s), found 0
+        const writer = file.writer();
+                       ~~~~^~~~~~~
+C:\Users\USER\AppData\Roaming\Antigravity\User\globalStorage\ziglang.vscode-zig\zig\x86_64-windows-0.15.2\lib\std\fs\File.zig:2120:5: note: function declared here
+pub fn writer(file: File, buffer: []u8) Writer {
+~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+referenced by:
+    saveToDisk: src\storage\llm_cache.zig:102:20
+    syncLLMCache: src\cli\sync.zig:101:25
+    8 reference(s) hidden; use '-freference-trace=10' to see all references
+error: the following command failed with 1 compilation errors:
+"C:\\Users\\USER\\AppData\\Roaming\\Antigravity\\User\\globalStorage\\ziglang.vscode-zig\\zig\\x86_64-windows-0.15.2\\zig.exe" build-exe -ODebug --dep Engram "-Mroot=C:\\git\\Engram\\src\\main.zig" "-MEngram=C:\\git\\Engram\\src\\root.zig" --cache-dir .zig-cache --global-cache-dir "C:\\Users\\USER\\AppData\\Local\\zig" --name engram --zig-lib-dir "C:\\Users\\USER\\AppData\\Roaming\\Antigravity\\User\\globalStorage\\ziglang.vscode-zig\\zig\\x86_64-windows-0.15.2\\lib\\" --listen=-
+
+Build Summary: 0/3 steps succeeded; 1 failed
+install transitive failure
++- install engram transitive failure
+   +- compile exe engram Debug native 1 errors
+
+error: the following build command failed with exit code 1:
+.zig-cache\o\99637042dd87d463b2ccb427f703bb56\build.exe C:\Users\USER\AppData\Roaming\Antigravity\User\globalStorage\ziglang.vscode-zig\zig\x86_64-windows-0.15.2\zig.exe C:\Users\USER\AppData\Roaming\Antigravity\User\globalStorage\ziglang.vscode-zig\zig\x86_64-windows-0.15.2\lib C:\git\Engram .zig-cache C:\Users\USER\AppData\Local\zig --seed 0xfc2af549 -Z04e95a66d5a688c5 --summary all

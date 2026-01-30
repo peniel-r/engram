@@ -1,0 +1,26 @@
+install
++- install engram
+   +- compile exe engram Debug native 2 errors
+src\storage\llm_cache.zig:190:20: error: unused function parameter
+    pub fn cleanup(self: *LLMCache, latest_neuronas: []const []const u8) void {
+                   ^~~~
+src\storage\llm_cache.zig:117:25: error: root source file struct 'json' has no member named 'encodeJsonString'
+            try std.json.encodeJsonString(entry.key_ptr.*, .{}, writer);
+                ~~~~~~~~^~~~~~~~~~~~~~~~~
+C:\Users\USER\AppData\Roaming\Antigravity\User\globalStorage\ziglang.vscode-zig\zig\x86_64-windows-0.15.2\lib\std\json.zig:1:1: note: struct declared here
+//! JSON parsing and stringification conforming to RFC 8259. https://datatracker.ietf.org/doc/html/rfc8259
+^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+referenced by:
+    saveToDisk: src\storage\llm_cache.zig:102:20
+    syncLLMCache: src\cli\sync.zig:101:25
+    8 reference(s) hidden; use '-freference-trace=10' to see all references
+error: the following command failed with 2 compilation errors:
+"C:\\Users\\USER\\AppData\\Roaming\\Antigravity\\User\\globalStorage\\ziglang.vscode-zig\\zig\\x86_64-windows-0.15.2\\zig.exe" build-exe -ODebug --dep Engram "-Mroot=C:\\git\\Engram\\src\\main.zig" "-MEngram=C:\\git\\Engram\\src\\root.zig" --cache-dir .zig-cache --global-cache-dir "C:\\Users\\USER\\AppData\\Local\\zig" --name engram --zig-lib-dir "C:\\Users\\USER\\AppData\\Roaming\\Antigravity\\User\\globalStorage\\ziglang.vscode-zig\\zig\\x86_64-windows-0.15.2\\lib\\" --listen=-
+
+Build Summary: 0/3 steps succeeded; 1 failed
+install transitive failure
++- install engram transitive failure
+   +- compile exe engram Debug native 2 errors
+
+error: the following build command failed with exit code 1:
+.zig-cache\o\99637042dd87d463b2ccb427f703bb56\build.exe C:\Users\USER\AppData\Roaming\Antigravity\User\globalStorage\ziglang.vscode-zig\zig\x86_64-windows-0.15.2\zig.exe C:\Users\USER\AppData\Roaming\Antigravity\User\globalStorage\ziglang.vscode-zig\zig\x86_64-windows-0.15.2\lib C:\git\Engram .zig-cache C:\Users\USER\AppData\Local\zig --seed 0xbf4dd9de -Z238e226217911ed9 --summary all

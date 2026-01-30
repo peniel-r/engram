@@ -1,12 +1,12 @@
 install
 +- install engram
    +- compile exe engram Debug native 1 errors
-src\storage\llm_cache.zig:110:37: error: root source file struct 'Io' has no member named 'bufferedWriter'
-        var buffered_writer = std.io.bufferedWriter(file.writer());
-                              ~~~~~~^~~~~~~~~~~~~~~
-C:\Users\USER\AppData\Roaming\Antigravity\User\globalStorage\ziglang.vscode-zig\zig\x86_64-windows-0.15.2\lib\std\Io.zig:1:1: note: struct declared here
-const builtin = @import("builtin");
-^~~~~
+src\storage\llm_cache.zig:117:25: error: root source file struct 'json' has no member named 'stringify'
+            try std.json.stringify(entry.key_ptr.*, .{}, writer);
+                ~~~~~~~~^~~~~~~~~~
+C:\Users\USER\AppData\Roaming\Antigravity\User\globalStorage\ziglang.vscode-zig\zig\x86_64-windows-0.15.2\lib\std\json.zig:1:1: note: struct declared here
+//! JSON parsing and stringification conforming to RFC 8259. https://datatracker.ietf.org/doc/html/rfc8259
+^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 referenced by:
     saveToDisk: src\storage\llm_cache.zig:102:20
     syncLLMCache: src\cli\sync.zig:101:25
@@ -20,4 +20,4 @@ install transitive failure
    +- compile exe engram Debug native 1 errors
 
 error: the following build command failed with exit code 1:
-.zig-cache\o\99637042dd87d463b2ccb427f703bb56\build.exe C:\Users\USER\AppData\Roaming\Antigravity\User\globalStorage\ziglang.vscode-zig\zig\x86_64-windows-0.15.2\zig.exe C:\Users\USER\AppData\Roaming\Antigravity\User\globalStorage\ziglang.vscode-zig\zig\x86_64-windows-0.15.2\lib C:\git\Engram .zig-cache C:\Users\USER\AppData\Local\zig --seed 0xf113b9a1 -Z701cf9d19b911bbe --summary all
+.zig-cache\o\99637042dd87d463b2ccb427f703bb56\build.exe C:\Users\USER\AppData\Roaming\Antigravity\User\globalStorage\ziglang.vscode-zig\zig\x86_64-windows-0.15.2\zig.exe C:\Users\USER\AppData\Roaming\Antigravity\User\globalStorage\ziglang.vscode-zig\zig\x86_64-windows-0.15.2\lib C:\git\Engram .zig-cache C:\Users\USER\AppData\Local\zig --seed 0xb6cecb47 -Zdf41cbba6bea71f1 --summary all

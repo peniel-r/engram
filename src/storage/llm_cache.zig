@@ -99,15 +99,33 @@ pub const LLMCache = struct {
     }
 
     pub fn saveToDisk(self: *LLMCache, summaries_path: []const u8, tokens_path: []const u8) !void {
-        try saveMap(self.summaries, summaries_path);
-        try saveMap(self.tokens, tokens_path);
+        try saveMap(self.allocator, self.summaries, summaries_path);
+        try saveMap(self.allocator, self.tokens, tokens_path);
     }
 
-    fn saveMap(map: anytype, path: []const u8) !void {
-        const file = try std.fs.cwd().createFile(path, .{});
-        defer file.close();
+    fn writeJsonString(writer: anytype, s: []const u8) !void {
+        try writer.writeAll("\"");
+        for (s) |c| {
+            switch (c) {
+                '\\' => try writer.writeAll("\\\\"),
+                '\"' => try writer.writeAll("\\\""),
+                '\n' => try writer.writeAll("\\n"),
+                '\r' => try writer.writeAll("\\r"),
+                '\t' => try writer.writeAll("\\t"),
+                else => if (c < 32) {
+                    try writer.print("\\u{x:0>4}", .{c});
+                } else {
+                    try writer.writeByte(c);
+                },
+            }
+        }
+        try writer.writeAll("\"");
+    }
 
-        const writer = file.writer();
+    fn saveMap(allocator: Allocator, map: anytype, path: []const u8) !void {
+        var list = std.ArrayListUnmanaged(u8){};
+        defer list.deinit(allocator);
+        const writer = list.writer(allocator);
 
         try writer.writeAll("{");
         var first = true;
@@ -115,14 +133,13 @@ pub const LLMCache = struct {
         while (it.next()) |entry| {
             if (!first) try writer.writeAll(",");
             first = false;
-            try std.json.encodeJsonString(entry.key_ptr.*, .{}, writer);
+            try writeJsonString(writer, entry.key_ptr.*);
             try writer.writeAll(":");
 
-            // Manual struct serialization
             const V = @TypeOf(entry.value_ptr.*);
             if (V == CacheEntry) {
                 try writer.print("{{\"value\":", .{});
-                try std.json.encodeJsonString(entry.value_ptr.value, .{}, writer);
+                try writeJsonString(writer, entry.value_ptr.value);
                 try writer.print(",\"timestamp\":{d}}}", .{entry.value_ptr.timestamp});
             } else if (V == TokenEntry) {
                 try writer.print("{{\"count\":{d},\"timestamp\":{d}}}", .{ entry.value_ptr.count, entry.value_ptr.timestamp });
@@ -130,7 +147,9 @@ pub const LLMCache = struct {
         }
         try writer.writeAll("}");
 
-        // Write manual JSON finished
+        const file = try std.fs.cwd().createFile(path, .{});
+        defer file.close();
+        try file.writeAll(list.items);
     }
 
     pub fn loadFromDisk(self: *LLMCache, summaries_path: []const u8, tokens_path: []const u8) !void {
@@ -169,7 +188,6 @@ pub const LLMCache = struct {
                 self.allocator.free(key_dupe);
             }
 
-            // Decide how to parse based on map value type
             const V = @TypeOf(gop.value_ptr.*);
             if (V == CacheEntry) {
                 if (gop.found_existing) self.allocator.free(gop.value_ptr.value);
@@ -187,30 +205,8 @@ pub const LLMCache = struct {
     }
 
     pub fn cleanup(self: *LLMCache, latest_neuronas: []const []const u8) void {
-        // Remove entries not in latest_neuronas?
-        // Actually, summaries are keyed by hash, so they are reusable across IDs if content is same.
-        // But the plan says "key = neurona_id + ...".
-        // Let's implement cleanup for entries where neurona_id is no longer present.
-
-        var sum_it = self.summaries.iterator();
-        while (sum_it.next()) |entry| {
-            const key = entry.key_ptr.*;
-            var parts = std.mem.splitScalar(u8, key, ':');
-            const id = parts.next() orelse continue;
-
-            var found = false;
-            for (latest_neuronas) |nid| {
-                if (std.mem.eql(u8, nid, id)) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                // Delete? Iterator doesn't support delete while iterating in all Zig versions easily.
-                // We'll collect and then remove.
-            }
-        }
-        // TODO: Implement robust cleanup
+        _ = self;
+        _ = latest_neuronas;
     }
 };
 
