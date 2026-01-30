@@ -14,11 +14,34 @@ const validator = @import("../core/validator.zig");
 pub const SyncConfig = struct {
     directory: []const u8 = "neuronas",
     verbose: bool = false,
-    rebuild_index: bool = true,
+    rebuild_index: bool = false,
+    force_rebuild: bool = false,
 };
 
 /// Main command handler
 pub fn execute(allocator: Allocator, config: SyncConfig) !void {
+    const index_path = try storage.index.getGraphIndexPath(allocator);
+    defer allocator.free(index_path);
+
+    if (!config.force_rebuild) {
+        if (storage.index.loadGraph(allocator, index_path)) |graph| {
+            var g = graph;
+            defer g.deinit(allocator);
+
+            if (config.verbose) {
+                std.debug.print("Loaded graph index from cache: {s}\n", .{index_path});
+                std.debug.print("Graph nodes: {d}, edges: {d}\n", .{ g.nodeCount(), g.edgeCount() / 2 });
+            }
+
+            // If we only wanted to load the index, we are done
+            if (!config.rebuild_index) return;
+        } else |_| {
+            if (config.verbose) {
+                std.debug.print("No graph index cache found (or corrupt), rebuilding...\n", .{});
+            }
+        }
+    }
+
     if (config.verbose) {
         std.debug.print("Scanning directory: {s}\n", .{config.directory});
     }
@@ -35,9 +58,7 @@ pub fn execute(allocator: Allocator, config: SyncConfig) !void {
     }
 
     // Step 2: Build graph index
-    if (config.rebuild_index) {
-        try buildGraphIndex(allocator, neuronas, config.verbose);
-    }
+    try buildGraphIndex(allocator, neuronas, config.verbose);
 }
 
 /// Build graph index from Neuronas
@@ -80,7 +101,16 @@ fn buildGraphIndex(allocator: Allocator, neuronas: []const Neurona, verbose: boo
         std.debug.print("✓ No orphaned Neuronas found\n\n", .{});
     }
 
-    // TODO: Save graph index to disk (Step 4.1 will implement)
+    // Step 3: Save graph index to disk
+    const index_path = try storage.index.getGraphIndexPath(allocator);
+    defer allocator.free(index_path);
+
+    try storage.index.ensureActivationsDir(allocator);
+    try storage.index.saveGraph(allocator, &graph, index_path);
+
+    if (verbose) {
+        std.debug.print("✓ Graph index saved to {s}\n", .{index_path});
+    }
 }
 
 /// Display graph statistics

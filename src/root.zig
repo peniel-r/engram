@@ -26,6 +26,7 @@ pub const storage = struct {
     pub const GloVeIndex = @import("storage/glove.zig").GloVeIndex;
     pub const NeuralActivation = @import("core/activation.zig").NeuralActivation;
     pub const llm_cache = @import("storage/llm_cache.zig");
+    pub const index = @import("storage/index.zig");
 };
 
 // Re-export utils

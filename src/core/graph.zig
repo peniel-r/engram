@@ -318,6 +318,129 @@ pub const Graph = struct {
             return error.PathNotFound;
         }
     }
+
+    // ==================== Serialization ====================
+
+    /// Serialize graph to binary format
+    /// Format:
+    /// [magic: 4 bytes "ENGI"]
+    /// [version: 4 bytes u32]
+    /// [node_count: 8 bytes u64]
+    /// [nodes: node_count * (id_len: u16, id: data, out_degree: u16)]
+    /// [edges: for each node, out_degree * (target_id_len: u16, target_id: data, weight: u8)]
+    pub fn serialize(self: *const Graph, allocator: Allocator) ![]u8 {
+        var buffer = std.ArrayListUnmanaged(u8){};
+        errdefer buffer.deinit(allocator);
+
+        const writer = buffer.writer(allocator);
+
+        // 1. Header
+        try writer.writeAll("ENGI");
+        try writer.writeInt(u32, 1, .little); // Version
+        try writer.writeInt(u64, @as(u64, self.nodeCount()), .little);
+
+        // 2. Nodes Metadata
+        var it = self.adjacency_list.iterator();
+        while (it.next()) |entry| {
+            const id = entry.key_ptr.*;
+            const edges = entry.value_ptr.items;
+
+            try writer.writeInt(u16, @as(u16, @intCast(id.len)), .little);
+            try writer.writeAll(id);
+            try writer.writeInt(u16, @as(u16, @intCast(edges.len)), .little);
+        }
+
+        // 3. Edges Data
+        it = self.adjacency_list.iterator();
+        while (it.next()) |entry| {
+            const edges = entry.value_ptr.items;
+            for (edges) |edge| {
+                try writer.writeInt(u16, @as(u16, @intCast(edge.target_id.len)), .little);
+                try writer.writeAll(edge.target_id);
+                try writer.writeInt(u8, edge.weight, .little);
+            }
+        }
+
+        return buffer.toOwnedSlice(allocator);
+    }
+
+    /// Deserialize graph from binary format
+    pub fn deserialize(data: []const u8, allocator: Allocator) !Graph {
+        var fbs = std.io.fixedBufferStream(data);
+        const reader = fbs.reader();
+
+        // 1. Header
+        var magic: [4]u8 = undefined;
+        try reader.readNoEof(&magic);
+        if (!std.mem.eql(u8, &magic, "ENGI")) return error.InvalidMagic;
+
+        const version = try reader.readInt(u32, .little);
+        if (version != 1) return error.UnsupportedVersion;
+
+        const node_count = try reader.readInt(u64, .little);
+
+        var graph = Graph.init();
+        errdefer graph.deinit(allocator);
+
+        // Pre-allocate nodes to avoid reallocations
+        try graph.adjacency_list.ensureTotalCapacity(allocator, @intCast(node_count));
+
+        // 2. Temporary storage for node metadata to build edges later
+        const NodeMeta = struct {
+            id: []const u8,
+            out_degree: u16,
+        };
+        var nodes_meta = try allocator.alloc(NodeMeta, @intCast(node_count));
+        defer {
+            // We only free the array, but NOT the IDs inside if they were dupped?
+            // Wait, we need to be careful with memory ownership here.
+            allocator.free(nodes_meta);
+        }
+
+        // Read all node IDs and degrees
+        for (0..node_count) |i| {
+            const id_len = try reader.readInt(u16, .little);
+            const id = try allocator.alloc(u8, id_len);
+            errdefer allocator.free(id);
+            try reader.readNoEof(id);
+            const out_degree = try reader.readInt(u16, .little);
+
+            nodes_meta[i] = .{ .id = id, .out_degree = out_degree };
+            // Initialize entry in adjacency list
+            try graph.adjacency_list.put(allocator, id, .{});
+        }
+
+        // 3. Read edges and populate graph (forward and reverse)
+        for (nodes_meta) |meta| {
+            for (0..meta.out_degree) |_| {
+                const target_id_len = try reader.readInt(u16, .little);
+                const target_id = try allocator.alloc(u8, target_id_len);
+                errdefer allocator.free(target_id);
+                try reader.readNoEof(target_id);
+                const weight = try reader.readInt(u8, .little);
+
+                // Add to forward adjacency list
+                const adj_entry = graph.adjacency_list.getPtr(meta.id).?;
+                try adj_entry.append(allocator, .{
+                    .target_id = target_id,
+                    .weight = weight,
+                });
+
+                // Add to reverse index
+                const rev_entry = try graph.reverse_index.getOrPut(allocator, target_id);
+                if (!rev_entry.found_existing) {
+                    rev_entry.value_ptr.* = std.ArrayListUnmanaged(Edge){};
+                    rev_entry.key_ptr.* = try allocator.dupe(u8, target_id);
+                }
+                try rev_entry.value_ptr.append(allocator, .{
+                    .target_id = try allocator.dupe(u8, meta.id),
+                    .weight = weight,
+                });
+            }
+        }
+
+        return graph;
+    }
 };
 
 test "Graph init creates empty graph" {
@@ -386,4 +509,34 @@ test "Graph degree counts edges" {
 
     try std.testing.expectEqual(@as(usize, 2), graph.degree("node1"));
     try std.testing.expectEqual(@as(usize, 2), graph.inDegree("node2"));
+}
+
+test "Graph serialize/deserialize" {
+    const allocator = std.testing.allocator;
+
+    var graph = Graph.init();
+    defer graph.deinit(allocator);
+
+    try graph.addEdge(allocator, "node1", "node2", 90);
+    try graph.addEdge(allocator, "node2", "node3", 50);
+    try graph.addEdge(allocator, "node3", "node1", 70);
+
+    const data = try graph.serialize(allocator);
+    defer allocator.free(data);
+
+    var loaded = try Graph.deserialize(data, allocator);
+    defer loaded.deinit(allocator);
+
+    try std.testing.expectEqual(graph.nodeCount(), loaded.nodeCount());
+    try std.testing.expectEqual(graph.edgeCount(), loaded.edgeCount());
+
+    try std.testing.expect(loaded.hasEdge("node1", "node2"));
+    try std.testing.expect(loaded.hasEdge("node2", "node3"));
+    try std.testing.expect(loaded.hasEdge("node3", "node1"));
+
+    const adj = loaded.getAdjacent("node1");
+    try std.testing.expectEqual(@as(u8, 90), adj[0].weight);
+
+    const incoming = loaded.getIncoming("node1");
+    try std.testing.expectEqual(@as(u8, 70), incoming[0].weight);
 }

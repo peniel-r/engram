@@ -425,6 +425,7 @@ fn handleSync(allocator: Allocator, args: []const []const u8) !void {
         .directory = "neuronas",
         .verbose = false,
         .rebuild_index = true,
+        .force_rebuild = false,
     };
 
     // Parse options
@@ -436,6 +437,8 @@ fn handleSync(allocator: Allocator, args: []const []const u8) !void {
             config.verbose = true;
         } else if (std.mem.eql(u8, arg, "--no-rebuild")) {
             config.rebuild_index = false;
+        } else if (std.mem.eql(u8, arg, "--force-rebuild") or std.mem.eql(u8, arg, "-f")) {
+            config.force_rebuild = true;
         } else if (std.mem.eql(u8, arg, "--directory") or std.mem.eql(u8, arg, "-d")) {
             if (i + 1 >= args.len) {
                 std.debug.print("Error: --directory requires a value\n", .{});
