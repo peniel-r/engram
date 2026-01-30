@@ -9,6 +9,7 @@ const readNeurona = @import("../storage/filesystem.zig").readNeurona;
 const scanNeuronas = @import("../storage/filesystem.zig").scanNeuronas;
 const findNeuronaPath = @import("../storage/filesystem.zig").findNeuronaPath;
 const Graph = @import("../core/graph.zig").Graph;
+const uri_parser = @import("../utils/uri_parser.zig");
 
 /// Trace configuration
 pub const TraceConfig = struct {
@@ -92,8 +93,12 @@ pub fn execute(allocator: Allocator, config: TraceConfig) !void {
 
 /// Trace dependencies from target node
 pub fn trace(allocator: Allocator, graph: *Graph, directory: []const u8, config: TraceConfig) ![]TraceNode {
+    // Resolve URI or use direct ID
+    const resolved_id = try uri_parser.resolveOrFallback(allocator, config.id, directory);
+    defer allocator.free(resolved_id);
+
     // Load starting Neurona to verify it exists
-    const filepath = try findNeuronaPath(allocator, directory, config.id);
+    const filepath = try findNeuronaPath(allocator, directory, resolved_id);
     defer allocator.free(filepath);
 
     var start_neurona = try readNeurona(allocator, filepath);
@@ -112,9 +117,9 @@ pub fn trace(allocator: Allocator, graph: *Graph, directory: []const u8, config:
     }
 
     if (config.direction == .down) {
-        try buildDownstreamTree(allocator, graph, &visited, &result, config.id, config.max_depth);
+        try buildDownstreamTree(allocator, graph, &visited, &result, resolved_id, config.max_depth);
     } else {
-        try buildUpstreamTree(allocator, graph, &visited, &result, config.id, config.max_depth);
+        try buildUpstreamTree(allocator, graph, &visited, &result, resolved_id, config.max_depth);
     }
 
     // Convert pointer list to value list

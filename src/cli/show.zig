@@ -7,6 +7,7 @@ const Allocator = std.mem.Allocator;
 const NeuronaType = @import("../core/neurona.zig").NeuronaType;
 const Neurona = @import("../core/neurona.zig").Neurona;
 const readNeurona = @import("../storage/filesystem.zig").readNeurona;
+const uri_parser = @import("../utils/uri_parser.zig");
 
 /// Display configuration
 pub const ShowConfig = struct {
@@ -18,8 +19,12 @@ pub const ShowConfig = struct {
 
 /// Main command handler
 pub fn execute(allocator: Allocator, config: ShowConfig) !void {
+    // Resolve URI or use direct ID
+    const resolved_id = try uri_parser.resolveOrFallback(allocator, config.id, "neuronas");
+    defer allocator.free(resolved_id);
+
     // Step1: Find and read Neurona file
-    const filepath = try findNeuronaPath(allocator, "neuronas", config.id);
+    const filepath = try findNeuronaPath(allocator, "neuronas", resolved_id);
     defer allocator.free(filepath);
 
     var neurona = try readNeurona(allocator, filepath);

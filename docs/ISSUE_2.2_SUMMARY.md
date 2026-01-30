@@ -52,7 +52,7 @@ Successfully implemented the EQL (Engram Query Language) parser as specified in 
 
 All tests pass successfully:
 
-```
+```text
 Build Summary: 9/9 steps succeeded; 145/145 tests passed
 ```
 

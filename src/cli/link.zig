@@ -8,6 +8,7 @@ const neurona_core = @import("../core/neurona.zig");
 const ConnectionType = neurona_core.ConnectionType;
 const Connection = neurona_core.Connection;
 const timestamp = @import("../utils/timestamp.zig");
+const uri_parser = @import("../utils/uri_parser.zig");
 
 /// Configuration for Link command
 pub const LinkConfig = struct {
@@ -28,19 +29,27 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
         return error.InvalidConnectionType;
     };
 
+    // Resolve source URI or use direct ID
+    const source_id = try uri_parser.resolveOrFallback(allocator, config.source_id, config.neuronas_dir);
+    defer allocator.free(source_id);
+
+    // Resolve target URI or use direct ID
+    const target_id = try uri_parser.resolveOrFallback(allocator, config.target_id, config.neuronas_dir);
+    defer allocator.free(target_id);
+
     // 2. Find source Neurona
-    const source_path = fs.findNeuronaPath(allocator, config.neuronas_dir, config.source_id) catch |err| {
+    const source_path = fs.findNeuronaPath(allocator, config.neuronas_dir, source_id) catch |err| {
         if (err == error.NeuronaNotFound) {
-            std.debug.print("Error: Source Neurona '{s}' not found in {s}.\n", .{ config.source_id, config.neuronas_dir });
+            std.debug.print("Error: Source Neurona '{s}' not found in {s}.\n", .{ source_id, config.neuronas_dir });
         }
         return err;
     };
     defer allocator.free(source_path);
 
     // 3. Find target Neurona
-    const target_path = fs.findNeuronaPath(allocator, config.neuronas_dir, config.target_id) catch |err| {
+    const target_path = fs.findNeuronaPath(allocator, config.neuronas_dir, target_id) catch |err| {
         if (err == error.NeuronaNotFound) {
-            std.debug.print("Error: Target Neurona '{s}' not found in {s}.\n", .{ config.target_id, config.neuronas_dir });
+            std.debug.print("Error: Target Neurona '{s}' not found in {s}.\n", .{ target_id, config.neuronas_dir });
         }
         return err;
     };
@@ -52,7 +61,7 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
         defer source.deinit(allocator);
 
         const conn = Connection{
-            .target_id = try allocator.dupe(u8, config.target_id),
+            .target_id = try allocator.dupe(u8, target_id),
             .connection_type = conn_type,
             .weight = config.weight,
         };
@@ -65,7 +74,7 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
         try fs.writeNeurona(allocator, source, source_path);
 
         if (config.verbose) {
-            std.debug.print("Linked {s} --[{s}]--> {s}\n", .{ config.source_id, config.connection_type, config.target_id });
+            std.debug.print("Linked {s} --[{s}]--> {s}\n", .{ source_id, config.connection_type, target_id });
         }
     }
 
@@ -82,7 +91,7 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
         defer target.deinit(allocator);
 
         const conn = Connection{
-            .target_id = try allocator.dupe(u8, config.source_id),
+            .target_id = try allocator.dupe(u8, source_id),
             .connection_type = reverse_type,
             .weight = config.weight,
         };
@@ -95,7 +104,7 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
         try fs.writeNeurona(allocator, target, target_path);
 
         if (config.verbose) {
-            std.debug.print("Linked {s} --[{s}]--> {s}\n", .{ config.target_id, @tagName(reverse_type), config.source_id });
+            std.debug.print("Linked {s} --[{s}]--> {s}\n", .{ target_id, @tagName(reverse_type), source_id });
         }
     }
 }
@@ -231,4 +240,51 @@ test "execute bidirectional link" {
     const t_conns = target.getConnections(.child);
     try std.testing.expectEqual(@as(usize, 1), t_conns.len);
     try std.testing.expectEqualStrings("source", t_conns[0].target_id);
+}
+
+test "execute resolves URIs for source and target" {
+    const allocator = std.testing.allocator;
+
+    // Setup test directory
+    const test_dir = "test_uri_link";
+    try std.fs.cwd().makePath(test_dir);
+    defer std.fs.cwd().deleteTree(test_dir) catch {};
+
+    // Create source neurona
+    const source_path = try std.fs.path.join(allocator, &.{ test_dir, "source.md" });
+    defer allocator.free(source_path);
+    try std.fs.cwd().writeFile(.{ .sub_path = source_path, .data = 
+        \\---
+        \\id: source
+        \\title: Source
+        \\tags: []
+        \\---
+    });
+
+    // Create target neurona
+    const target_path = try std.fs.path.join(allocator, &.{ test_dir, "target.md" });
+    defer allocator.free(target_path);
+    try std.fs.cwd().writeFile(.{ .sub_path = target_path, .data = 
+        \\---
+        \\id: target
+        \\title: Target
+        \\tags: []
+        \\---
+    });
+
+    // Test with direct IDs (not URIs, should fallback)
+    const config = LinkConfig{
+        .source_id = "source",
+        .target_id = "target",
+        .connection_type = "parent",
+        .neuronas_dir = test_dir,
+    };
+
+    try execute(allocator, config);
+
+    // Verify link created
+    var source = try fs.readNeurona(allocator, source_path);
+    defer source.deinit(allocator);
+    const conns = source.getConnections(.parent);
+    try std.testing.expectEqual(@as(usize, 1), conns.len);
 }

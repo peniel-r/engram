@@ -5,16 +5,8 @@ type: issue
 tags: [bug, p3]
 updated: 2025-01-24
 language: en
+connections: ["blocks:req.perf.001:80", "relates_to:issue.001:60"]
 ---
 Database connection fails during user login transactions.
 Connection pool exhaustion causes intermittent errors.
 
-connections:
-  blocks:
-    - connection_type: blocks
-      target_id: req.perf.001
-      weight: 80
-  relates_to:
-    - connection_type: relates_to
-      target_id: issue.001
-      weight: 60
