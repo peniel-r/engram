@@ -60,8 +60,48 @@ pub fn execute(allocator: Allocator, config: SyncConfig) !void {
     // Step 2: Build graph index
     try buildGraphIndex(allocator, neuronas, config.verbose);
 
-    // Step 3: Build/Load Vector Index (Issue 1.2)
+    // Step 3: Manage LLM Cache (Issue 1.3)
+    try syncLLMCache(allocator, neuronas, config.verbose);
+
+    // Step 4: Build/Load Vector Index (Issue 1.2)
     try syncVectors(allocator, neuronas, config.verbose, config.force_rebuild, config.directory);
+}
+
+/// Sync LLM Cache (Issue 1.3)
+fn syncLLMCache(allocator: Allocator, neuronas: []const Neurona, verbose: bool) !void {
+    _ = neuronas;
+    const cache_dir = ".activations/cache/";
+    const summaries_path = cache_dir ++ "summaries.cache";
+    const tokens_path = cache_dir ++ "tokens.cache";
+
+    // Ensure directory exists
+    std.fs.cwd().makePath(cache_dir) catch |err| {
+        if (err != error.PathAlreadyExists) return err;
+    };
+
+    var cache = storage.llm_cache.LLMCache.init(allocator);
+    defer cache.deinit();
+
+    // Load existing
+    cache.loadFromDisk(summaries_path, tokens_path) catch |err| {
+        if (verbose) std.debug.print("Note: Could not load LLM cache: {}\n", .{err});
+    };
+
+    if (verbose) {
+        std.debug.print("LLM Cache loaded: {d} summaries, {d} token counts\n", .{
+            cache.summaries.count(),
+            cache.tokens.count(),
+        });
+    }
+
+    // TODO: Perform enrichment/cleanup if needed
+    // For now, we just ensure it's initialized and persisted
+
+    // Save back to disk
+    try cache.saveToDisk(summaries_path, tokens_path);
+    if (verbose) {
+        std.debug.print("✓ LLM Cache saved to {s}\n", .{cache_dir});
+    }
 }
 
 /// Sync vectors and persist to .activations/vectors.bin

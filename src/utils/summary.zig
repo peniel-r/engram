@@ -3,24 +3,46 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const token_counter = @import("./token_counter.zig");
 
-pub fn generateSummary(allocator: Allocator, text: []const u8, strategy: []const u8, max_tokens: u32) ![]u8 {
-    if (std.mem.eql(u8, strategy, "full")) {
-        return try allocator.dupe(u8, text);
+const llm_cache = @import("../storage/llm_cache.zig");
+
+pub fn generateSummary(
+    allocator: Allocator,
+    text: []const u8,
+    strategy: []const u8,
+    max_tokens: u32,
+    cache: ?*llm_cache.LLMCache,
+    neurona_id: []const u8,
+    content_hash: []const u8,
+) ![]u8 {
+    var cache_key: ?[]u8 = null;
+    defer if (cache_key) |k| allocator.free(k);
+
+    if (cache) |c| {
+        cache_key = try c.generateKey(allocator, neurona_id, strategy, max_tokens, content_hash);
+        if (c.getSummary(cache_key.?, 0)) |cached| {
+            return try allocator.dupe(u8, cached);
+        }
     }
 
-    if (std.mem.eql(u8, strategy, "summary")) {
-        return try generateSimpleSummary(allocator, text, max_tokens);
+    const result = if (std.mem.eql(u8, strategy, "full"))
+        try allocator.dupe(u8, text)
+    else if (std.mem.eql(u8, strategy, "summary"))
+        try generateSimpleSummary(allocator, text, max_tokens, cache, neurona_id)
+    else if (std.mem.eql(u8, strategy, "hierarchical"))
+        try generateHierarchicalSummary(allocator, text, max_tokens, cache, neurona_id)
+    else
+        try allocator.dupe(u8, text);
+
+    if (cache) |c| {
+        if (cache_key) |k| {
+            try c.setSummary(k, result);
+        }
     }
 
-    if (std.mem.eql(u8, strategy, "hierarchical")) {
-        return try generateHierarchicalSummary(allocator, text, max_tokens);
-    }
-
-    // Fallback to full if unknown strategy
-    return try allocator.dupe(u8, text);
+    return result;
 }
 
-fn generateSimpleSummary(allocator: Allocator, text: []const u8, max_tokens: u32) ![]u8 {
+fn generateSimpleSummary(allocator: Allocator, text: []const u8, max_tokens: u32, cache: ?*llm_cache.LLMCache, neurona_id: ?[]const u8) ![]u8 {
     // Naive sentence split by .!? and keep sentences until token limit
     var out = std.ArrayListUnmanaged(u8){};
     defer out.deinit(allocator);
@@ -39,7 +61,7 @@ fn generateSimpleSummary(allocator: Allocator, text: []const u8, max_tokens: u32
                 // Try append and check token count
                 const prev_len = out.items.len;
                 try writer.print("{s} ", .{s});
-                const tokens = try token_counter.countTokens(allocator, out.items);
+                const tokens = try token_counter.countTokens(allocator, out.items, cache, neurona_id);
                 if (tokens > max_tokens and max_tokens > 0) {
                     // Remove last appended sentence by truncating to previous length
                     out.shrinkAndFree(allocator, prev_len);
@@ -66,7 +88,7 @@ fn generateSimpleSummary(allocator: Allocator, text: []const u8, max_tokens: u32
     return result;
 }
 
-fn generateHierarchicalSummary(allocator: Allocator, text: []const u8, max_tokens: u32) ![]u8 {
+fn generateHierarchicalSummary(allocator: Allocator, text: []const u8, max_tokens: u32, cache: ?*llm_cache.LLMCache, neurona_id: ?[]const u8) ![]u8 {
     // Extract headings (lines starting with #) and create indented bullets
     var out = std.ArrayListUnmanaged(u8){};
     defer out.deinit(allocator);
@@ -100,14 +122,14 @@ fn generateHierarchicalSummary(allocator: Allocator, text: []const u8, max_token
 
             const current = try out.toOwnedSlice(allocator);
             defer allocator.free(current);
-            const tokens = try token_counter.countTokens(allocator, current);
+            const tokens = try token_counter.countTokens(allocator, current, cache, neurona_id);
             if (tokens >= max_tokens and max_tokens > 0) break;
         }
     }
 
     // Fallback to simple summary if no headings
     if (out.items.len == 0) {
-        return try generateSimpleSummary(allocator, text, max_tokens);
+        return try generateSimpleSummary(allocator, text, max_tokens, cache, neurona_id);
     }
 
     return try out.toOwnedSlice(allocator);
@@ -124,7 +146,7 @@ fn trimSpaces(s: []const u8) []const u8 {
 test "generateSummary full returns original" {
     const allocator = std.testing.allocator;
     const txt = "This is a test. Second sentence.";
-    const out = try generateSummary(allocator, txt, "full", 0);
+    const out = try generateSummary(allocator, txt, "full", 0, null, "test", "hash");
     defer allocator.free(out);
     try std.testing.expectEqualStrings(txt, out);
 }
@@ -132,9 +154,9 @@ test "generateSummary full returns original" {
 test "generateSummary summary returns shorter or equal" {
     const allocator = std.testing.allocator;
     const txt = "Sentence one. Sentence two. Sentence three.";
-    const out = try generateSummary(allocator, txt, "summary", 2);
+    const out = try generateSummary(allocator, txt, "summary", 2, null, "test", "hash");
     defer allocator.free(out);
-    const tokens = try @import("./token_counter.zig").countTokens(allocator, out);
+    const tokens = try @import("./token_counter.zig").countTokens(allocator, out, null, null);
     std.debug.print("\nSummary: '{s}', Tokens: {d}\n", .{ out, tokens });
     try std.testing.expect(tokens <= 2);
 }
@@ -142,7 +164,7 @@ test "generateSummary summary returns shorter or equal" {
 test "generateSummary hierarchical extracts headings" {
     const allocator = std.testing.allocator;
     const txt = "# Title\n## Sub\nContent here.\n# Another";
-    const out = try generateSummary(allocator, txt, "hierarchical", 100);
+    const out = try generateSummary(allocator, txt, "hierarchical", 100, null, "test", "hash");
     defer allocator.free(out);
     try std.testing.expect(std.mem.indexOf(u8, out, "Title") != null);
 }
