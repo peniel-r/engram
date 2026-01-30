@@ -342,25 +342,25 @@ fn executeVectorQuery(allocator: Allocator, config: QueryConfig) !void {
         return error.GloVeCacheNotFound;
     }
 
-    const dimension = glove_index.dimension;
-    var vector_index = storage.VectorIndex.init(allocator, dimension);
-    defer vector_index.deinit(allocator);
+    const vector_index_path = try storage.VectorIndex.getVectorIndexPath(allocator);
+    defer allocator.free(vector_index_path);
 
-    var doc_vec_map = std.StringHashMap([]const f32).init(allocator);
-    defer {
-        var it = doc_vec_map.iterator();
-        while (it.next()) |entry| {
-            allocator.free(entry.value_ptr.*);
+    var vector_index: storage.VectorIndex = undefined;
+    var loaded_from_cache = false;
+
+    if (storage.VectorIndex.load(allocator, vector_index_path)) |loaded| {
+        vector_index = loaded.index;
+        loaded_from_cache = true;
+    } else |_| {
+        // Fallback: Build index if cache is missing
+        vector_index = storage.VectorIndex.init(allocator, glove_index.dimension);
+        for (neuronas) |*neurona| {
+            const embedding = try createGloVeEmbedding(allocator, neurona, &glove_index);
+            defer allocator.free(embedding);
+            try vector_index.addVector(allocator, neurona.id, embedding);
         }
-        doc_vec_map.deinit();
     }
-
-    for (neuronas) |*neurona| {
-        // Create GloVe embedding
-        const embedding = try createGloVeEmbedding(allocator, neurona, &glove_index);
-        try doc_vec_map.put(neurona.id, embedding);
-        try vector_index.addVector(allocator, neurona.id, embedding);
-    }
+    defer vector_index.deinit(allocator);
 
     // Step 3: Create query vector
     const query_embedding = try createGloVeQueryEmbedding(allocator, config.query_text, &glove_index);
@@ -426,15 +426,25 @@ fn executeHybridQuery(allocator: Allocator, config: QueryConfig) !void {
         return error.GloVeCacheNotFound;
     }
 
-    const dimension = glove_index.dimension;
-    var vector_index = storage.VectorIndex.init(allocator, dimension);
-    defer vector_index.deinit(allocator);
+    const vector_index_path = try storage.VectorIndex.getVectorIndexPath(allocator);
+    defer allocator.free(vector_index_path);
 
-    for (neuronas) |*neurona| {
-        const embedding = try createGloVeEmbedding(allocator, neurona, &glove_index);
-        defer allocator.free(embedding);
-        try vector_index.addVector(allocator, neurona.id, embedding);
+    var vector_index: storage.VectorIndex = undefined;
+    var loaded_from_cache = false;
+
+    if (storage.VectorIndex.load(allocator, vector_index_path)) |loaded| {
+        vector_index = loaded.index;
+        loaded_from_cache = true;
+    } else |_| {
+        // Fallback: Build index if cache is missing
+        vector_index = storage.VectorIndex.init(allocator, glove_index.dimension);
+        for (neuronas) |*neurona| {
+            const embedding = try createGloVeEmbedding(allocator, neurona, &glove_index);
+            defer allocator.free(embedding);
+            try vector_index.addVector(allocator, neurona.id, embedding);
+        }
     }
+    defer vector_index.deinit(allocator);
 
     // Step 4: Run both searches
     const limit = config.limit orelse 50;
@@ -631,9 +641,9 @@ fn createSimpleEmbedding(allocator: Allocator, neurona: *const Neurona, dimensio
 }
 
 /// Create GloVe embedding for a neurona document
-fn createGloVeEmbedding(allocator: Allocator, neurona: *const Neurona, glove_index: *GloVeIndex) ![]f32 {
+pub fn createGloVeEmbedding(allocator: Allocator, neurona: *const Neurona, glove_index: *const GloVeIndex) ![]f32 {
     // Combine title and tags for embedding
-    var content = std.ArrayList(u8){};
+    var content = std.ArrayListUnmanaged(u8){};
     try content.ensureTotalCapacity(allocator, neurona.title.len + 200);
     defer content.deinit(allocator);
 
@@ -650,7 +660,7 @@ fn createGloVeEmbedding(allocator: Allocator, neurona: *const Neurona, glove_ind
         lower[i] = std.ascii.toLower(c);
     }
 
-    var words = std.ArrayList([]const u8){};
+    var words = std.ArrayListUnmanaged([]const u8){};
     defer words.deinit(allocator);
 
     var start: usize = 0;

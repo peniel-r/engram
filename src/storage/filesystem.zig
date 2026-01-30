@@ -720,3 +720,22 @@ test "scanNeuronas skips invalid files" {
     try std.testing.expectEqual(@as(usize, 1), neuronas.len);
     try std.testing.expectEqualStrings("test.001", neuronas[0].id);
 }
+
+/// Get the latest modification time (nanoseconds) of any file in a directory
+pub fn getLatestModificationTime(directory: []const u8) !i64 {
+    var dir = std.fs.cwd().openDir(directory, .{ .iterate = true }) catch |err| {
+        if (err == error.FileNotFound) return 0;
+        return err;
+    };
+    defer dir.close();
+
+    var latest: i64 = 0;
+    var iter = dir.iterate();
+    while (try iter.next()) |entry| {
+        if (entry.kind == .file) {
+            const stat = try dir.statFile(entry.name);
+            if (stat.mtime > latest) latest = @intCast(stat.mtime);
+        }
+    }
+    return latest;
+}

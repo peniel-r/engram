@@ -59,6 +59,75 @@ pub fn execute(allocator: Allocator, config: SyncConfig) !void {
 
     // Step 2: Build graph index
     try buildGraphIndex(allocator, neuronas, config.verbose);
+
+    // Step 3: Build/Load Vector Index (Issue 1.2)
+    try syncVectors(allocator, neuronas, config.verbose, config.force_rebuild, config.directory);
+}
+
+/// Sync vectors and persist to .activations/vectors.bin
+fn syncVectors(allocator: Allocator, neuronas: []const Neurona, verbose: bool, force: bool, directory: []const u8) !void {
+    const vector_path = try storage.VectorIndex.getVectorIndexPath(allocator);
+    defer allocator.free(vector_path);
+
+    const latest_mtime = try storage.getLatestModificationTime(directory);
+
+    if (!force) {
+        if (storage.VectorIndex.load(allocator, vector_path)) |loaded| {
+            if (loaded.timestamp >= latest_mtime) {
+                if (verbose) {
+                    std.debug.print("✓ Vector index is up to date (Timestamp: {d})\n", .{loaded.timestamp});
+                }
+                var idx = loaded.index;
+                idx.deinit(allocator);
+                return;
+            }
+            var idx = loaded.index;
+            idx.deinit(allocator);
+            if (verbose) {
+                std.debug.print("Vector index is stale, rebuilding...\n", .{});
+            }
+        } else |_| {
+            if (verbose) {
+                std.debug.print("No vector index found, building...\n", .{});
+            }
+        }
+    }
+
+    const GloVeIndex = storage.GloVeIndex;
+
+    // Build vectors
+    var glove_index = GloVeIndex.init(allocator);
+    defer glove_index.deinit(allocator);
+
+    const glove_cache_path = "glove_cache.bin";
+    if (GloVeIndex.cacheExists(glove_cache_path)) {
+        try glove_index.loadCacheZeroCopy(allocator, glove_cache_path);
+    } else {
+        if (verbose) {
+            std.debug.print("⚠️  Warning: GloVe cache not found at {s}. Skipping vector building.\n", .{glove_cache_path});
+        }
+        return;
+    }
+
+    var vector_index = storage.VectorIndex.init(allocator, glove_index.dimension);
+    defer vector_index.deinit(allocator);
+
+    if (verbose) {
+        std.debug.print("Computing embeddings for {d} Neuronas...\n", .{neuronas.len});
+    }
+
+    const query = @import("query.zig");
+    for (neuronas) |*neurona| {
+        const embedding = try query.createGloVeEmbedding(allocator, neurona, &glove_index);
+        defer allocator.free(embedding);
+        try vector_index.addVector(allocator, neurona.id, embedding);
+    }
+
+    // Save
+    try vector_index.save(allocator, vector_path, latest_mtime);
+    if (verbose) {
+        std.debug.print("✓ Vector index saved to {s}\n", .{vector_path});
+    }
 }
 
 /// Build graph index from Neuronas
