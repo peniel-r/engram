@@ -14,12 +14,12 @@ This document outlines a detailed plan to address all critical, medium, and low 
 
 ### Issue 1.1: Persist Graph Index to `.activations/graph.idx`
 
-**Status**: ❌ Not Implemented  
+**Status**: ✅ Implemented  
 **Impact**: O(1) traversal unavailable between runs; graph rebuilt every `engram sync`  
 **Effort**: 4-6 hours  
 **Priority**: CRITICAL
 
-#### Implementation Steps:
+#### Implementation Steps
 
 1. **Create `src/storage/index.zig`** - New persistence module
    - `GraphIndex` struct to hold serialized graph data
@@ -27,6 +27,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
    - `loadGraph(allocator, path)` - Deserialize and reconstruct graph
 
 2. **Binary Format Design**:
+
    ```
    [header: 8 bytes magic "ENGI" + 4 bytes version + 8 bytes node_count]
    [nodes: node_count * (id_len: u16 + out_degree: u16 + edge_data)]
@@ -50,6 +51,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
    - Verify same results
 
 **Success Criteria**:
+
 - ✅ `.activations/graph.idx` created after `engram sync`
 - ✅ `engram sync` loads from cache on second run
 - ✅ Graph traversal < 1ms (depth 1)
@@ -63,13 +65,14 @@ This document outlines a detailed plan to address all critical, medium, and low 
 **Effort**: 6-8 hours  
 **Priority**: CRITICAL
 
-#### Implementation Steps:
+#### Implementation Steps
 
 1. **Extend `src/storage/vectors.zig`**:
    - `saveVectors(allocator, index, path)` - Binary serialization
    - `loadVectors(allocator, path)` - Binary deserialization
 
 2. **Binary Format Design**:
+
    ```
    [header: 8 bytes magic "VECT" + 4 bytes version + 8 bytes dim + 8 bytes count]
    [vectors: count * dim * f32]
@@ -92,6 +95,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
    - Verify CRC checksum on load
 
 **Success Criteria**:
+
 - ✅ `.activations/vectors.bin` created with embeddings
 - ✅ Vector search loads from cache
 - ✅ Cache invalidated when Neuronas modified
@@ -106,7 +110,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
 **Effort**: 4-5 hours  
 **Priority**: CRITICAL
 
-#### Implementation Steps:
+#### Implementation Steps
 
 1. **Complete `src/storage/llm_cache.zig`**:
    - `LLMCache` struct with HashMap for summaries
@@ -121,6 +125,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
    - Includes timestamp for TTL expiration
 
 3. **Cache Storage Format**:
+
    ```
    .activations/cache/
    ├── summaries.cache  (JSON: {key: summary})
@@ -142,6 +147,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
    - Remove entries for deleted Neuronas
 
 **Success Criteria**:
+
 - ✅ `.activations/cache/` directory created
 - ✅ Summaries cached for 24 hours
 - ✅ Token counts cached
@@ -157,9 +163,10 @@ This document outlines a detailed plan to address all critical, medium, and low 
 **Effort**: 6-8 hours  
 **Priority**: CRITICAL
 
-#### Implementation Steps:
+#### Implementation Steps
 
 1. **Create `src/benchmark.zig`** - New benchmark module:
+
    ```zig
    pub const Timer = struct {
        start_time: i64,
@@ -191,6 +198,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
    - Print performance summary with ✓/✗ indicators
 
 3. **Extend `tests/benchmarks.zig`**:
+
    ```zig
    pub fn benchmarkGraphTraversal() !void {
        // Test O(1) adjacency lookup
@@ -218,6 +226,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
    - Store baseline metrics in `.activations/benchmarks.json`
 
 **Success Criteria**:
+
 - ✅ All benchmarks implemented
 - ✅ Performance thresholds validated
 - ✅ Timing reports on `engram sync`
@@ -236,7 +245,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
 **Effort**: 3-4 hours  
 **Priority**: MEDIUM
 
-#### Implementation Steps:
+#### Implementation Steps
 
 1. **Update `src/utils/yaml.zig`**:
    - Ensure connections are parsed from frontmatter, not body
@@ -246,6 +255,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
 2. **Update `src/storage/filesystem.zig`**:
    - Ensure `writeNeurona()` writes connections in frontmatter
    - Format:
+
      ```yaml
      ---
      id: req.auth.001
@@ -268,6 +278,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
      ```
 
 3. **Migration Script** (`src/tools/migrate_frontmatter.zig`):
+
    ```zig
    pub fn migrateNeuronas(allocator: Allocator, dir: []const u8) !void {
        // Scan existing Neuronas
@@ -283,6 +294,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
    - Ensure migrated files are accepted
 
 **Success Criteria**:
+
 - ✅ All new Neuronas have connections in frontmatter
 - ✅ Existing Neuronas migrated
 - ✅ YAML parser validates frontmatter-only connections
@@ -297,9 +309,10 @@ This document outlines a detailed plan to address all critical, medium, and low 
 **Effort**: 8-10 hours  
 **Priority**: MEDIUM
 
-#### Implementation Steps:
+#### Implementation Steps
 
 1. **Create `src/utils/eql_parser.zig`**:
+
    ```zig
    pub const EQLParser = struct {
        query: []const u8,
@@ -327,6 +340,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
    ```
 
 2. **Grammar to Implement**:
+
    ```
    EQL := Condition (LogicOp Condition)*
    Condition := FieldCondition | LinkCondition
@@ -335,6 +349,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
    ```
 
 3. **Supported Examples**:
+
    ```bash
    # Field conditions
    engram query "type:issue"
@@ -365,6 +380,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
    - Link: `link(type,target)`
 
 **Success Criteria**:
+
 - ✅ EQL parser implemented
 - ✅ All operators supported
 - ✅ Complex queries (AND, OR) working
@@ -381,9 +397,10 @@ This document outlines a detailed plan to address all critical, medium, and low 
 **Effort**: 10 minutes  
 **Priority**: MEDIUM
 
-#### Implementation Steps:
+#### Implementation Steps
 
 1. **Update `.gitignore`** (root directory):
+
    ```gitignore
    # System Memory (Neurona Spec)
    .activations/
@@ -406,6 +423,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
    - Create test Cortex and verify `.gitignore` works
 
 **Success Criteria**:
+
 - ✅ `.gitignore` updated in root
 - ✅ `.gitignore` includes `.activations/`
 - ✅ Init command generates correct `.gitignore`
@@ -424,9 +442,10 @@ This document outlines a detailed plan to address all critical, medium, and low 
 **Effort**: 8-10 hours  
 **Priority**: LOW
 
-#### Implementation Steps:
+#### Implementation Steps
 
 1. **Create `src/cli/run.zig`** - New command module:
+
    ```zig
    pub const RunConfig = struct {
        neurona_id: []const u8,
@@ -468,6 +487,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
    - Add help text: `engram run <neurona_id> [options]`
 
 6. **CLI Interface**:
+
    ```bash
    engram run artifact.build.backend --runtime node
    engram run sm.auth.logged_in --trigger logout
@@ -475,6 +495,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
    ```
 
 **Success Criteria**:
+
 - ✅ `engram run` command implemented
 - ✅ Artifact execution working
 - ✅ State machine execution working
@@ -491,9 +512,10 @@ This document outlines a detailed plan to address all critical, medium, and low 
 **Effort**: 4-5 hours  
 **Priority**: LOW
 
-#### Implementation Steps:
+#### Implementation Steps
 
 1. **Create `src/utils/uri_parser.zig`**:
+
    ```zig
    pub const URI = struct {
        scheme: []const u8,
@@ -506,6 +528,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
    ```
 
 2. **Supported Format**:
+
    ```
    neurona://<cortex-id>/<neurona-id>
    ```
@@ -535,6 +558,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
    - Neurona not found in Cortex
 
 **Success Criteria**:
+
 - ✅ URI parser implemented
 - ✅ Resolution logic working
 - ✅ Commands accept URI format
@@ -547,6 +571,7 @@ This document outlines a detailed plan to address all critical, medium, and low 
 ## Implementation Timeline
 
 ### Week 1: HIGH PRIORITY
+
 - Day 1-2: Issue 1.1 - Graph Persistence
 - Day 3-4: Issue 1.2 - Vector Persistence
 - Day 5: Issue 1.3 - LLM Cache
@@ -554,12 +579,14 @@ This document outlines a detailed plan to address all critical, medium, and low 
 - **Deliverable**: All persistence and critical features working
 
 ### Week 2: MEDIUM PRIORITY
+
 - Day 1-2: Issue 2.1 - YAML Frontmatter Fix
 - Day 3-5: Issue 2.2 - EQL Query Language
 - Day 6: Issue 2.3 - Update .gitignore
 - **Deliverable**: Query system and file structure compliance at 85%+
 
 ### Week 3: LOW PRIORITY
+
 - Day 1-4: Issue 3.1 - `engram run` Command
 - Day 5: Issue 3.2 - URI Scheme Support
 - **Deliverable**: Phase 3 features complete, 95%+ compliance
@@ -568,7 +595,8 @@ This document outlines a detailed plan to address all critical, medium, and low 
 
 ## Success Criteria
 
-### Phase 1 Complete When:
+### Phase 1 Complete When
+
 - ✅ `.activations/graph.idx` persisted and loaded
 - ✅ `.activations/vectors.bin` persisted and loaded
 - ✅ `.activations/cache/` populated with LLM data
@@ -576,14 +604,16 @@ This document outlines a detailed plan to address all critical, medium, and low 
 - ✅ All benchmarks passing thresholds
 - ✅ CI integration for performance testing
 
-### Phase 2 Complete When:
+### Phase 2 Complete When
+
 - ✅ All Neuronas have connections in frontmatter only
 - ✅ EQL parser implemented and integrated
 - ✅ All EQL operators supported
 - ✅ `.gitignore` includes `.activations/`
 - ✅ No YAML parsing errors
 
-### Phase 3 Complete When:
+### Phase 3 Complete When
+
 - ✅ `engram run` command working
 - ✅ Artifact and state machine execution
 - ✅ Safety features (sandbox, timeout) implemented
@@ -591,7 +621,8 @@ This document outlines a detailed plan to address all critical, medium, and low 
 - ✅ Commands accept URI format
 - ✅ Documentation complete
 
-### Full Compliance Achieved When:
+### Full Compliance Achieved When
+
 - ✅ Overall compliance ≥ 95%
 - ✅ All HIGH PRIORITY issues resolved
 - ✅ All MEDIUM PRIORITY issues resolved
