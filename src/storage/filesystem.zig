@@ -9,6 +9,7 @@ const ConnectionType = @import("../core/neurona.zig").ConnectionType;
 const LLMMetadata = @import("../core/neurona.zig").LLMMetadata;
 const frontmatter = @import("../utils/frontmatter.zig").Frontmatter;
 const yaml = @import("../utils/yaml.zig");
+const validator = @import("../core/validator.zig");
 const getString = yaml.getString;
 const getInt = yaml.getInt;
 const getBool = yaml.getBool;
@@ -58,6 +59,9 @@ pub fn readNeurona(allocator: Allocator, filepath: []const u8) !Neurona {
         }
         yaml_data.deinit();
     }
+
+    // Validate that connections are only in frontmatter (not in body)
+    try validator.validateConnectionsLocation(fm.body);
 
     // Convert YAML to Neurona
     return try yamlToNeurona(allocator, yaml_data, fm.body);
@@ -149,8 +153,10 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
                                     switch (target_item) {
                                         .object => |t_obj_opt| {
                                             if (t_obj_opt) |t_obj| {
-                                                if (t_obj.get("id")) |target_id_val| {
-                                                    const target_id = getString(target_id_val, "");
+                                                // Check for "target_id" (new format) or "id" (legacy format)
+                                                const target_id_val = t_obj.get("target_id") orelse t_obj.get("id");
+                                                if (target_id_val) |tid_val| {
+                                                    const target_id = getString(tid_val, "");
                                                     if (target_id.len == 0) continue;
 
                                                     var weight: u8 = 50;
@@ -300,7 +306,8 @@ pub fn neuronaToYaml(allocator: Allocator, neurona: Neurona) ![]u8 {
         try writer.print("type: {s}\n", .{@tagName(neurona.type)});
     }
 
-    // Connections (Tier 2)
+    // Connections (Tier 2) - Use simplified array format for YAML parser compatibility
+    // Format: ["type:target_id:weight"]
     if (neurona.connections.count() > 0) {
         try writer.writeAll("connections: [");
         var first = true;

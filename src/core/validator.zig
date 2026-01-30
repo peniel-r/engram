@@ -95,6 +95,61 @@ pub fn getAllowedConnections(from_type: NeuronaType, to_type: NeuronaType) []con
     return &[_]ConnectionType{.relates_to}; // Fallback
 }
 
+/// Validate that connections are only in frontmatter, not in body
+/// Per Neurona spec, connections must be in YAML frontmatter
+pub fn validateConnectionsLocation(body: []const u8) !void {
+    // Check for connection keywords in body
+    const connection_keywords = [_][]const u8{
+        "connections:",
+        "validates:",
+        "validates_by:",
+        "implements:",
+        "blocks:",
+        "blocked_by:",
+        "tests:",
+        "tested_by:",
+        "relates_to:",
+        "parent:",
+        "child:",
+        "prerequisite:",
+        "next:",
+    };
+
+    for (connection_keywords) |keyword| {
+        if (std.mem.indexOf(u8, body, keyword)) |_| {
+            return error.ConnectionsInBodyNotAllowed;
+        }
+    }
+
+    // Also check for legacy format "type:target:weight" pattern in body
+    // This is a heuristic: look for patterns like "validated_by:target_id:weight"
+    var line_iter = std.mem.splitScalar(u8, body, '\n');
+    while (line_iter.next()) |line| {
+        const trimmed = std.mem.trim(u8, line, " \t\r");
+        if (trimmed.len == 0) continue;
+        
+        // Skip markdown headings
+        if (trimmed[0] == '#') continue;
+        
+        // Check if line looks like a connection (contains multiple colons)
+        var colon_count: usize = 0;
+        for (trimmed) |c| {
+            if (c == ':') colon_count += 1;
+        }
+        
+        // Lines with 2+ colons might be legacy connection format
+        if (colon_count >= 2 and !std.mem.startsWith(u8, trimmed, "http")) {
+            // Check if any connection type is in the line
+            for (connection_keywords) |keyword| {
+                const keyword_without_colon = keyword[0 .. keyword.len - 1];
+                if (std.mem.indexOf(u8, trimmed, keyword_without_colon)) |_| {
+                    return error.ConnectionsInBodyNotAllowed;
+                }
+            }
+        }
+    }
+}
+
 // ==================== Cycle Detection ====================
 
 /// Detect cycles in the graph using DFS
