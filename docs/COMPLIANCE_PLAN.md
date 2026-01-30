@@ -319,10 +319,30 @@ The nested object format specified in the Neurona spec requires a more sophistic
 
 ### Issue 2.2: Implement EQL Query Language
 
-**Status**: ❌ Not Implemented  
+**Status**: ✅ **COMPLETE**  
 **Impact**: Cannot use spec's query syntax (`engram query "type:issue AND tag:p1"`); limited to flag-based queries  
 **Effort**: 8-10 hours  
 **Priority**: MEDIUM
+
+**Completed**: 2026-01-29
+
+**Implementation Summary**:
+- ✅ EQL parser implemented in `src/utils/eql_parser.zig` (487 lines)
+- ✅ Full grammar support: field conditions, logical operators (AND/OR), link conditions
+- ✅ All comparison operators: eq, neq, gt, lt, gte, lte, contains, not_contains
+- ✅ Integration helper in `src/cli/query_helpers.zig` (132 lines)
+- ✅ Auto-detection: EQL vs natural language queries
+- ✅ CLI integration in `src/main.zig` with comprehensive help text
+- ✅ All 8 unit tests passing
+- ✅ Documentation in `docs/EQL_IMPLEMENTATION.md` and `docs/ISSUE_2.2_SUMMARY.md`
+
+**Files Changed**:
+- `src/utils/eql_parser.zig` - 487 lines (new)
+- `src/cli/query_helpers.zig` - 132 lines (new)
+- `src/cli/query.zig` - Made executeFilterQuery and executeBM25Query public
+- `src/main.zig` - Integrated query_helpers with auto-detection
+- `docs/EQL_IMPLEMENTATION.md` - 133 lines (new)
+- `docs/ISSUE_2.2_SUMMARY.md` - Implementation summary
 
 #### Implementation Steps
 

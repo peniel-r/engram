@@ -11,6 +11,7 @@ const delete_cmd = @import("cli/delete.zig");
 const trace_cmd = @import("cli/trace.zig");
 const status_cmd = @import("cli/status.zig");
 const query_cmd = @import("cli/query.zig");
+const query_helpers = @import("cli/query_helpers.zig");
 const update_cmd = @import("cli/update.zig");
 const impact_cmd = @import("cli/impact.zig");
 const link_artifact_cmd = @import("cli/link_artifact.zig");
@@ -645,6 +646,7 @@ fn handleQuery(allocator: Allocator, args: []const []const u8) !void {
     // Parse options
     var i: usize = 2;
     var query_arg: ?[]const u8 = null;
+    var explicit_mode = false;
 
     while (i < args.len) : (i += 1) {
         const arg = args[i];
@@ -674,6 +676,7 @@ fn handleQuery(allocator: Allocator, args: []const []const u8) !void {
                 printQueryHelp();
                 std.process.exit(1);
             }
+            explicit_mode = true;
         } else if (std.mem.eql(u8, arg, "--limit") or std.mem.eql(u8, arg, "-l")) {
             if (i + 1 >= args.len) {
                 std.debug.print("Error: --limit requires a value\n", .{});
@@ -704,7 +707,14 @@ fn handleQuery(allocator: Allocator, args: []const []const u8) !void {
         config.query_text = qa;
     }
 
-    try query_cmd.execute(allocator, config);
+    // If query text is provided and mode is not explicitly set, use EQL/text auto-detection
+    if (query_arg != null and config.query_text.len > 0 and !explicit_mode) {
+        // Use query_helpers to auto-detect EQL vs natural language and route appropriately
+        try query_helpers.executeQueryWithText(allocator, config);
+    } else {
+        // Use standard query execution
+        try query_cmd.execute(allocator, config);
+    }
 }
 
 fn handleUpdate(allocator: Allocator, args: []const []const u8) !void {
@@ -1151,25 +1161,54 @@ fn printQueryHelp() void {
         \\  engram query [options] [query_string]
         \\
         \\Options:
-        \\  --mode, -m      Query mode: filter, text, vector, hybrid, activation (default: filter)
-        \\  --type, -t       Filter by type (filter mode only)
+        \\  --mode, -m      Query mode: filter, text, vector, hybrid, activation (default: auto-detect)
         \\  --limit, -l      Limit results (default: 50)
         \\  --json, -j       Output as JSON
         \\
         \\Query Modes:
-        \\  filter            Filter by type, tags, connections (default)
+        \\  auto-detect       Auto-detect EQL or natural language (default with query_string)
+        \\  filter            Filter by type, tags, connections
         \\  text              BM25 full-text search
         \\  vector            Vector similarity search
         \\  hybrid             Combined BM25 + vector search
         \\  activation         Neural propagation across graph
         \\
+        \\EQL Query Syntax (Engram Query Language):
+        \\  Field Conditions:
+        \\    type:issue                      Match by type
+        \\    tag:security                    Match by tag
+        \\    priority:gte:3                  Numeric comparison
+        \\    title:contains:auth             String matching
+        \\
+        \\  Logical Operators:
+        \\    type:issue AND tag:p1           Both conditions must match
+        \\    type:requirement OR type:feature  Either condition must match
+        \\
+        \\  Link Conditions:
+        \\    link(validates, req.auth.001)   Find items validating a requirement
+        \\    link(blocked_by, issue.001)     Find items blocked by an issue
+        \\
+        \\  Comparison Operators:
+        \\    eq, neq, gt, lt, gte, lte       Numeric comparisons
+        \\    contains, not_contains           String matching
+        \\
         \\Examples:
-        \\  engram query
-        \\  engram query --type issue --limit 10
-        \\  engram query --mode text "authentication"
-        \\  engram query --mode vector "user login"
-        \\  engram query --mode hybrid "login failure"
-        \\  engram query --mode activation "critical bug"
+        \\  EQL Queries:
+        \\    engram query "type:issue"
+        \\    engram query "type:issue AND tag:p1"
+        \\    engram query "priority:gte:3"
+        \\    engram query "title:contains:authentication OR tag:security"
+        \\    engram query "link(validates, req.auth.001) AND type:test_case"
+        \\    engram query "(type:issue OR type:requirement) AND state:open"
+        \\
+        \\  Text Search (natural language):
+        \\    engram query "authentication"
+        \\    engram query "user login failure"
+        \\
+        \\  Explicit Mode:
+        \\    engram query --mode text "authentication"
+        \\    engram query --mode vector "user login"
+        \\    engram query --mode hybrid "login failure"
         \\
     , .{});
 }

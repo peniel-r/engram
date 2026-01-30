@@ -116,7 +116,7 @@ pub fn execute(allocator: Allocator, config: QueryConfig) !void {
 }
 
 /// Filter mode: Filter by type, tags, connections
-fn executeFilterQuery(allocator: Allocator, config: QueryConfig) !void {
+pub fn executeFilterQuery(allocator: Allocator, config: QueryConfig) !void {
     // Step 1: Scan all Neuronas
     const neuronas = try storage.scanNeuronas(allocator, "neuronas");
     defer {
@@ -263,7 +263,7 @@ fn matchesSingleConnection(conn: *const @import("../core/neurona.zig").Connectio
 }
 
 /// BM25 text search mode
-fn executeBM25Query(allocator: Allocator, config: QueryConfig) !void {
+pub fn executeBM25Query(allocator: Allocator, config: QueryConfig) !void {
     if (config.query_text.len == 0) {
         std.debug.print("Error: Text search requires a query string\n", .{});
         return error.MissingQueryText;

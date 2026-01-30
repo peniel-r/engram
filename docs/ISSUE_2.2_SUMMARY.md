@@ -99,7 +99,7 @@ engram query "link(validates, req.auth.001) AND type:test_case"
 engram query "link(blocked_by, issue.001)"
 
 # Complex queries
-eng ram query "(type:issue OR type:requirement) AND state:open"
+engram query "(type:issue OR type:requirement) AND state:open"
 ```
 
 ## Success Criteria (from COMPLIANCE_PLAN)
@@ -113,7 +113,7 @@ eng ram query "(type:issue OR type:requirement) AND state:open"
 
 ## Files Changed
 
-```
+```text
  docs/EQL_IMPLEMENTATION.md      | 133 ++++++++++++
  src/cli/query_helpers.zig        | 132 ++++++++++++
  src/utils/eql_parser.zig         | 487 ++++++++++++++++++
@@ -122,7 +122,7 @@ eng ram query "(type:issue OR type:requirement) AND state:open"
 
 ## Commit
 
-```
+```text
 commit 2b7a0bf
 feat: Implement EQL (Engram Query Language) parser for Issue 2.2
 ```

@@ -1,13 +1,13 @@
 // File: src/cli/query_helpers.zig
 // Helper functions for query command - EQL integration
-const std = @import(\"std\");
+const std = @import("std");
 const Allocator = std.mem.Allocator;
-const EQLParser = @import(\"../utils/eql_parser.zig\").EQLParser;
-const eql_parser = @import(\"../utils/eql_parser.zig\");
-const nl_query_parser = @import(\"../utils/nl_query_parser.zig\");
+const EQLParser = @import("../utils/eql_parser.zig").EQLParser;
+const eql_parser = @import("../utils/eql_parser.zig");
+const nl_query_parser = @import("../utils/nl_query_parser.zig");
 
 // Re-export query types (import from query.zig)
-const query = @import(\"query.zig\");
+const query = @import("query.zig");
 pub const QueryConfig = query.QueryConfig;
 pub const QueryFilter = query.QueryFilter;
 pub const TypeFilter = query.TypeFilter;
@@ -29,7 +29,7 @@ pub fn executeQueryWithText(allocator: Allocator, config: QueryConfig) !void {
         defer eql_query.deinit(allocator);
 
         // Convert EQL to filters
-        const filters = try convertEQLToFilters(allocator, \u0026eql_query);
+        const filters = try convertEQLToFilters(allocator, &eql_query);
         defer {
             for (filters) |*f| {
                 switch (f.*) {
@@ -40,7 +40,7 @@ pub fn executeQueryWithText(allocator: Allocator, config: QueryConfig) !void {
                 }
             }
             allocator.free(filters);
-        };
+        }
 
         const new_config = QueryConfig{
             .mode = .filter,
@@ -51,12 +51,12 @@ pub fn executeQueryWithText(allocator: Allocator, config: QueryConfig) !void {
         };
 
         // Call the filter query function from query module
-        const query_module = @import(\"query.zig\");
+        const query_module = @import("query.zig");
         return try query_module.executeFilterQuery(allocator, new_config);
     }
 
     // Fallback: treat as text search
-    std.debug.print(\"Query using BM25 text search...\\n\", .{});
+    std.debug.print("Query using BM25 text search...\n", .{});
     const text_config = QueryConfig{
         .mode = .text,
         .query_text = query_text,
@@ -64,14 +64,14 @@ pub fn executeQueryWithText(allocator: Allocator, config: QueryConfig) !void {
         .limit = config.limit,
         .json_output = config.json_output,
     };
-    
-    const query_module = @import(\"query.zig\");
+
+    const query_module = @import("query.zig");
     return try query_module.executeBM25Query(allocator, text_config);
 }
 
 /// Convert EQL query to QueryFilters
 fn convertEQLToFilters(allocator: Allocator, eql_query: *const eql_parser.EQLQuery) ![]QueryFilter {
-    var filters = std.ArrayList(QueryFilter){};
+    var filters = std.ArrayListUnmanaged(QueryFilter){};
     defer filters.deinit(allocator);
 
     for (eql_query.conditions.items) |*cond| {
@@ -80,14 +80,14 @@ fn convertEQLToFilters(allocator: Allocator, eql_query: *const eql_parser.EQLQue
             const link_filter = ConnectionFilter{
                 .connection_type = cond.link_type,
                 .target_id = cond.link_target,
-                .operator = .@\"and\",
+                .operator = .@"and",
             };
             try filters.append(allocator, .{ .connection_filter = link_filter });
             continue;
         }
 
         // Handle field conditions
-        if (std.mem.eql(u8, cond.field, \"type\")) {
+        if (std.mem.eql(u8, cond.field, "type")) {
             var type_filter = TypeFilter{
                 .types = .{},
                 .include = cond.op != .neq,
@@ -95,7 +95,7 @@ fn convertEQLToFilters(allocator: Allocator, eql_query: *const eql_parser.EQLQue
             const type_val = try allocator.dupe(u8, cond.value);
             try type_filter.types.append(allocator, type_val);
             try filters.append(allocator, .{ .type_filter = type_filter });
-        } else if (std.mem.eql(u8, cond.field, \"tag\")) {
+        } else if (std.mem.eql(u8, cond.field, "tag")) {
             var tag_filter = TagFilter{
                 .tags = .{},
                 .include = cond.op != .neq,
