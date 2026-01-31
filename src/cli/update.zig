@@ -305,7 +305,7 @@ fn applyContextUpdate(allocator: Allocator, neurona: *Neurona, context_field: []
             if (existing) |v| {
                 allocator.free(v);
             }
-            try ctx.put(try allocator.dupe(u8, context_field), try allocator.dupe(u8, value));
+            try ctx.put(context_field, try allocator.dupe(u8, value));
             return true;
         },
         .none => {

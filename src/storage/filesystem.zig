@@ -77,6 +77,212 @@ fn replaceString(allocator: Allocator, old: []const u8, new_value: []const u8) !
     return allocator.dupe(u8, new_value);
 }
 
+/// Parse context from YAML object based on neurona type
+fn parseContext(allocator: Allocator, ctx_obj: std.StringHashMap(yaml.Value), neurona_type: NeuronaType) !@import("../core/neurona.zig").Context {
+    const Context = @import("../core/neurona.zig").Context;
+
+    // Try to infer context type from fields present
+    const has_status = ctx_obj.get("status") != null;
+    const has_framework = ctx_obj.get("framework") != null;
+    const has_runtime = ctx_obj.get("runtime") != null;
+    const has_verification_method = ctx_obj.get("verification_method") != null;
+    const has_entry_action = ctx_obj.get("entry_action") != null;
+
+    // Handle feature, lesson, reference, concept types as custom context
+    if (neurona_type == .feature or neurona_type == .lesson or neurona_type == .reference or neurona_type == .concept) {
+        var custom = std.StringHashMap([]const u8).init(allocator);
+        errdefer {
+            var it = custom.iterator();
+            while (it.next()) |entry| {
+                allocator.free(entry.key_ptr.*);
+                allocator.free(entry.value_ptr.*);
+            }
+            custom.deinit();
+        }
+
+        var it = ctx_obj.iterator();
+        while (it.next()) |entry| {
+            const key = try allocator.dupe(u8, entry.key_ptr.*);
+            const val = try allocator.dupe(u8, getString(entry.value_ptr.*, ""));
+            try custom.put(key, val);
+        }
+
+        return Context{ .custom = custom };
+    }
+
+    if (has_verification_method) {
+        var ctx = Context{ .requirement = undefined };
+        ctx.requirement = .{
+            .status = try allocator.dupe(u8, if (ctx_obj.get("status")) |v| getString(v, "draft") else "draft"),
+            .verification_method = try allocator.dupe(u8, if (ctx_obj.get("verification_method")) |v| getString(v, "test") else "test"),
+            .priority = @intCast(if (ctx_obj.get("priority")) |v| getInt(v, 3) else 3),
+            .assignee = null,
+            .effort_points = null,
+            .sprint = null,
+        };
+        if (ctx_obj.get("assignee")) |a| {
+            const s = getString(a, "");
+            if (s.len > 0) ctx.requirement.assignee = try allocator.dupe(u8, s);
+        }
+        if (ctx_obj.get("effort_points")) |e| {
+            ctx.requirement.effort_points = @intCast(getInt(e, 0));
+        }
+        if (ctx_obj.get("sprint")) |s| {
+            const str = getString(s, "");
+            if (str.len > 0) ctx.requirement.sprint = try allocator.dupe(u8, str);
+        }
+        return ctx;
+    }
+
+    if (has_framework) {
+        var ctx = Context{ .test_case = undefined };
+        ctx.test_case = .{
+            .framework = try allocator.dupe(u8, if (ctx_obj.get("framework")) |v| getString(v, "unknown") else "unknown"),
+            .test_file = null,
+            .status = try allocator.dupe(u8, if (ctx_obj.get("status")) |v| getString(v, "pending") else "pending"),
+            .priority = @intCast(if (ctx_obj.get("priority")) |v| getInt(v, 3) else 3),
+            .assignee = null,
+            .duration = null,
+            .last_run = null,
+        };
+        if (ctx_obj.get("test_file")) |f| {
+            const s = getString(f, "");
+            if (s.len > 0) ctx.test_case.test_file = try allocator.dupe(u8, s);
+        }
+        if (ctx_obj.get("assignee")) |a| {
+            const s = getString(a, "");
+            if (s.len > 0) ctx.test_case.assignee = try allocator.dupe(u8, s);
+        }
+        if (ctx_obj.get("duration")) |d| {
+            const s = getString(d, "");
+            if (s.len > 0) ctx.test_case.duration = try allocator.dupe(u8, s);
+        }
+        if (ctx_obj.get("last_run")) |l| {
+            const s = getString(l, "");
+            if (s.len > 0) ctx.test_case.last_run = try allocator.dupe(u8, s);
+        }
+        return ctx;
+    }
+
+    if (has_runtime) {
+        var ctx = Context{ .artifact = undefined };
+        ctx.artifact = .{
+            .runtime = try allocator.dupe(u8, if (ctx_obj.get("runtime")) |v| getString(v, "unknown") else "unknown"),
+            .file_path = try allocator.dupe(u8, if (ctx_obj.get("file_path")) |v| getString(v, "") else ""),
+            .safe_to_exec = if (ctx_obj.get("safe_to_exec")) |v| getBool(v, false) else false,
+            .language_version = null,
+            .last_modified = null,
+        };
+        if (ctx_obj.get("language_version")) |v| {
+            const s = getString(v, "");
+            if (s.len > 0) ctx.artifact.language_version = try allocator.dupe(u8, s);
+        }
+        if (ctx_obj.get("last_modified")) |m| {
+            const s = getString(m, "");
+            if (s.len > 0) ctx.artifact.last_modified = try allocator.dupe(u8, s);
+        }
+        return ctx;
+    }
+
+    if (has_entry_action) {
+        var triggers = std.ArrayListUnmanaged([]const u8){};
+        var allowed_roles = std.ArrayListUnmanaged([]const u8){};
+        errdefer {
+            for (triggers.items) |t| allocator.free(t);
+            triggers.deinit(allocator);
+            for (allowed_roles.items) |r| allocator.free(r);
+            allowed_roles.deinit(allocator);
+        }
+
+        if (ctx_obj.get("triggers")) |t| {
+            const arr = try getArray(t, allocator, &[_][]const u8{});
+            for (arr) |trigger| try triggers.append(allocator, trigger);
+            allocator.free(arr);
+        }
+        if (ctx_obj.get("allowed_roles")) |r| {
+            const arr = try getArray(r, allocator, &[_][]const u8{});
+            for (arr) |role| try allowed_roles.append(allocator, role);
+            allocator.free(arr);
+        }
+
+        var ctx = Context{ .state_machine = undefined };
+        ctx.state_machine = .{
+            .triggers = triggers,
+            .entry_action = try allocator.dupe(u8, if (ctx_obj.get("entry_action")) |v| getString(v, "") else ""),
+            .exit_action = try allocator.dupe(u8, if (ctx_obj.get("exit_action")) |v| getString(v, "") else ""),
+            .allowed_roles = allowed_roles,
+        };
+        return ctx;
+    }
+
+    if (has_status or neurona_type == .issue) {
+        var ctx = Context{ .issue = undefined };
+        var blocked_by = std.ArrayListUnmanaged([]const u8){};
+        var related_to = std.ArrayListUnmanaged([]const u8){};
+        errdefer {
+            for (blocked_by.items) |b| allocator.free(b);
+            blocked_by.deinit(allocator);
+            for (related_to.items) |r| allocator.free(r);
+            related_to.deinit(allocator);
+        }
+
+        if (ctx_obj.get("blocked_by")) |b| {
+            const arr = try getArray(b, allocator, &[_][]const u8{});
+            for (arr) |item| try blocked_by.append(allocator, item);
+            allocator.free(arr);
+        }
+        if (ctx_obj.get("related_to")) |r| {
+            const arr = try getArray(r, allocator, &[_][]const u8{});
+            for (arr) |item| try related_to.append(allocator, item);
+            allocator.free(arr);
+        }
+
+        ctx.issue = .{
+            .status = try allocator.dupe(u8, if (ctx_obj.get("status")) |v| getString(v, "open") else "open"),
+            .priority = @intCast(if (ctx_obj.get("priority")) |v| getInt(v, 3) else 3),
+            .assignee = null,
+            .created = try allocator.dupe(u8, if (ctx_obj.get("created")) |v| getString(v, "") else ""),
+            .resolved = null,
+            .closed = null,
+            .blocked_by = blocked_by,
+            .related_to = related_to,
+        };
+        if (ctx_obj.get("assignee")) |a| {
+            const s = getString(a, "");
+            if (s.len > 0) ctx.issue.assignee = try allocator.dupe(u8, s);
+        }
+        if (ctx_obj.get("resolved")) |r| {
+            const s = getString(r, "");
+            if (s.len > 0) ctx.issue.resolved = try allocator.dupe(u8, s);
+        }
+        if (ctx_obj.get("closed")) |c| {
+            const s = getString(c, "");
+            if (s.len > 0) ctx.issue.closed = try allocator.dupe(u8, s);
+        }
+        return ctx;
+    }
+
+    // Default: custom context for any other fields
+    var custom = std.StringHashMap([]const u8).init(allocator);
+    errdefer {
+        var it = custom.iterator();
+        while (it.next()) |entry| {
+            allocator.free(entry.key_ptr.*);
+            allocator.free(entry.value_ptr.*);
+        }
+        custom.deinit();
+    }
+
+    var it = ctx_obj.iterator();
+    while (it.next()) |entry| {
+        const key = try allocator.dupe(u8, entry.key_ptr.*);
+        const val = try allocator.dupe(u8, getString(entry.value_ptr.*, ""));
+        try custom.put(key, val);
+    }
+
+    return Context{ .custom = custom };
+}
+
 /// Convert parsed YAML frontmatter to Neurona struct
 fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value), body: []const u8) !Neurona {
     _ = body; // TODO: Use body content for full Neurona
@@ -247,6 +453,18 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
         neurona.llm_metadata = metadata;
     }
 
+    // Tier 3 field: context (optional)
+    if (yaml_data.get("context")) |ctx_val| {
+        switch (ctx_val) {
+            .object => |ctx_obj_opt| {
+                if (ctx_obj_opt) |ctx_obj| {
+                    neurona.context = try parseContext(allocator, ctx_obj, neurona.type);
+                }
+            },
+            else => {},
+        }
+    }
+
     return neurona;
 }
 
@@ -272,8 +490,24 @@ pub fn writeNeurona(allocator: Allocator, neurona: Neurona, filepath: []const u8
     const yaml_content = try neuronaToYaml(allocator, neurona);
     defer allocator.free(yaml_content);
 
+    // Preserve existing body content if file exists
+    var body_content: []const u8 = "";
+    defer allocator.free(body_content);
+    if (std.fs.cwd().openFile(filepath, .{})) |file| {
+        defer file.close();
+        const existing_content = file.readToEndAlloc(allocator, 10 * 1024 * 1024) catch "";
+        defer allocator.free(existing_content);
+        if (existing_content.len > 0) {
+            const fm = frontmatter.parse(allocator, existing_content) catch null;
+            if (fm) |*f| {
+                defer f.deinit(allocator);
+                body_content = try allocator.dupe(u8, f.body);
+            }
+        }
+    } else |_| {}
+
     // Generate complete Markdown content
-    const content = try generateMarkdown(allocator, yaml_content, "");
+    const content = try generateMarkdown(allocator, yaml_content, body_content);
     defer allocator.free(content);
 
     // Write to file
@@ -352,6 +586,86 @@ pub fn neuronaToYaml(allocator: Allocator, neurona: Neurona) ![]u8 {
         }
         try writer.print("_llm_c: {d}\n", .{meta.token_count});
         try writer.print("_llm_strategy: {s}\n", .{meta.strategy});
+    }
+
+    // Tier 3 field: context (optional)
+    try writer.writeAll("context:\n");
+    switch (neurona.context) {
+        .none => {},
+        .artifact => |*ctx| {
+            if (ctx.runtime.len > 0) try writer.print("  runtime: {s}\n", .{ctx.runtime});
+            if (ctx.file_path.len > 0) try writer.print("  file_path: {s}\n", .{ctx.file_path});
+            try writer.print("  safe_to_exec: {}\n", .{ctx.safe_to_exec});
+            if (ctx.language_version) |v| try writer.print("  language_version: {s}\n", .{v});
+            if (ctx.last_modified) |m| try writer.print("  last_modified: {s}\n", .{m});
+        },
+        .test_case => |*ctx| {
+            if (ctx.framework.len > 0) try writer.print("  framework: {s}\n", .{ctx.framework});
+            if (ctx.test_file) |f| try writer.print("  test_file: {s}\n", .{f});
+            if (ctx.status.len > 0) try writer.print("  status: {s}\n", .{ctx.status});
+            try writer.print("  priority: {d}\n", .{ctx.priority});
+            if (ctx.assignee) |a| try writer.print("  assignee: {s}\n", .{a});
+            if (ctx.duration) |d| try writer.print("  duration: {s}\n", .{d});
+            if (ctx.last_run) |l| try writer.print("  last_run: {s}\n", .{l});
+        },
+        .issue => |*ctx| {
+            if (ctx.status.len > 0) try writer.print("  status: {s}\n", .{ctx.status});
+            try writer.print("  priority: {d}\n", .{ctx.priority});
+            if (ctx.assignee) |a| try writer.print("  assignee: {s}\n", .{a});
+            if (ctx.created.len > 0) try writer.print("  created: {s}\n", .{ctx.created});
+            if (ctx.resolved) |r| try writer.print("  resolved: {s}\n", .{r});
+            if (ctx.closed) |c| try writer.print("  closed: {s}\n", .{c});
+            if (ctx.blocked_by.items.len > 0) {
+                try writer.writeAll("  blocked_by: [");
+                for (ctx.blocked_by.items, 0..) |b, i| {
+                    if (i > 0) try writer.writeAll(", ");
+                    try writer.print("\"{s}\"", .{b});
+                }
+                try writer.writeAll("]\n");
+            }
+            if (ctx.related_to.items.len > 0) {
+                try writer.writeAll("  related_to: [");
+                for (ctx.related_to.items, 0..) |r, i| {
+                    if (i > 0) try writer.writeAll(", ");
+                    try writer.print("\"{s}\"", .{r});
+                }
+                try writer.writeAll("]\n");
+            }
+        },
+        .requirement => |*ctx| {
+            if (ctx.status.len > 0) try writer.print("  status: {s}\n", .{ctx.status});
+            if (ctx.verification_method.len > 0) try writer.print("  verification_method: {s}\n", .{ctx.verification_method});
+            try writer.print("  priority: {d}\n", .{ctx.priority});
+            if (ctx.assignee) |a| try writer.print("  assignee: {s}\n", .{a});
+            if (ctx.effort_points) |e| try writer.print("  effort_points: {d}\n", .{e});
+            if (ctx.sprint) |s| try writer.print("  sprint: {s}\n", .{s});
+        },
+        .state_machine => |*ctx| {
+            if (ctx.triggers.items.len > 0) {
+                try writer.writeAll("  triggers: [");
+                for (ctx.triggers.items, 0..) |t, i| {
+                    if (i > 0) try writer.writeAll(", ");
+                    try writer.print("\"{s}\"", .{t});
+                }
+                try writer.writeAll("]\n");
+            }
+            if (ctx.entry_action.len > 0) try writer.print("  entry_action: {s}\n", .{ctx.entry_action});
+            if (ctx.exit_action.len > 0) try writer.print("  exit_action: {s}\n", .{ctx.exit_action});
+            if (ctx.allowed_roles.items.len > 0) {
+                try writer.writeAll("  allowed_roles: [");
+                for (ctx.allowed_roles.items, 0..) |r, i| {
+                    if (i > 0) try writer.writeAll(", ");
+                    try writer.print("\"{s}\"", .{r});
+                }
+                try writer.writeAll("]\n");
+            }
+        },
+        .custom => |*ctx| {
+            var it = ctx.iterator();
+            while (it.next()) |entry| {
+                try writer.print("  {s}: {s}\n", .{ entry.key_ptr.*, entry.value_ptr.* });
+            }
+        },
     }
 
     return try yaml_buf.toOwnedSlice(allocator);
