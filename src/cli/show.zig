@@ -20,11 +20,16 @@ pub const ShowConfig = struct {
 /// Main command handler
 pub fn execute(allocator: Allocator, config: ShowConfig) !void {
     // Resolve URI or use direct ID
-    const resolved_id = try uri_parser.resolveOrFallback(allocator, config.id, "neuronas");
-    defer allocator.free(resolved_id);
+    var resolved_id: ?[]const u8 = null;
+    if (uri_parser.URI.isURI(config.id)) {
+        resolved_id = try uri_parser.resolveURIStr(allocator, config.id, "neuronas");
+    } else {
+        resolved_id = try allocator.dupe(u8, config.id);
+    }
+    defer if (resolved_id) |id| allocator.free(id);
 
     // Step1: Find and read Neurona file
-    const filepath = try findNeuronaPath(allocator, "neuronas", resolved_id);
+    const filepath = try findNeuronaPath(allocator, "neuronas", resolved_id.?);
     defer allocator.free(filepath);
 
     var neurona = try readNeurona(allocator, filepath);

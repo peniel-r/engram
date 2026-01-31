@@ -98,45 +98,23 @@ pub fn findCortexDir(allocator: Allocator) ![]const u8 {
 /// Resolve URI to Neurona file path
 /// Uses cortex.json for directory location and graph.idx for lookup
 pub fn resolveURI(allocator: Allocator, uri: *const URI, neuronas_dir: []const u8) ![]const u8 {
-    const cortex_dir = try findCortexDir(allocator);
-    defer allocator.free(cortex_dir);
+    // Simple implementation: just return the path to the neurona file
+    // The cortex_id in URI is currently informational
+    const neurona_path = try std.fs.path.join(allocator, &.{ neuronas_dir, uri.neurona_id });
 
-    const graph_index_path = try std.fs.path.join(allocator, &.{ cortex_dir, ".activations", "graph.idx" });
-    defer allocator.free(graph_index_path);
+    const neurona_path_md = try std.fmt.allocPrint(allocator, "{s}.md", .{neurona_path});
+    errdefer allocator.free(neurona_path_md);
+    allocator.free(neurona_path);
 
-    const index_module = @import("../storage/index.zig");
-
-    var graph = index_module.Graph.init();
-    defer graph.deinit(allocator);
-
-    if (std.fs.cwd().access(graph_index_path, .{})) |_| {
-        const data = try std.fs.cwd().readFileAlloc(allocator, graph_index_path, 100 * 1024 * 1024);
-        defer allocator.free(data);
-
-        graph = try index_module.Graph.deserialize(data, allocator);
+    // Check if file exists
+    if (std.fs.cwd().access(neurona_path_md, .{})) |_| {
+        return neurona_path_md;
     } else |err| {
-        if (err != error.FileNotFound) {
-            return err;
+        if (err == error.FileNotFound) {
+            return error.NeuronaNotFound;
         }
+        return err;
     }
-
-    if (graph.adjacency_list.contains(uri.neurona_id)) {
-        const neurona_path = try std.fs.path.join(allocator, &.{ neuronas_dir, uri.neurona_id });
-        const neurona_path_md = try std.fmt.allocPrint(allocator, "{s}.md", .{neurona_path});
-        allocator.free(neurona_path);
-
-        if (std.fs.cwd().access(neurona_path_md, .{})) |_| {
-            return neurona_path_md;
-        } else |err| {
-            if (err != error.FileNotFound) {
-                allocator.free(neurona_path_md);
-                return err;
-            }
-            allocator.free(neurona_path_md);
-        }
-    }
-
-    return error.NeuronaNotFound;
 }
 
 /// Parse and resolve URI to file path in one step
@@ -220,4 +198,60 @@ test "resolveOrFallback returns direct ID for non-URI" {
     defer allocator.free(result);
 
     try std.testing.expectEqualStrings("req.001", result);
+}
+
+test "URI parse handles edge cases" {
+    const allocator = std.testing.allocator;
+
+    const test_cases = [_]struct {
+        uri: []const u8,
+        should_fail: bool,
+        expected_cortex: ?[]const u8,
+        expected_neurona: ?[]const u8,
+        expected_error: ?anyerror,
+    }{
+        .{ .uri = "neurona://ctx/n1", .should_fail = false, .expected_cortex = "ctx", .expected_neurona = "n1", .expected_error = null },
+        .{ .uri = "neurona://my.cortex/req.auth.001", .should_fail = false, .expected_cortex = "my.cortex", .expected_neurona = "req.auth.001", .expected_error = null },
+        .{ .uri = "neurona://c/n", .should_fail = false, .expected_cortex = "c", .expected_neurona = "n", .expected_error = null },
+        .{ .uri = "http://example.com", .should_fail = true, .expected_cortex = null, .expected_neurona = null, .expected_error = SchemeError.InvalidScheme },
+        .{ .uri = "neurona:/invalid", .should_fail = true, .expected_cortex = null, .expected_neurona = null, .expected_error = SchemeError.InvalidScheme },
+        .{ .uri = "neurona:///", .should_fail = true, .expected_cortex = null, .expected_neurona = null, .expected_error = SchemeError.MissingComponent },
+    };
+
+    for (test_cases) |tc| {
+        const result = URI.parse(allocator, tc.uri);
+        if (tc.should_fail) {
+            if (tc.expected_error) |err| {
+                try std.testing.expectError(err, result);
+            }
+        } else {
+            var uri = try result;
+            defer uri.deinit(allocator);
+            if (tc.expected_cortex) |ec| {
+                try std.testing.expectEqualStrings(ec, uri.cortex_id);
+            }
+            if (tc.expected_neurona) |en| {
+                try std.testing.expectEqualStrings(en, uri.neurona_id);
+            }
+        }
+    }
+}
+
+test "URI deinit cleans up all memory" {
+    const allocator = std.testing.allocator;
+
+    var uri = try URI.parse(allocator, "neurona://test_cortex/test_neurona");
+    uri.deinit(allocator);
+
+    // No memory leak assertion needed - GPA will catch in tests
+}
+
+test "resolveOrFallback handles empty string" {
+    const allocator = std.testing.allocator;
+
+    const input = "";
+    const result = try resolveOrFallback(allocator, input, "neuronas");
+    defer allocator.free(result);
+
+    try std.testing.expectEqualStrings("", result);
 }

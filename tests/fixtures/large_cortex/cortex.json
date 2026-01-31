@@ -1,0 +1,16 @@
+{
+  "id": "large_cortex",
+  "name": "Large Test Cortex (10K files)",
+  "version": "0.1.0",
+  "spec_version": "0.1.0",
+  "capabilities": {
+    "type": "zettelkasten",
+    "semantic_search": false,
+    "llm_integration": false,
+    "default_language": "en"
+  },
+  "indices": {
+    "strategy": "lazy",
+    "embedding_model": "none"
+  }
+}

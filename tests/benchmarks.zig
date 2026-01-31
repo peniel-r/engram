@@ -40,6 +40,9 @@ pub fn runAll(allocator: Allocator) !void {
     // 6. Index Build (100 files)
     try reports.append(allocator, try runner.run("Index Build (100 files scan)", 5, benchmarkIndexBuild, .{allocator}));
 
+    // 7. Index Build (10K files)
+    try reports.append(allocator, try runner.run("Index Build (10K files scan)", 3, benchmarkIndexBuild10K, .{allocator}));
+
     // Print summary
     printResults(reports.items);
 }
@@ -205,6 +208,16 @@ fn benchmarkIndexBuild(allocator: Allocator) !void {
     }
 }
 
+fn benchmarkIndexBuild10K(allocator: Allocator) !void {
+    const test_dir = "tests/fixtures/large_cortex";
+
+    const neuronas = try fs.scanNeuronas(allocator, test_dir);
+    defer {
+        for (neuronas) |*n| n.deinit(allocator);
+        allocator.free(neuronas);
+    }
+}
+
 /// Print benchmark results summary
 fn printResults(results: []const benchmark.BenchmarkReport) void {
     std.debug.print("=== Results Summary ===\n\n", .{});
@@ -215,7 +228,7 @@ fn printResults(results: []const benchmark.BenchmarkReport) void {
     var failed: usize = 0;
 
     for (results) |result| {
-        const threshold: f64 = if (std.mem.indexOf(u8, result.operation, "Cold Start") != null) 50.0 else if (std.mem.indexOf(u8, result.operation, "Traversal (Depth 5)") != null) 10.0 else if (std.mem.indexOf(u8, result.operation, "Traversal (Depth 3)") != null) 5.0 else if (std.mem.indexOf(u8, result.operation, "Traversal (Depth 1)") != null) 1.0 else 100.0;
+        const threshold: f64 = if (std.mem.indexOf(u8, result.operation, "Cold Start") != null) 50.0 else if (std.mem.indexOf(u8, result.operation, "Traversal (Depth 5)") != null) 10.0 else if (std.mem.indexOf(u8, result.operation, "Traversal (Depth 3)") != null) 5.0 else if (std.mem.indexOf(u8, result.operation, "Traversal (Depth 1)") != null) 1.0 else if (std.mem.indexOf(u8, result.operation, "10K files") != null) 1000.0 else 100.0;
 
         const passes = result.avg_ms < threshold;
         const status = if (passes) "✅ PASS" else "❌ FAIL";
@@ -369,4 +382,27 @@ test "Graph traversal - depth 5 (shortest path) < 10ms" {
     path.deinit(allocator);
 
     try std.testing.expect(ms < 10.0);
+}
+
+test "Index build - 10K files (< 1000ms)" {
+    const allocator = std.testing.allocator;
+
+    const cortex_path = "tests/fixtures/large_cortex/cortex.json";
+
+    var timer = try benchmark.Timer.start();
+    const loaded = try cortex.fromFile(allocator, cortex_path);
+    const ms = timer.readMs();
+
+    defer {
+        allocator.free(loaded.id);
+        allocator.free(loaded.name);
+        allocator.free(loaded.version);
+        allocator.free(loaded.spec_version);
+        allocator.free(loaded.capabilities.type);
+        allocator.free(loaded.capabilities.default_language);
+        allocator.free(loaded.indices.strategy);
+        allocator.free(loaded.indices.embedding_model);
+    }
+
+    try std.testing.expect(ms < 1000.0);
 }

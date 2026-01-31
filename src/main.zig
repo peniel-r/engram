@@ -1037,7 +1037,8 @@ fn printShowHelp() void {
         \\  engram show <id> [options]
         \\
         \\Arguments:
-        \\  id                Neurona ID (required)
+        \\  id                Neurona ID or URI (required)
+        \\                    Format: neurona://<cortex>/<neurona-id>
         \\
         \\Options:
         \\  --no-connections  Don't show connections
@@ -1046,6 +1047,7 @@ fn printShowHelp() void {
         \\
         \\Examples:
         \\  engram show test.001
+        \\  engram show neurona://my_cortex/req.auth.001
         \\  engram show req.auth.oauth2 --no-body
         \\  engram show test.oauth.001 --json
         \\
@@ -1060,8 +1062,9 @@ fn printLinkHelp() void {
         \\  engram link <source_id> <target_id> <type> [options]
         \\
         \\Arguments:
-        \\  source_id         ID of the source Neurona
-        \\  target_id         ID of the target Neurona
+        \\  source_id         ID or URI of the source Neurona
+        \\                    Format: neurona://<cortex>/<neurona-id>
+        \\  target_id         ID or URI of the target Neurona
         \\  type              Type of connection (e.g., parent, relates_to, validates)
         \\
         \\Options:
@@ -1071,6 +1074,7 @@ fn printLinkHelp() void {
         \\
         \\Examples:
         \\  engram link note.1 note.2 relates_to
+        \\  engram link neurona://ctx1/n1 neurona://ctx1/n2 relates_to
         \\  engram link req.auth test.auth validates --bidirectional
         \\
     , .{});
@@ -1103,7 +1107,8 @@ fn printTraceHelp() void {
         \\  engram trace <neurona_id> [options]
         \\
         \\Arguments:
-        \\  neurona_id       ID of Neurona to trace from (required)
+        \\  neurona_id       ID or URI of Neurona to trace from (required)
+        \\                    Format: neurona://<cortex>/<neurona-id>
         \\
         \\Options:
         \\  --up, -u         Trace upstream (parents/dependencies) instead of downstream
@@ -1113,6 +1118,7 @@ fn printTraceHelp() void {
         \\
         \\Examples:
         \\  engram trace req.auth
+        \\  engram trace neurona://my_cortex/req.auth.001
         \\  engram trace req.auth --up
         \\  engram trace req.auth --depth 3
         \\

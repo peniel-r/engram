@@ -17,3 +17,4 @@ zig-out/
 # ---> Testing
 test_existing_cortex/
 test_force_cortex/
+test/fixtures/large_cortex/*.md
