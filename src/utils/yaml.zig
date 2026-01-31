@@ -29,12 +29,12 @@ pub const Value = union(enum) {
             },
             .object => |*obj_opt| {
                 if (obj_opt.*) |*obj| {
+                    // Deinitialize all values recursively
                     var it = obj.iterator();
                     while (it.next()) |entry| {
-                        // Just deinit the values recursively
                         entry.value_ptr.deinit(allocator);
                     }
-                    // Free the internal bucket array of the nested HashMap
+                    // Free the HashMap's internal bucket array
                     obj.deinit();
                 }
             },
