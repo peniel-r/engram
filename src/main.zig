@@ -1059,7 +1059,7 @@ fn printUsage() void {
         \\Commands:
         \\  init              Initialize a new Cortex
         \\  new               Create a new Neurona
-        \\  show              Display a Neurona
+        \\  show              Display a Neurona (use "config" to open config)
         \\  link              Create connections between Neuronas
         \\  delete            Delete a Neurona
         \\  sync              Rebuild graph index
@@ -1175,6 +1175,7 @@ fn printShowHelp() void {
         \\Arguments:
         \\  id                Neurona ID or URI (required)
         \\                    Format: neurona://<cortex>/<neurona-id>
+        \\                    Use "config" to open the configuration file
         \\
         \\Options:
         \\  --no-connections  Don't show connections
@@ -1186,6 +1187,7 @@ fn printShowHelp() void {
         \\  engram show neurona://my_cortex/req.auth.001
         \\  engram show req.auth.oauth2 --no-body
         \\  engram show test.oauth.001 --json
+        \\  engram show config
         \\
     , .{});
 }

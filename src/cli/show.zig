@@ -1,6 +1,7 @@
 // File: src/cli/show.zig
 // The `engram show` command for displaying Neuronas
 // Displays Neurona content with connections
+// Also supports `engram show config` to open configuration file
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -8,6 +9,8 @@ const NeuronaType = @import("../core/neurona.zig").NeuronaType;
 const Neurona = @import("../core/neurona.zig").Neurona;
 const readNeurona = @import("../storage/filesystem.zig").readNeurona;
 const uri_parser = @import("../utils/uri_parser.zig");
+const config_util = @import("../utils/config.zig");
+const editor_util = @import("../utils/editor.zig");
 
 /// Display configuration
 pub const ShowConfig = struct {
@@ -19,6 +22,25 @@ pub const ShowConfig = struct {
 
 /// Main command handler
 pub fn execute(allocator: Allocator, config: ShowConfig) !void {
+    // Handle special "config" case
+    if (std.mem.eql(u8, config.id, "config")) {
+        const config_path = try config_util.getConfigFilePath(allocator);
+        defer allocator.free(config_path);
+
+        // Ensure config file exists, create default if not
+        _ = std.fs.cwd().openFile(config_path, .{}) catch {
+            try config_util.createDefaultConfigFile(allocator);
+        };
+
+        // Load config to get editor preference
+        var app_config = try config_util.loadConfig(allocator);
+        defer app_config.deinit(allocator);
+
+        std.debug.print("Opening config file: {s}\n", .{config_path});
+        try editor_util.open(allocator, config_path, app_config.editor);
+        return;
+    }
+
     // Resolve URI or use direct ID
     var resolved_id: ?[]const u8 = null;
     if (uri_parser.URI.isURI(config.id)) {
@@ -82,6 +104,7 @@ fn findNeuronaPath(allocator: Allocator, directory: []const u8, id: []const u8) 
 /// Read file body content (markdown after frontmatter)
 fn readBodyContent(allocator: Allocator, filepath: []const u8) ![]const u8 {
     const content = try std.fs.cwd().readFileAlloc(allocator, filepath, 10 * 1024 * 1024);
+    defer allocator.free(content); // Fix: Free the temporary content buffer
 
     // Find end of frontmatter (second ---)
     const second_delim = std.mem.indexOfPos(u8, content, 0, "\n---") orelse return error.InvalidFormat;
@@ -128,7 +151,7 @@ fn outputHuman(neurona: *const Neurona, body: []const u8, show_connections: bool
     std.debug.print("  Language: {s}\n", .{neurona.language});
 
     // Body
-    if (show_body) {
+    if (show_body and body.len > 0) {
         std.debug.print("\n", .{});
         for (0..50) |_| std.debug.print("=", .{});
         std.debug.print("\n", .{});
@@ -136,6 +159,8 @@ fn outputHuman(neurona: *const Neurona, body: []const u8, show_connections: bool
         std.debug.print("\n", .{});
         for (0..50) |_| std.debug.print("=", .{});
         std.debug.print("\n", .{});
+    } else if (show_body) {
+        std.debug.print("\n  (No body content)\n", .{});
     }
 }
 

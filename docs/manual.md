@@ -352,6 +352,196 @@ engram status --sort-by created
 
 ---
 
+## Configuration
+
+Engram uses a YAML configuration file to store user preferences and default settings. This makes it easy to customize your workflow without needing to specify options repeatedly.
+
+### Configuration File Location
+
+The configuration file is located at:
+- **Linux/Mac:** `~/.config/engram/engram-config.yaml`
+- **Windows:** `%USERPROFILE%\.config\engram\engram-config.yaml`
+
+The configuration file is automatically created with default values the first time you use Engram.
+
+### Opening the Configuration File
+
+The easiest way to edit your configuration is with the `open-config` command:
+
+```bash
+# Open config file in your default text editor
+engram open-config
+
+# With verbose output to see file location
+engram open-config --verbose
+```
+
+This will open the configuration file in your configured text editor (helix by default).
+
+### Configuration Options
+
+The configuration file supports the following options:
+
+```yaml
+# Engram Configuration File
+# This file controls default behavior for Engram CLI
+
+# Default text editor for opening files (e.g., helix, vim, nvim, code)
+text-editor: helix
+
+# Default artifact type when creating new neuronas
+# Options: feature, requirement, test_case, issue, artifact
+default-artifact-type: feature
+
+# Default directory for neuronas storage
+neuronas-dir: neuronas
+
+# Enable verbose output by default
+verbose-output: false
+
+# Enable JSON output by default (for AI agent integration)
+json-output: false
+```
+
+#### text-editor
+
+Specifies the default text editor to use when opening files.
+
+**Common values:**
+- `helix` - Modern, modal editor (default)
+- `vim` - Classic modal editor
+- `nvim` - Neovim editor
+- `code` - VS Code
+- `nano` - Simple terminal editor
+
+**Example:**
+```yaml
+text-editor: code
+```
+
+#### default-artifact-type
+
+Sets the default type when creating new Neuronas. This is useful if you primarily work with one type of artifact.
+
+**Options:**
+- `feature` - Group of related requirements
+- `requirement` - What needs to be built
+- `test_case` - How to verify something works
+- `issue` - Problems or bugs
+- `artifact` - Code files or scripts
+
+**Example:**
+```yaml
+# If you mostly write requirements
+default-artifact-type: requirement
+```
+
+Then you can create requirements more quickly:
+```bash
+engram new "Support User Login"  # Creates a requirement automatically
+```
+
+#### neuronas-dir
+
+Specifies the default directory where Neuronas are stored.
+
+**Default:** `neuronas`
+
+**Example:**
+```yaml
+# Use a different directory name
+neuronas-dir: docs
+```
+
+#### verbose-output
+
+Enable verbose output by default for all commands.
+
+**Default:** `false`
+
+**Example:**
+```yaml
+verbose-output: true
+```
+
+#### json-output
+
+Enable JSON output by default. This is particularly useful for AI agents and automated workflows.
+
+**Default:** `false`
+
+**Example:**
+```yaml
+json-output: true
+```
+
+With this enabled, commands like `engram status` will output JSON by default, making it easier to integrate with AI agents and CI/CD pipelines.
+
+### Example Configuration
+
+Here's a complete example configuration for a developer who uses VS Code and primarily works with requirements:
+
+```yaml
+# Engram Configuration File
+
+# Use VS Code as my editor
+text-editor: code
+
+# I mostly write requirements
+default-artifact-type: requirement
+
+# Standard neuronas directory
+neuronas-dir: neuronas
+
+# Enable verbose output
+verbose-output: true
+
+# Enable JSON for AI integration
+json-output: false
+```
+
+### Manually Editing the Configuration
+
+You can also edit the configuration file directly with any text editor:
+
+```bash
+# Open with your preferred editor
+code ~/.config/engram/engram-config.yaml  # Linux/Mac
+code %USERPROFILE%\.config\engram\engram-config.yaml  # Windows
+```
+
+After editing, the changes take effect immediately for new commands.
+
+### Benefits of Configuration
+
+Using the configuration file provides several benefits:
+
+1. **Consistency**: Set your preferences once and they apply everywhere
+2. **Efficiency**: Skip typing common options repeatedly
+3. **Team Standardization**: Share configuration files with team members
+4. **AI Integration**: Configure JSON output for seamless AI agent workflows
+5. **Editor Preference**: Use your favorite editor without specifying it each time
+
+### Configuration for AI Agents
+
+For AI agents and automated workflows, consider this configuration:
+
+```yaml
+# AI-Optimized Configuration
+
+text-editor: helix
+default-artifact-type: feature
+neuronas-dir: neuronas
+verbose-output: false
+
+# Enable JSON by default for AI parsing
+json-output: true
+```
+
+With `json-output: true`, AI agents can automatically parse all command outputs without needing to specify `--json` every time.
+
+---
+
 ## Creating Project Artifacts
 
 ### Creating a Neurona
@@ -1415,7 +1605,7 @@ Engram files are just Markdown files. You can:
 | `show` | View a Neurona |
 | `link` | Connect two Neuronas |
 | `delete` | Delete a Neurona |
-| `sync` | Rebuild the graph index |
+| `sync` | Rebuild graph index |
 | `trace` | View dependency chains |
 | `status` | List Neuronas with filtering |
 | `query` | Search and filter Neuronas |
@@ -1424,6 +1614,7 @@ Engram files are just Markdown files. You can:
 | `link-artifact` | Link code files to requirements |
 | `release-status` | Check release readiness |
 | `metrics` | View project statistics |
+| `open-config` | Open configuration file |
 
 ### All Neurona Types
 
