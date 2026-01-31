@@ -52,13 +52,7 @@ pub fn readNeurona(allocator: Allocator, filepath: []const u8) !Neurona {
 
     // Parse YAML
     var yaml_data = try yaml.Parser.parse(allocator, fm.content);
-    defer {
-        var it = yaml_data.iterator();
-        while (it.next()) |entry| {
-            entry.value_ptr.deinit(allocator);
-        }
-        yaml_data.deinit();
-    }
+    defer yaml_data.deinit();
 
     // Validate that connections are only in frontmatter (not in body)
     try validator.validateConnectionsLocation(fm.body);

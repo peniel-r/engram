@@ -29,12 +29,31 @@ pub const Value = union(enum) {
             },
             .object => |*obj_opt| {
                 if (obj_opt.*) |*obj| {
-                    // Deinitialize all values recursively
                     var it = obj.iterator();
                     while (it.next()) |entry| {
-                        entry.value_ptr.deinit(allocator);
+                        const value = entry.value_ptr.*;
+                        switch (value) {
+                            .string => |s| allocator.free(s),
+                            .array => |arr| {
+                                for (arr.items) |*v| {
+                                    v.deinit(allocator);
+                                }
+                                var mut_arr = arr;
+                                mut_arr.deinit(allocator);
+                            },
+                            .object => |nested_opt| {
+                                if (nested_opt) |nested_obj| {
+                                    var nit = nested_obj.iterator();
+                                    while (nit.next()) |nentry| {
+                                        nentry.value_ptr.deinit(allocator);
+                                    }
+                                    var mut_nested = nested_obj;
+                                    mut_nested.deinit();
+                                }
+                            },
+                            else => {},
+                        }
                     }
-                    // Free the HashMap's internal bucket array
                     obj.deinit();
                 }
             },
