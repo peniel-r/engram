@@ -123,4 +123,3 @@ To support the discussed domains, Engram will ship with standard "Flavors" embed
 ### Phase 3: The Cortex (Intelligence)
 *   [ ] Vector Embeddings (via C-interop with llama.cpp or similar).
 *   [ ] Natural Language Querying.
-*   [ ] `engram run` for executing code artifacts.

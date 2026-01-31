@@ -39,7 +39,6 @@ The Engram CLI currently fulfills the core requirements for a high-performance, 
 ## 3. Gaps and Roadmap
 
 ### 3.1 Missing Tier 3 Features
-*   **`engram run <id>`**: Not yet implemented. This "Phase 3" feature for executing context-aware artifacts is pending.
 *   **`engram metrics`**: The high-level dashboard command (Flow 8) is missing, though `release-status --json` provides the raw data for such reports.
 
 ### 3.2 Use Case Refinements

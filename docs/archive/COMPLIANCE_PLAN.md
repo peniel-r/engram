@@ -470,77 +470,7 @@ The nested object format specified in the Neurona spec requires a more sophistic
 
 **Goal**: Reach 95%+ compliance by implementing Phase 3 features.
 
-### Issue 3.1: Implement `engram run` Command
-
-**Status**: ❌ Not Implemented  
-**Impact**: Cannot execute code artifacts (Phase 3 feature)  
-**Effort**: 8-10 hours  
-**Priority**: LOW
-
-#### Implementation Steps
-
-1. **Create `src/cli/run.zig`** - New command module:
-
-   ```zig
-   pub const RunConfig = struct {
-       neurona_id: []const u8,
-       trigger: ?[]const u8,
-       sandbox: bool = false,
-       timeout_seconds: u32 = 30,
-   };
-
-   pub fn execute(allocator: Allocator, config: RunConfig) !void {
-       // Load Neurona by ID
-       // Check type == artifact or type == state_machine
-       // Verify context.safe_to_exec == true
-       // Execute code or run state machine
-   };
-   ```
-
-2. **For Artifacts**:
-   - Read file from `context.file_path`
-   - Use runtime specified in `context.runtime`
-   - Support: `zig`, `python`, `node`, `bash`
-   - Capture and display output
-   - Handle execution errors
-
-3. **For State Machines**:
-   - Load state machine definition from `context`
-   - Execute `entry_action`
-   - Process triggers
-   - Execute `exit_action`
-   - Validate allowed roles
-
-4. **Safety Features**:
-   - Sandbox execution (chroot, namespaces) - optional but recommended
-   - Timeout enforcement (default 30s, configurable)
-   - Resource limits (memory, CPU)
-   - User confirmation before executing (optional)
-
-5. **Register Command**:
-   - Update `src/main.zig` to add `engram run` to command registry
-   - Add help text: `engram run <neurona_id> [options]`
-
-6. **CLI Interface**:
-
-   ```bash
-   engram run artifact.build.backend --runtime node
-   engram run sm.auth.logged_in --trigger logout
-   engram run artifact.test.api --sandbox --timeout 60
-   ```
-
-**Success Criteria**:
-
-- ✅ `engram run` command implemented
-- ✅ Artifact execution working
-- ✅ State machine execution working
-- ✅ Safety features (sandbox, timeout, confirmation)
-- ✅ Support for multiple runtimes
-- ✅ Registered in CLI and documented
-
----
-
-### Issue 3.2: Add URI Scheme Support
+### Issue 3.1: Add URI Scheme Support
 
 **Status**: ❌ Not Implemented  
 **Impact**: Cannot reference Neuronas by URI (`neurona://<cortex-id>/<neurona-id>`); limited to direct IDs  
@@ -622,8 +552,7 @@ The nested object format specified in the Neurona spec requires a more sophistic
 
 ### Week 3: LOW PRIORITY
 
-- Day 1-4: Issue 3.1 - `engram run` Command
-- Day 5: Issue 3.2 - URI Scheme Support
+- Day 1-5: Issue 3.1 - URI Scheme Support
 - **Deliverable**: Phase 3 features complete, 95%+ compliance
 
 ---
@@ -649,9 +578,6 @@ The nested object format specified in the Neurona spec requires a more sophistic
 
 ### Phase 3 Complete When
 
-- ✅ `engram run` command working
-- ✅ Artifact and state machine execution
-- ✅ Safety features (sandbox, timeout) implemented
 - ✅ URI scheme parsing and resolution
 - ✅ Commands accept URI format
 - ✅ Documentation complete
@@ -673,8 +599,8 @@ The nested object format specified in the Neurona spec requires a more sophistic
 |--------|---------|-------------|
 | Phase 1 (HIGH) | 4 | 20-28 hours |
 | Phase 2 (MEDIUM) | 3 | 13-17 hours |
-| Phase 3 (LOW) | 2 | 12-15 hours |
-| **Total** | **9** | **45-60 hours** (~6-8 days focused work) |
+| Phase 3 (LOW) | 1 | 4-5 hours |
+| **Total** | **8** | **37-50 hours** (~5-7 days focused work) |
 
 ---
 
