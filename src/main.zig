@@ -16,6 +16,7 @@ const update_cmd = @import("cli/update.zig");
 const impact_cmd = @import("cli/impact.zig");
 const link_artifact_cmd = @import("cli/link_artifact.zig");
 const release_status_cmd = @import("cli/release_status.zig");
+const metrics_cmd = @import("cli/metrics.zig");
 
 // Command registry
 const Command = struct {
@@ -103,6 +104,12 @@ const commands = [_]Command{
         .description = "Release readiness check",
         .handler = handleReleaseStatus,
         .help_fn = printReleaseStatusHelp,
+    },
+    .{
+        .name = "metrics",
+        .description = "Display project metrics",
+        .handler = handleMetrics,
+        .help_fn = printMetricsHelp,
     },
 };
 
@@ -920,6 +927,54 @@ fn handleReleaseStatus(allocator: Allocator, args: []const []const u8) !void {
     try release_status_cmd.execute(allocator, config);
 }
 
+fn handleMetrics(allocator: Allocator, args: []const []const u8) !void {
+    var config = metrics_cmd.MetricsConfig{
+        .since_date = null,
+        .last_days = null,
+        .json_output = false,
+        .verbose = false,
+        .neuronas_dir = "neuronas",
+    };
+
+    var i: usize = 2;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+
+        if (std.mem.eql(u8, arg, "--since")) {
+            if (i + 1 >= args.len) {
+                std.debug.print("Error: --since requires a value\n", .{});
+                printMetricsHelp();
+                std.process.exit(1);
+            }
+            i += 1;
+            config.since_date = args[i];
+        } else if (std.mem.eql(u8, arg, "--last")) {
+            if (i + 1 >= args.len) {
+                std.debug.print("Error: --last requires a value\n", .{});
+                printMetricsHelp();
+                std.process.exit(1);
+            }
+            i += 1;
+            const days_str = args[i];
+            config.last_days = std.fmt.parseInt(u32, days_str, 10) catch {
+                std.debug.print("Error: Invalid days value '{s}'\n", .{days_str});
+                printMetricsHelp();
+                std.process.exit(1);
+            };
+        } else if (std.mem.eql(u8, arg, "--json") or std.mem.eql(u8, arg, "-j")) {
+            config.json_output = true;
+        } else if (std.mem.eql(u8, arg, "--verbose") or std.mem.eql(u8, arg, "-v")) {
+            config.verbose = true;
+        } else if (std.mem.startsWith(u8, arg, "-")) {
+            std.debug.print("Error: Unknown flag '{s}'\n", .{arg});
+            printMetricsHelp();
+            std.process.exit(1);
+        }
+    }
+
+    try metrics_cmd.execute(allocator, config);
+}
+
 // Help functions
 
 fn printUsage() void {
@@ -938,6 +993,7 @@ fn printUsage() void {
         \\  impact            Impact analysis
         \\  link-artifact     Link source files
         \\  release-status    Release readiness check
+        \\  metrics           Display project metrics
         \\  --help, -h        Show this help message
         \\  --version, -v     Show version information
         \\
@@ -967,6 +1023,7 @@ fn printHelp() void {
         \\  impact            Impact analysis
         \\  link-artifact     Link source files
         \\  release-status    Release readiness check
+        \\  metrics           Display project metrics
         \\  --help, -h        Show this help message
         \\  --version, -v     Show version information
         \\
@@ -1332,6 +1389,28 @@ fn printReleaseStatusHelp() void {
     , .{});
 }
 
+fn printMetricsHelp() void {
+    std.debug.print(
+        \\Display project metrics
+        \\
+        \\Usage:
+        \\  engram metrics [options]
+        \\
+        \\Options:
+        \\  --since           Show metrics since date (format: YYYY-MM-DD)
+        \\  --last            Show metrics for last N days
+        \\  --json, -j       Output as JSON
+        \\  --verbose, -v    Show verbose output
+        \\
+        \\Examples:
+        \\  engram metrics
+        \\  engram metrics --since 2026-01-01
+        \\  engram metrics --last 7
+        \\  engram metrics --json
+        \\
+    , .{});
+}
+
 fn printVersion() void {
     std.debug.print("Engram version 0.1.0\n", .{});
 }
@@ -1352,6 +1431,7 @@ test {
     _ = @import("cli/impact.zig");
     _ = @import("cli/link_artifact.zig");
     _ = @import("cli/release_status.zig");
+    _ = @import("cli/metrics.zig");
 }
 
 test "Command registry contains all expected commands" {
@@ -1372,10 +1452,11 @@ test "Command registry contains all expected commands" {
         "impact",
         "link-artifact",
         "release-status",
+        "metrics",
     };
 
-    // Verify we have 13 commands
-    try std.testing.expectEqual(@as(usize, 13), expected_commands.len);
+    // Verify we have 14 commands
+    try std.testing.expectEqual(@as(usize, 14), expected_commands.len);
 }
 
 test "Help functions print usage information" {
