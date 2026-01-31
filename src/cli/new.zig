@@ -247,7 +247,7 @@ pub fn execute(allocator: Allocator, config: NewConfig) !void {
         try outputHuman(neurona_id, filename, config, connections.items);
 
         if (config.interactive) {
-            _ = try editor.open(allocator, filename);
+            _ = try editor.open(allocator, filename, null);
         }
     }
 }
@@ -410,7 +410,7 @@ fn writeNeuronaFile(path: []const u8, content: []const u8) !void {
     // Ensure the directory exists
     const dir_path = std.fs.path.dirname(path) orelse ".";
     try std.fs.cwd().makePath(dir_path);
-    
+
     const file = try std.fs.cwd().createFile(path, .{});
     defer file.close();
     try file.writeAll(content);

@@ -3,16 +3,68 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-/// Open file in system's default editor
-/// Uses $EDITOR environment variable if set, otherwise uses platform default
-pub fn open(allocator: Allocator, path: []const u8) !void {
-    const editor = try getEditorCommand(allocator);
+/// Open file in specified editor
+/// If editor is null, uses $EDITOR environment variable or platform default
+/// If specified editor is not installed, falls back to environment variable
+pub fn open(allocator: Allocator, path: []const u8, editor_opt: ?[]const u8) !void {
+    var editor = if (editor_opt) |e|
+        try allocator.dupe(u8, e)
+    else
+        try getEditorCommand(allocator);
     defer allocator.free(editor);
+
+    // Check if editor is available, fallback if not
+    if (editor_opt != null and !isEditorAvailable(allocator, editor)) {
+        std.debug.print("Warning: Editor '{s}' not found, falling back to default\n", .{editor});
+        allocator.free(editor);
+        editor = try getEditorCommand(allocator);
+    }
 
     const command = try buildCommand(allocator, editor, path);
     defer allocator.free(command);
 
     return runCommand(allocator, command);
+}
+
+/// Check if editor command is available on the system
+fn isEditorAvailable(allocator: Allocator, editor: []const u8) bool {
+    const os_tag = builtin.os.tag;
+
+    return switch (os_tag) {
+        .windows => isCommandAvailableWindows(editor),
+        .linux, .macos => isCommandAvailableUnix(allocator, editor),
+        else => true, // Assume available on unknown platforms
+    };
+}
+
+/// Check if command is available on Windows
+fn isCommandAvailableWindows(command: []const u8) bool {
+    // Use "where" command to check if executable exists
+    const result = std.process.Child.run(.{
+        .allocator = std.heap.page_allocator,
+        .argv = &[_][]const u8{ "cmd", "/c", "where", command },
+    }) catch return false;
+    defer {
+        std.heap.page_allocator.free(result.stdout);
+        std.heap.page_allocator.free(result.stderr);
+    }
+
+    return result.term.Exited == 0 and result.stdout.len > 0;
+}
+
+/// Check if command is available on Unix (Linux/macOS)
+fn isCommandAvailableUnix(allocator: Allocator, command: []const u8) bool {
+    // Use "which" command to check if executable exists
+    const result = std.process.Child.run(.{
+        .allocator = allocator,
+        .argv = &[_][]const u8{ "which", command },
+    }) catch return false;
+    defer {
+        allocator.free(result.stdout);
+        allocator.free(result.stderr);
+    }
+
+    return result.term.Exited == 0 and result.stdout.len > 0;
 }
 
 /// Get editor command from environment or platform default
@@ -51,52 +103,66 @@ fn buildCommand(allocator: Allocator, editor: []const u8, path: []const u8) ![]c
     return std.fmt.allocPrint(allocator, "{s} {s}", .{ editor, escaped_path });
 }
 
-/// Run command and wait for completion
-fn runCommand(allocator: Allocator, command: []const u8) !void {
-    const os_tag = builtin.os.tag;
-
-    return switch (os_tag) {
-        .windows => runWindows(allocator, command),
-        .linux, .macos => runUnix(allocator, command),
-        else => error.UnsupportedPlatform,
+/// Check if editor is terminal-based (needs to be waited for)
+fn isTerminalBasedEditor(editor: []const u8) bool {
+    const terminal_editors = [_][]const u8{
+        "vim",    "vi",
+        "helix",  "hx",
+        "neovim", "nvim",
+        "nano",   "emacs",
+        "joe",    "pico",
+        "ed",
     };
+
+    for (terminal_editors) |term_editor| {
+        if (std.ascii.eqlIgnoreCase(editor, term_editor)) {
+            return true;
+        }
+    }
+    return false;
 }
 
-/// Run command on Windows
-fn runWindows(allocator: Allocator, command: []const u8) !void {
+/// Run command - wait for terminal-based editors, spawn GUI editors in background
+fn runCommand(allocator: Allocator, command: []const u8) !void {
+    const os_tag = builtin.os.tag;
     const argv = try parseCommandArgs(allocator, command);
     defer {
         for (argv) |arg| allocator.free(arg);
         allocator.free(argv);
     }
 
-    const result = try std.process.Child.run(.{
-        .allocator = allocator,
-        .argv = argv,
-    });
-    defer {
-        allocator.free(result.stdout);
-        allocator.free(result.stderr);
-    }
+    const editor_name = argv[0];
+    const should_wait = isTerminalBasedEditor(editor_name);
 
-    _ = result.term; // Wait for completion
+    return switch (os_tag) {
+        .windows => runWindows(allocator, argv, should_wait),
+        .linux, .macos => runUnix(allocator, argv, should_wait),
+        else => error.UnsupportedPlatform,
+    };
+}
+
+/// Run command on Windows
+fn runWindows(allocator: Allocator, argv: [][]const u8, should_wait: bool) !void {
+    var child = std.process.Child.init(argv, allocator);
+
+    if (should_wait) {
+        _ = try child.spawnAndWait();
+    } else {
+        try child.spawn();
+        std.debug.print("\n", .{});
+    }
 }
 
 /// Run command on Unix (Linux, macOS)
-fn runUnix(allocator: Allocator, command: []const u8) !void {
-    // Use sh -c to execute command
-    const argv = [_][]const u8{ "sh", "-c", command };
+fn runUnix(allocator: Allocator, argv: [][]const u8, should_wait: bool) !void {
+    var child = std.process.Child.init(argv, allocator);
 
-    const result = try std.process.Child.run(.{
-        .allocator = allocator,
-        .argv = &argv,
-    });
-    defer {
-        allocator.free(result.stdout);
-        allocator.free(result.stderr);
+    if (should_wait) {
+        _ = try child.spawnAndWait();
+    } else {
+        try child.spawn();
+        std.debug.print("\n", .{});
     }
-
-    _ = result.term; // Wait for completion
 }
 
 /// Parse command string into argv array

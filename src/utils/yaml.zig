@@ -288,18 +288,18 @@ pub const Parser = struct {
 
     /// Read a line from input
     fn readLine(self: *Parser) ?[]const u8 {
+        if (self.pos >= self.input.len) return null;
+
         const start = self.pos;
         while (self.pos < self.input.len and self.input[self.pos] != '\n') : (self.pos += 1) {}
 
-        if (self.pos > start) {
-            const line = self.input[start..self.pos];
-            if (self.pos < self.input.len and self.input[self.pos] == '\n') {
-                self.pos += 1; // Skip newline
-            }
-            return line;
+        const line = self.input[start..self.pos];
+
+        if (self.pos < self.input.len and self.input[self.pos] == '\n') {
+            self.pos += 1; // Skip newline
         }
 
-        return null;
+        return line;
     }
 
     /// Skip whitespace characters
