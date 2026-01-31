@@ -17,6 +17,7 @@ const impact_cmd = @import("cli/impact.zig");
 const link_artifact_cmd = @import("cli/link_artifact.zig");
 const release_status_cmd = @import("cli/release_status.zig");
 const metrics_cmd = @import("cli/metrics.zig");
+const man_cmd = @import("cli/man.zig");
 
 // Command registry
 const Command = struct {
@@ -110,6 +111,12 @@ const commands = [_]Command{
         .description = "Display project metrics",
         .handler = handleMetrics,
         .help_fn = printMetricsHelp,
+    },
+    .{
+        .name = "man",
+        .description = "Show manual",
+        .handler = handleMan,
+        .help_fn = printManHelp,
     },
 };
 
@@ -1020,6 +1027,31 @@ fn handleMetrics(allocator: Allocator, args: []const []const u8) !void {
     try metrics_cmd.execute(allocator, config);
 }
 
+fn handleMan(allocator: Allocator, args: []const []const u8) !void {
+    var config = man_cmd.ManConfig{
+        .html = false,
+    };
+
+    // Parse options
+    var i: usize = 2;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+
+        if (std.mem.eql(u8, arg, "--html")) {
+            config.html = true;
+        } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+            printManHelp();
+            return;
+        } else if (std.mem.startsWith(u8, arg, "-")) {
+            std.debug.print("Error: Unknown flag '{s}'\n", .{arg});
+            printManHelp();
+            std.process.exit(1);
+        }
+    }
+
+    try man_cmd.execute(allocator, config);
+}
+
 // Help functions
 
 fn printUsage() void {
@@ -1039,6 +1071,7 @@ fn printUsage() void {
         \\  link-artifact     Link source files
         \\  release-status    Release readiness check
         \\  metrics           Display project metrics
+        \\  man               Show manual
         \\  --help, -h        Show this help message
         \\  --version, -v     Show version information
         \\
@@ -1069,6 +1102,7 @@ fn printHelp() void {
         \\  link-artifact     Link source files
         \\  release-status    Release readiness check
         \\  metrics           Display project metrics
+        \\  man               Show manual
         \\  --help, -h        Show this help message
         \\  --version, -v     Show version information
         \\
@@ -1458,6 +1492,23 @@ fn printMetricsHelp() void {
 
 fn printVersion() void {
     std.debug.print("Engram version 0.1.0\n", .{});
+}
+
+fn printManHelp() void {
+    std.debug.print(
+        \\Show manual
+        \\
+        \\Usage:
+        \\  engram man [options]
+        \\
+        \\Options:
+        \\  --html            Open full manual in browser
+        \\
+        \\Examples:
+        \\  engram man         Show quick reference
+        \\  engram man --html  Open full manual in browser
+        \\
+    , .{});
 }
 
 // ==================== Tests ====================

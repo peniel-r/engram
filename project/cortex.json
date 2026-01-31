@@ -1,0 +1,16 @@
+{
+  "id": "project",
+  "name": "project",
+  "version": "0.1.0",
+  "spec_version": "0.1.0",
+  "capabilities": {
+    "type": "alm",
+    "semantic_search": true,
+    "llm_integration": true,
+    "default_language": "en"
+  },
+  "indices": {
+    "strategy": "lazy",
+    "embedding_model": "text-embedding-ada-002"
+  }
+}
