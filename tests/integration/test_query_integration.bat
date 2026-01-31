@@ -4,8 +4,11 @@ REM Tests all 5 query modes with CLI
 
 setlocal enabledelayedexpansion
 
+REM Change to project root directory
+cd /d "%~dp0..\.."
+
 set ENGRAM=zig-out\bin\engram.exe
-set NEURONAS_DIR=neuronas
+set NEURONAS_DIR=tests\fixtures\neuronas
 set TESTS_PASSED=0
 set TESTS_FAILED=0
 

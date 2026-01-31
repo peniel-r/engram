@@ -4,8 +4,12 @@
 
 set -e
 
+# Change to project root directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPT_DIR/../.."
+
 ENGRAM="./zig-out/bin/engram"
-NEURONAS_DIR="neuronas"
+NEURONAS_DIR="tests/fixtures/neuronas"
 
 echo "=========================================="
 echo "🧪 Query Integration Tests"
