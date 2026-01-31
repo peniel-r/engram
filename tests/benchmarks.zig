@@ -236,3 +236,68 @@ pub fn main() !void {
 
     try runAll(allocator);
 }
+
+test "Cold start - parse cortex.json (< 50ms)" {
+    const allocator = std.testing.allocator;
+
+    const test_dir = "test_cold_start";
+    try std.fs.cwd().makePath(test_dir);
+    defer std.fs.cwd().deleteTree(test_dir) catch {};
+
+    const cortex_config = try cortex.default(allocator, "test_cortex", "Test Cortex");
+    defer {
+        allocator.free(cortex_config.id);
+        allocator.free(cortex_config.name);
+        allocator.free(cortex_config.version);
+        allocator.free(cortex_config.spec_version);
+        allocator.free(cortex_config.capabilities.type);
+        allocator.free(cortex_config.capabilities.default_language);
+        allocator.free(cortex_config.indices.strategy);
+        allocator.free(cortex_config.indices.embedding_model);
+    }
+
+    const cortex_path = try std.fs.path.join(allocator, &.{ test_dir, "cortex.json" });
+    defer allocator.free(cortex_path);
+
+    const cortex_json = try std.fmt.allocPrint(allocator,
+        \\{{
+        \\  "id": "{s}",
+        \\  "name": "{s}",
+        \\  "version": "0.1.0",
+        \\  "spec_version": "0.1.0",
+        \\  "capabilities": {{
+        \\    "type": "zettelkasten",
+        \\    "semantic_search": false,
+        \\    "llm_integration": false,
+        \\    "default_language": "en"
+        \\  }},
+        \\  "indices": {{
+        \\    "strategy": "lazy",
+        \\    "embedding_model": "none"
+        \\  }}
+        \\}}
+    , .{ cortex_config.id, cortex_config.name });
+    defer allocator.free(cortex_json);
+
+    try std.fs.cwd().writeFile(.{
+        .sub_path = cortex_path,
+        .data = cortex_json,
+    });
+
+    var timer = try benchmark.Timer.start();
+    const loaded = try cortex.fromFile(allocator, cortex_path);
+    const ms = timer.readMs();
+
+    defer {
+        allocator.free(loaded.id);
+        allocator.free(loaded.name);
+        allocator.free(loaded.version);
+        allocator.free(loaded.spec_version);
+        allocator.free(loaded.capabilities.type);
+        allocator.free(loaded.capabilities.default_language);
+        allocator.free(loaded.indices.strategy);
+        allocator.free(loaded.indices.embedding_model);
+    }
+
+    try std.testing.expect(ms < 50.0);
+}
