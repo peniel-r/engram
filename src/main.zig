@@ -161,7 +161,34 @@ pub fn main() !void {
     std.process.exit(1);
 }
 
-// Command handlers
+// ==================== Error Handling Helpers ====================
+
+/// Handle NeuronaNotFound error gracefully
+/// Prints user-friendly error message and exits if the error is NeuronaNotFound
+/// Otherwise returns the error for further handling
+fn handleNeuronaNotFound(err: anyerror, id: []const u8) void {
+    if (err == error.NeuronaNotFound) {
+        std.debug.print("Error: Neurona '{s}' not found.\n", .{id});
+        std.debug.print("\nHint: Run 'engram status' to see all available neuronas.\n", .{});
+        std.process.exit(1);
+    }
+}
+
+/// Handle errors specific to link-artifact command
+/// Handles NeuronaNotFound and InvalidNeuronaType errors
+fn handleLinkArtifactError(err: anyerror, id: []const u8) void {
+    if (err == error.NeuronaNotFound) {
+        std.debug.print("Error: Neurona '{s}' not found.\n", .{id});
+        std.debug.print("\nHint: Run 'engram status' to see all available neuronas.\n", .{});
+        std.process.exit(1);
+    } else if (err == error.InvalidNeuronaType) {
+        std.debug.print("Error: '{s}' is not a requirement.\n", .{id});
+        std.debug.print("\nHint: link-artifact only works with requirement neuronas.\n", .{});
+        std.process.exit(1);
+    }
+}
+
+// ==================== Command Handlers ====================
 
 fn handleInit(allocator: Allocator, args: []const []const u8) !void {
     var name: ?[]const u8 = null;
@@ -368,7 +395,10 @@ fn handleShow(allocator: Allocator, args: []const []const u8) !void {
         }
     }
 
-    try show_cmd.execute(allocator, config);
+    show_cmd.execute(allocator, config) catch |err| {
+        handleNeuronaNotFound(err, config.id);
+        return err;
+    };
 }
 
 fn handleLink(allocator: Allocator, args: []const []const u8) !void {
@@ -525,7 +555,10 @@ fn handleTrace(allocator: Allocator, args: []const []const u8) !void {
         }
     }
 
-    try trace_cmd.execute(allocator, config);
+    trace_cmd.execute(allocator, config) catch |err| {
+        handleNeuronaNotFound(err, config.id);
+        return err;
+    };
 }
 
 fn handleStatus(allocator: Allocator, args: []const []const u8) !void {
@@ -637,7 +670,10 @@ fn handleDelete(allocator: Allocator, args: []const []const u8) !void {
         }
     }
 
-    try delete_cmd.execute(allocator, config);
+    delete_cmd.execute(allocator, config) catch |err| {
+        handleNeuronaNotFound(err, config.id);
+        return err;
+    };
 }
 
 fn handleQuery(allocator: Allocator, args: []const []const u8) !void {
@@ -780,7 +816,10 @@ fn handleUpdate(allocator: Allocator, args: []const []const u8) !void {
         }
     }
 
-    try update_cmd.execute(allocator, config);
+    update_cmd.execute(allocator, config) catch |err| {
+        handleNeuronaNotFound(err, config.id);
+        return err;
+    };
 }
 
 fn handleImpact(allocator: Allocator, args: []const []const u8) !void {
@@ -830,7 +869,10 @@ fn handleImpact(allocator: Allocator, args: []const []const u8) !void {
         }
     }
 
-    try impact_cmd.execute(allocator, config);
+    impact_cmd.execute(allocator, config) catch |err| {
+        handleNeuronaNotFound(err, config.id);
+        return err;
+    };
 }
 
 fn handleLinkArtifact(allocator: Allocator, args: []const []const u8) !void {
@@ -895,7 +937,10 @@ fn handleLinkArtifact(allocator: Allocator, args: []const []const u8) !void {
         }
     }
 
-    try link_artifact_cmd.execute(allocator, config);
+    link_artifact_cmd.execute(allocator, config) catch |err| {
+        handleLinkArtifactError(err, config.requirement_id);
+        return err;
+    };
 }
 
 fn handleReleaseStatus(allocator: Allocator, args: []const []const u8) !void {

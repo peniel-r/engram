@@ -15,12 +15,7 @@ pub const DeleteConfig = struct {
 /// Execute delete command
 pub fn execute(allocator: Allocator, config: DeleteConfig) !void {
     // 1. Find Neurona file
-    const filepath = fs.findNeuronaPath(allocator, config.neuronas_dir, config.id) catch |err| {
-        if (err == error.NeuronaNotFound) {
-            std.debug.print("Error: Neurona '{s}' not found in {s}.\n", .{ config.id, config.neuronas_dir });
-        }
-        return err;
-    };
+    const filepath = try fs.findNeuronaPath(allocator, config.neuronas_dir, config.id);
     defer allocator.free(filepath);
 
     // 2. Delete file

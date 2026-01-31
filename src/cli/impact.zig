@@ -115,6 +115,11 @@ pub fn analyzeImpact(allocator: Allocator, graph: *Graph, neuronas: []const Neur
         try neurona_map.put(neurona.id, neurona);
     }
 
+    // Check if the specified neurona exists
+    if (neurona_map.get(config.id) == null) {
+        return error.NeuronaNotFound;
+    }
+
     // Trace upstream dependencies
     if (config.direction == .upstream or config.direction == .both) {
         const upstream = try traceDirection(allocator, graph, config.id, config.max_depth, .upstream);
@@ -291,7 +296,9 @@ fn generateRecommendation(allocator: Allocator, neurona: Neurona, conn_type: ?Co
 /// Sort results by level (ascending) and type priority
 fn sortResults(allocator: Allocator, results: []ImpactResult) void {
     _ = allocator;
-    // Simple bubble sort
+    // Simple bubble sort (safely handle empty or single-element arrays)
+    if (results.len <= 1) return;
+    
     for (0..results.len - 1) |i| {
         for (0..results.len - i - 1) |j| {
             if (results[j].level > results[j + 1].level or
