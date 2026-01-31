@@ -1,15 +1,12 @@
 ---
 id: feat.yaml-configuration-file-support
 title: YAML Configuration file support
+tags: [feature]
 type: feature
-tags: ["feature"]
-
+updated: "2026-01-31T21:30:57Z"
 context:
-  status: active
+  status: resolved
   priority: 3
-
-updated: "2026-01-31T18:55:51Z"
-language: en
 ---
 
 # YAML Configuration file support
