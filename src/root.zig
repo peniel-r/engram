@@ -43,6 +43,9 @@ pub const utils = struct {
 
 // Re-export CLI (for integration tests)
 pub const cli = struct {
+    pub const init = @import("cli/init.zig");
+    pub const new = @import("cli/new.zig");
+    pub const query = @import("cli/query.zig");
     pub const impact = @import("cli/impact.zig");
     pub const release_status = @import("cli/release_status.zig");
     pub const trace = @import("cli/trace.zig");

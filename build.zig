@@ -197,6 +197,44 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_alm_flow_tests.step);
     _ = test_alm_step; // Silence unused warning
 
+    // Lifecycle integration tests
+    const lifecycle_mod = b.createModule(.{
+        .root_source_file = b.path("tests/integration/lifecycle.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "Engram", .module = mod },
+        },
+    });
+
+    const lifecycle_tests = b.addTest(.{
+        .root_module = lifecycle_mod,
+    });
+
+    const run_lifecycle_tests = b.addRunArtifact(lifecycle_tests);
+    const test_lifecycle_step = b.step("test-lifecycle", "Run lifecycle integration tests");
+    test_step.dependOn(&run_lifecycle_tests.step);
+    _ = test_lifecycle_step; // Silence unused warning
+
+    // Simple lifecycle test
+    const lifecycle_simple_mod = b.createModule(.{
+        .root_source_file = b.path("tests/integration/lifecycle_simple.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "Engram", .module = mod },
+        },
+    });
+
+    const lifecycle_simple_tests = b.addTest(.{
+        .root_module = lifecycle_simple_mod,
+    });
+
+    const run_lifecycle_simple_tests = b.addRunArtifact(lifecycle_simple_tests);
+    const test_lifecycle_simple_step = b.step("test-lifecycle-simple", "Run simple lifecycle test");
+    test_step.dependOn(&run_lifecycle_simple_tests.step);
+    _ = test_lifecycle_simple_step; // Silence unused warning
+
     // Just like flags, top level steps are also listed in the `--help` menu.
     //
     // The Zig build system is entirely implemented in userland, which means
