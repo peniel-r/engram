@@ -407,6 +407,10 @@ fn generateFileContent(allocator: Allocator, id: []const u8, config: NewConfig, 
 
 /// Write neurona to file
 fn writeNeuronaFile(path: []const u8, content: []const u8) !void {
+    // Ensure the directory exists
+    const dir_path = std.fs.path.dirname(path) orelse ".";
+    try std.fs.cwd().makePath(dir_path);
+    
     const file = try std.fs.cwd().createFile(path, .{});
     defer file.close();
     try file.writeAll(content);

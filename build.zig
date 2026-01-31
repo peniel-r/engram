@@ -89,6 +89,16 @@ pub fn build(b: *std.Build) void {
     // by passing `--prefix` or `-p`.
     b.installArtifact(exe);
 
+    // Create a command to copy the built executable to C:\bin
+    const copy_cmd = b.addSystemCommand(&.{ "cmd", "/c", "copy", "/Y" });
+    copy_cmd.addArtifactArg(exe);
+    copy_cmd.addArg("C:\\bin\\engram.exe");
+
+    // Make the default install step also copy to C:\bin
+    // The copy command depends on building the exe, and the install step depends on the copy command
+    copy_cmd.step.dependOn(&exe.step);
+    b.getInstallStep().dependOn(&copy_cmd.step);
+
     // This creates a top level step. Top level steps have a name and can be
     // invoked by name when running `zig build` (e.g. `zig build run`).
     // This will evaluate the `run` step rather than the default step.
