@@ -301,3 +301,72 @@ test "Cold start - parse cortex.json (< 50ms)" {
 
     try std.testing.expect(ms < 50.0);
 }
+
+test "Graph traversal - depth 1 (O(1)) < 1ms" {
+    const allocator = std.testing.allocator;
+    var test_graph = graph_module.Graph.init();
+    defer test_graph.deinit(allocator);
+
+    for (0..1000) |i| {
+        const from_id = try std.fmt.allocPrint(allocator, "node.{d}", .{i});
+        defer allocator.free(from_id);
+        const to_id = try std.fmt.allocPrint(allocator, "node.{d}", .{(i + 1) % 1000});
+        defer allocator.free(to_id);
+        try test_graph.addEdge(allocator, from_id, to_id, 50);
+    }
+
+    var timer = try benchmark.Timer.start();
+    const adj = test_graph.getAdjacent("node.500");
+    const ms = timer.readMs();
+
+    try std.testing.expect(adj.len > 0);
+    try std.testing.expect(ms < 1.0);
+}
+
+test "Graph traversal - depth 3 (BFS) < 5ms" {
+    const allocator = std.testing.allocator;
+    var test_graph = graph_module.Graph.init();
+    defer test_graph.deinit(allocator);
+
+    for (0..200) |i| {
+        const from_id = try std.fmt.allocPrint(allocator, "node.{d}", .{i});
+        defer allocator.free(from_id);
+        const to_id = try std.fmt.allocPrint(allocator, "node.{d}", .{i + 1});
+        defer allocator.free(to_id);
+        try test_graph.addEdge(allocator, from_id, to_id, 50);
+    }
+
+    var timer = try benchmark.Timer.start();
+    const bfs_results = try test_graph.bfs(allocator, "node.0");
+    const ms = timer.readMs();
+
+    defer {
+        for (bfs_results) |r| allocator.free(r.path);
+        allocator.free(bfs_results);
+    }
+
+    try std.testing.expect(bfs_results.len > 0);
+    try std.testing.expect(ms < 5.0);
+}
+
+test "Graph traversal - depth 5 (shortest path) < 10ms" {
+    const allocator = std.testing.allocator;
+    var test_graph = graph_module.Graph.init();
+    defer test_graph.deinit(allocator);
+
+    for (0..500) |i| {
+        const from_id = try std.fmt.allocPrint(allocator, "node.{d}", .{i});
+        defer allocator.free(from_id);
+        const to_id = try std.fmt.allocPrint(allocator, "node.{d}", .{i + 1});
+        defer allocator.free(to_id);
+        try test_graph.addEdge(allocator, from_id, to_id, 50);
+    }
+
+    var timer = try benchmark.Timer.start();
+    var path = try test_graph.shortestPath(allocator, "node.0", "node.100");
+    const ms = timer.readMs();
+
+    path.deinit(allocator);
+
+    try std.testing.expect(ms < 10.0);
+}
