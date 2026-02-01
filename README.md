@@ -24,6 +24,41 @@ Built with **Zig 0.15.2**, Engram offers zero-overhead performance, manual memor
 
 ### Prerequisites
 - [Zig 0.15.2](https://ziglang.org/download/) or higher.
+- [just](https://github.com/casey/just) - Command runner (optional, for using Justfile recipes)
+
+### Installation with Just
+
+If you have [just](https://github.com/casey/just) installed, you can use the provided Justfile:
+
+```bash
+just install
+```
+
+This will perform the same installation steps as the automated scripts.
+
+### Automated Installation
+
+#### Windows (PowerShell)
+```powershell
+.\scripts\install.ps1
+```
+This will:
+- Build Engram with ReleaseSafe optimization
+- Install to `%APPDATA%\engram`
+- Copy the manual and launch scripts
+- Add Engram to your User PATH
+- Restart your terminal to use `engram` command
+
+#### Unix/Linux/macOS (Bash)
+```bash
+./scripts/install.sh
+```
+This will:
+- Build Engram with ReleaseSafe optimization
+- Install executable to `~/.local/bin`
+- Install data files to `~/.local/share/engram`
+- Automatically add `~/.local/bin` to PATH in your shell config
+- Restart your shell or run `source ~/.bashrc`/`source ~/.zshrc`
 
 ### Build from Source
 ```bash
@@ -31,7 +66,7 @@ git clone https://github.com/yourusername/Engram.git
 cd Engram
 zig build -Doptimize=ReleaseSafe
 ```
-The binary will be available in `zig-out/bin/Engram`.
+The binary will be available in `zig-out/bin/engram`.
 
 ## 📖 Usage
 
