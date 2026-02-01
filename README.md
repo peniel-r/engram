@@ -171,6 +171,69 @@ engram release-status --json
 engram metrics --json
 ```
 
+## 🤖 AI Agent Integration
+
+Engram is designed from the ground up for AI agent and LLM-powered automation:
+
+### AI Agent Workflow
+
+```bash
+# 1. Initialize project and get structure
+engram init my_project --type alm
+engram status --json > project_state.json
+
+# 2. Query for relevant artifacts
+engram query --type requirement --state draft --json
+engram query "type:requirement AND NOT link(validates, type:test_case)" --json
+
+# 3. Analyze impact before changes
+engram impact src/auth/login.zig --json --down
+
+# 4. Execute operations based on analysis
+engram update req.auth --set "context.status=implemented"
+
+# 5. Sync after manual edits
+engram sync
+```
+
+### Key AI Features
+
+- **Structured JSON Output**: Every command returns parseable JSON for programmatic access
+- **LLM-Optimized Metadata**: Token-efficient `_llm` metadata for AI consumption
+- **Semantic Search**: Vector embeddings for understanding meaning beyond keywords
+- **Natural Language Queries**: Parse plain English queries programmatically
+- **Impact Analysis**: Predict effects of changes before making them
+
+### Core AI Commands
+
+| Command | Purpose |
+|---------|---------|
+| `engram status --json` | Project overview |
+| `engram query --json` | Search/filter artifacts |
+| `engram show <id> --json` | Get Neurona details |
+| `engram trace <id> --json` | Dependency analysis |
+| `engram impact <artifact> --json` | Change impact |
+| `engram release-status --json` | Release readiness |
+| `engram metrics --json` | Statistics |
+
+### Example Integration
+
+```bash
+# Find requirements without tests and generate them
+engram query "type:requirement AND state:approved AND NOT link(validates, type:test_case)" --json | \
+  ai-generate-tests | \
+  jq -r '.[] | "engram new test_case \"\(.title)\" --validates \(.validates)"' | \
+  bash
+
+# Analyze code changes and get affected tests
+git diff HEAD~1 --name-only | while read file; do
+  engram impact "$file" --json --down | \
+    jq -r '.affected_items[] | select(.type == "test_case") | .id'
+done
+```
+
+For comprehensive AI agent documentation, see [docs/AI_AGENTS_GUIDE.md](docs/AI_AGENTS_GUIDE.md).
+
 ## 🧪 Development
 
 ### Running Tests
@@ -197,8 +260,9 @@ zig build bench
 This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 📚 Documentation
+- [User Manual](docs/manual.md) - Complete guide for users and developers
+- [AI Agents Guide](docs/AI_AGENTS_GUIDE.md) - AI/LLM integration documentation
 - [Master Plan](docs/PLAN.md) - Complete project roadmap and architecture
-- [Query Integration Tests](QUERY_INTEGRATION_TESTS.md) - Comprehensive query mode testing
 
 ---
 *Part of the Neurona Knowledge Protocol ecosystem.*
