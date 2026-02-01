@@ -1,238 +1,414 @@
-# Engram CLI Master Plan
+# Configuration Enhancement Plan for Engram
 
-**Version**: 1.1.0
-**Status**: Phase 1 Complete - Phase 2 Complete - Phase 3 In Progress
-**Last Updated**: 2026-01-24
-
----
-
-## Executive Summary
-
-This master plan outlines the implementation of **Engram**, a high-performance CLI tool implementing the Neurona Knowledge Protocol. The project is being delivered in three phases, targeting sub-10ms graph traversal and offline-first ALM capabilities.
-
-**Technology Stack**:
-- Language: **Zig** 0.15.2+ (zero-overhead, manual memory control, cross-compilation)
-- Storage: Plain text (Markdown + YAML Frontmatter)
-- Indexing: Custom binary adjacency lists + vector embeddings
-- Distribution: Single static binary, no external dependencies
+**Version**: 0.1.0  
+**Date**: 2026-01-31  
+**Status**: Draft  
 
 ---
 
-## Phase 1: The Soma (Foundation) - MVP ✅ COMPLETE
+## Overview
 
-**Goal**: Basic CRUD operations for Neuronas with graph-aware connections.
-
-**Timeline**: Week 1-2 (Completed Jan 23, 2026)
-
-### Milestones
-
-#### 1.1 Core Infrastructure
-- [x] CLI skeleton with command routing
-- [x] Markdown frontmatter parser (YAML extraction)
-- [x] YAML parser (key-value, arrays, nested objects)
-- [x] Filesystem I/O layer (read, write, scan)
-
-#### 1.2 Core Data Structures
-- [x] Neurona data model (Tier 1, 2, 3 support)
-  - Tier 1: id, title, tags, links (Essential)
-  - Tier 2: type, connections, language, updated (Standard)
-  - Tier 3: hash, _llm, context (Advanced)
-- [x] Cortex configuration parser
-- [x] Graph data structure (adjacency list, O(1) lookup)
-- [x] Connection type definitions (15 types)
-
-#### 1.3 Neurona Flavors
-Engram supports 10 Neurona flavors from the union of spec.md and NEURONA_OPEN_SPEC.md:
-
-**ALM Flavors (spec.md)**:
-- `issue` - Bug reports, feature requests, blockers
-- `requirement` - Functional requirements, acceptance criteria
-- `test_case` - Test specifications, validation
-- `artifact` - Code files, scripts, tools
-- `feature` - Feature groupings, organizational
-
-**General-Purpose Flavors (NEURONA_OPEN_SPEC.md)**:
-- `concept` - Default, generic knowledge
-- `reference` - API docs, definitions, facts
-- `state_machine` - State graph nodes, workflow states
-- `lesson` - Educational content, tutorials
-
-#### 1.4 Basic CLI Commands
-- [x] `engram init` - Initialize new Cortex
-- [x] `engram new` - Create Neurona with ALM templates
-- [x] `engram show` - Display Neurona with connections
-- [x] `engram link` - Create connections between Neuronas
-- [x] `engram sync` - Rebuild graph index
-- [x] `engram delete` - Delete Neurona (Moved from Phase 2)
-
-### Success Criteria
-- ✅ Create, read, update, delete Neuronas
-- ✅ Track connections in graph structure
-- ✅ All 10 Neurona flavors supported
-- ✅ Tier 1, 2, 3 metadata parsing complete
-- ✅ 90%+ test coverage (89 test blocks passing)
-- ✅ Sub-10ms graph traversal (depth 1, validated: 0.0001ms)
-- ✅ Cold start < 50ms (validated: 0.23ms)
+This document outlines potential configuration options that could be added to Engram's `config.yaml` file. Currently, the configuration only supports two basic settings (`editor` and `default-artifact-type`). This plan proposes comprehensive configuration categories to enhance Engram's functionality, usability, and customization.
 
 ---
 
-## Phase 2: The Axon (Connectivity) ✅ COMPLETE
+## Current Configuration
 
-**Goal**: Advanced graph operations and ALM workflow support.
+The existing `config.yaml` structure:
 
-**Timeline**: Week 3-4 (Completed Jan 24, 2026)
+```yaml
+# Engram Configuration File
+# Configuration settings for the Engram application
 
-### Milestones
-
-#### 2.1 Graph Traversal Engine
-- [x] BFS traversal with level tracking
-- [x] DFS traversal
-- [x] Shortest path finding (Dijkstra/BFS for unweighted)
-- [x] Bidirectional indexing (forward + reverse)
-- [x] Node/edge statistics (degree, inDegree)
-
-#### 2.2 ALM Commands
-- [x] `engram trace` - Dependency tree visualization
-  - Trace requirements → tests
-  - Trace tests → code
-  - Trace issues → blocked artifacts
-- [x] `engram status` - List open issues by priority
-- [x] `engram query` - Basic query interface (type, tag, connection filters)
-- [x] `engram update` - Update Neurona fields programmatically
-  - Example: `engram update test.001 --set "context.status=passing"`
-- [x] `engram impact` - Impact analysis for code changes
-  - Trace upstream dependencies (requirements, features)
-  - Trace downstream dependencies (tests, artifacts)
-  - Generate recommendations for affected tests
-- [x] `engram link-artifact` - Link source files to requirements
-  - Creates artifact Neuronas automatically
-  - Links to implementing requirement
-- [x] `engram release-status` - Release readiness check
-  - Validate all requirements covered
-  - Check test status
-  - Identify blocking issues
-  - Compute completion percentage
-
-#### 2.3 State Management
-- [x] Enforced state transitions
-  - Issues: open → in_progress → resolved → closed
-  - Tests: not_run → running → passing → failing
-  - Requirements: draft → approved → implemented
-- [x] Validation rules for connections
-  - Type-specific allowed connections
-  - Cardinality constraints (e.g., binary_node: left/right max 1)
-- [x] Orphan detection (unconnected Neuronas)
-- [x] State filtering (e.g., `engram status --filter "state:open AND priority:1"`)
-
-### Success Criteria
-- ✅ Trace arbitrary depth dependencies
-- ✅ Filter Neuronas by type, tag, connections
-- ✅ Enforce ALM workflow states
-- ✅ 4 additional commands implemented (update, impact, link-artifact, release-status)
-- ✅ State management enforced (issues, tests, requirements)
-- ✅ Impact analysis functional
-- ✅ Release readiness checks working
-- ✅ State filtering with EQL support
-- ✅ Sub-10ms pathfinding (depth 5)
-- ✅ 90%+ test coverage (129 tests passing, 13 integration tests for ALM workflows)
+editor: hx
+default-artifact-type: feature
+```
 
 ---
 
-## Phase 3: The Cortex (Intelligence) ⏳ PENDING
+## Proposed Configuration Categories
 
-**Goal**: AI-powered features and semantic search.
+### 1. Search & Query Configuration
 
-**Timeline**: Week 5-6
+Controls how search and query operations behave.
 
-### Milestones
+```yaml
+search:
+  default-mode: hybrid        # Options: filter, text, vector, hybrid, activation
+  max-results: 20             # Maximum number of results to return
+  include-context: true       # Include surrounding context in results
+  context-depth: 2            # Depth of context to include (lines/nodes)
+```
 
-#### 3.1 Semantic Search
-- [x] Vector embeddings integration (C-interop with llama.cpp or similar)
-- [x] `.activations/vectors.bin` index format
-- [x] Hybrid search (BM25 + vector similarity)
-- [x] Neural Activation algorithm implementation
-  - Stimulus: Text match + vector match
-  - Propagation: Signal decay across weighted links
-  - Response: Ranked results with relevance scores
-- [x] Query command extended with 5 search modes
-  - `--mode filter` - Filter by type, tags, connections (default)
-  - `--mode text` - BM25 full-text search
-  - `--mode vector` - Vector similarity search (cosine)
-  - `--mode hybrid` - Combined BM25 + vector fusion (0.6/0.4 weights)
-  - `--mode activation` - Neural propagation across graph connections
-- [x] Hash-based word frequency embeddings for vector search
-  - Simple, efficient word → dimension mapping
-  - Cosine similarity scoring
-  - Note: Production would use proper embeddings (Word2Vec, GloVe, BERT)
-- [x] Integration test suite for all query modes
-  - 9 comprehensive tests covering all 5 modes
-  - Test data with 8 Neuronas including connections
-  - Bash and Windows test scripts
+**Rationale**: Essential for user experience, allows users to customize search behavior based on their needs and project size.
 
-#### 3.2 LLM Optimization
-- [x] `_llm` metadata support
-  - `t`: Short title for token efficiency
-  - `d`: Density/difficulty (1-4)
-  - `k`: Top keywords
-  - `c`: Token count
-  - `strategy`: full, summary, hierarchical
-- [x] Token counting and optimization
-- [x] Summary generation (Tier 3 strategy)
-- [x] Cache management for LLM responses
-  - `.activations/cache/` directory
-  - Invalidation on content changes
+### 2. Indexing & Performance
 
-#### 3.3 Advanced Features
-- [ ] `engram metrics` - Analytics and statistics
-   - Requirements: total, validated, blocked, coverage
-   - Issues: open, resolved, avg resolution time
-   - Tests: passing, failing, not_run, pass rate
-   - Velocity: items created/resolved per week
-   - Traceability: complete chain percentages
-- [x] Natural language query parsing
-   - Parse EQL queries with natural language
-   - Convert to structured graph queries
-- [ ] State machine execution engine
-   - Execute `type: state_machine` Neuronas
-   - Handle `context.triggers`, `entry_action`, `exit_action`
+Controls how indices are built and managed.
 
-### Success Criteria
-- [x] Semantic search implemented
-- [x] Query command extended with 5 search modes
-- [x] BM25 text search produces ranked results with relevance scores
-- [x] Vector similarity search with hash-based embeddings
-- [x] Hybrid search combines BM25 + vector with 0.6/0.4 fusion weights
-- [x] Neural activation propagates across graph connections
-- [x] Integration test suite for all query modes (9 tests passing)
-- [x] LLM-optimized Neurona representation
-- [x] Natural language query parsing functional
-- [ ] Analytics and metrics functional
-- [ ] 90%+ test coverage
-- [ ] Performance targets met
+```yaml
+indexing:
+  strategy: lazy               # Options: lazy, eager, on-demand
+  auto-sync: true             # Automatically sync indices after changes
+  rebuild-on-startup: false   # Rebuild all indices on startup
+  thread-count: 0             # Number of threads for indexing (0 = auto-detect)
+  cache-size: 100             # Index cache size in MB
+```
+
+**Rationale**: Critical for performance in large projects, allows tuning based on system resources.
+
+### 3. LLM & Embedding Settings
+
+Configures AI/ML integration features.
+
+```yaml
+llm:
+  enabled: true
+  model: text-embedding-ada-002
+  endpoint: https://api.openai.com/v1
+  cache-embeddings: true
+  cache-ttl: 86400            # Cache time-to-live in seconds (24 hours)
+  timeout: 30                 # Request timeout in seconds
+  max-retries: 3              # Maximum retry attempts for failed requests
+```
+
+**Rationale**: Enables customization of AI features, supports alternative endpoints and models.
+
+### 4. Display & Output
+
+Controls how information is presented to users.
+
+```yaml
+display:
+  color-output: true          # Enable ANSI color codes
+  output-format: human        # Options: human, json, markdown
+  show-ids: true              # Display artifact IDs
+  show-timestamps: false      # Show timestamps in output
+  truncate-length: 100        # Maximum line length before truncation
+  pager: less                 # Pager for long output (e.g., less, more)
+```
+
+**Rationale**: Improves user experience, supports different workflows (human vs programmatic).
+
+### 5. Git Integration
+
+Controls integration with version control.
+
+```yaml
+git:
+  auto-commit: false          # Automatically commit after changes
+  commit-template: "engram: {action} {artifact_type} '{title}'"
+  require-commit-message: true
+  track-neuronas: true        # Track all neuronas in git
+```
+
+**Rationale**: Streamlines workflow, ensures proper version control practices.
+
+### 6. Validation & State Management
+
+Enforces data integrity and state transitions.
+
+```yaml
+validation:
+  enforce-state-transitions: true    # Prevent invalid state changes
+  require-mandatory-links: true      # Enforce required link types
+  validate-frontmatter: true         # Validate YAML frontmatter
+  strict-mode: false                 # Fail on any validation errors
+```
+
+**Rationale**: Ensures data integrity, prevents invalid states that could break functionality.
+
+### 7. CLI Behavior
+
+Controls command-line interface behavior.
+
+```yaml
+cli:
+  confirm-destructive: true   # Confirm before destructive operations
+  auto-save: false            # Automatically save changes
+  save-interval: 300          # Auto-save interval in seconds
+  show-progress: true         # Show progress bars for long operations
+  verbose: false              # Enable verbose output
+  debug: false                # Enable debug logging
+```
+
+**Rationale**: Enhances user control, supports different workflow preferences.
+
+### 8. Artifact Type Defaults
+
+Sets default values for different artifact types.
+
+```yaml
+artifact-defaults:
+  requirement:
+    priority: 2
+    verification-method: test
+  issue:
+    status: open
+    priority: 3
+  test_case:
+    status: not_run
+  feature:
+    status: planned
+```
+
+**Rationale**: Improves consistency, reduces repetitive input.
+
+### 9. Workspace Settings
+
+Configures project workspace structure.
+
+```yaml
+workspace:
+  cortex-path: .              # Relative path to cortex.json
+  neuronas-path: project/neuronas
+  activations-path: .activations
+  auto-init: false            # Initialize cortex automatically if missing
+```
+
+**Rationale**: Supports custom project structures, improves flexibility.
+
+### 10. Notifications & Alerts
+
+Configures alerts and notifications.
+
+```yaml
+notifications:
+  alert-on-blocked: true      # Alert when items are blocked
+  alert-on-overdue: true      # Alert for overdue items
+  alert-on-state-change: false
+  show-summary-on-sync: true  # Show summary after sync operation
+```
+
+**Rationale**: Keeps users informed about important events.
+
+### 11. Query Language (EQL) Settings
+
+Configures the Engram Query Language behavior.
+
+```yaml
+eql:
+  case-sensitive: false
+  wildcards-enabled: true
+  regex-support: true
+  max-query-time: 5000        # Maximum query time in milliseconds
+```
+
+**Rationale**: Controls query behavior, prevents runaway queries.
+
+### 12. Performance Tuning
+
+Fine-tunes performance parameters.
+
+```yaml
+performance:
+  cold-start-timeout: 50      # Target cold start time in ms
+  traversal-timeout: 10       # Target graph traversal time in ms
+  index-build-timeout: 1000   # Target index build time in ms
+  enable-metrics: false       # Enable performance metrics collection
+```
+
+**Rationale**: Allows optimization for different use cases and system capabilities.
+
+### 13. Templates
+
+Configures template system.
+
+```yaml
+templates:
+  enable: true
+  custom-path: templates/
+  default-template: minimal   # Default template to use
+```
+
+**Rationale**: Supports customization, improves consistency across artifacts.
+
+### 14. Network Settings
+
+Configures network-related operations.
+
+```yaml
+network:
+  timeout: 30                 # Default timeout in seconds
+  proxy:                      # Optional proxy server
+  max-connections: 10         # Maximum concurrent connections
+  retry-delay: 1000           # Delay between retries in ms
+```
+
+**Rationale**: Essential for remote services and API integrations.
+
+### 15. Advanced/Experimental
+
+Controls experimental features.
+
+```yaml
+experimental:
+  features: []                # List of enabled experimental features
+  enable-activation-propagation: false
+  enable-neural-search-optimization: false
+```
+
+**Rationale**: Allows testing new features without affecting stability.
 
 ---
 
-## Timeline
+## Implementation Priority
 
-| Phase | Start | End | Duration | Status |
-|-------|-------|-----|----------|--------|
- | Phase 1: The Soma | Week 1 | Week 2 | 2 weeks | ✅ Complete |
- | Phase 2: The Axon | Week 3 | Week 4 | 2 weeks | ✅ Complete |
- | Phase 3: The Cortex | Week 5 | Week 6 | 2 weeks | ⏳ In Progress (Query modes complete) |
+### Phase 1: Core Functionality (High Priority)
 
-**Total Duration**: 6 weeks
+1. **Display & Output** - Essential for user experience
+2. **CLI Behavior** - Controls basic workflow
+3. **Workspace Settings** - Critical for project organization
+4. **Search & Query Configuration** - Improves usability
+
+**Estimated Effort**: 2-3 days
+
+### Phase 2: Enhanced Features (Medium Priority)
+
+5. **Indexing & Performance** - Important for large projects
+6. **Validation & State Management** - Ensures data integrity
+7. **Artifact Type Defaults** - Improves consistency
+8. **Git Integration** - Streamlines workflow
+9. **Notifications & Alerts** - Enhances user awareness
+
+**Estimated Effort**: 3-4 days
+
+### Phase 3: Advanced Features (Low Priority)
+
+10. **LLM & Embedding Settings** - For AI features
+11. **Templates** - For customization
+12. **EQL Settings** - For advanced querying
+13. **Performance Tuning** - For optimization
+14. **Network Settings** - For remote services
+15. **Advanced/Experimental** - For testing new features
+
+**Estimated Effort**: 4-5 days
 
 ---
 
-## References
+## Implementation Considerations
 
-- **Product Specification**: `docs/spec.md`
-- **Neurona Specification**: `docs/NEURONA_OPEN_SPEC.md`
-- **Use Cases**: `docs/usecase.md`
-- **Integration Tests**: `QUERY_INTEGRATION_TESTS.md` - Query mode testing
+### Backward Compatibility
+
+- All new configuration options should have sensible defaults
+- Existing configurations should continue to work without modification
+- Provide migration guide if breaking changes are necessary
+
+### Validation
+
+- Validate configuration on load
+- Provide clear error messages for invalid values
+- Support configuration validation command
+
+### Documentation
+
+- Document each configuration option with examples
+- Provide sample configuration files
+- Include configuration reference in user manual
+
+### Testing
+
+- Unit tests for configuration parsing
+- Integration tests for configuration effects
+- Edge case testing (missing config, invalid values, etc.)
 
 ---
 
-**Last Updated**: 2026-01-24
-**Status**: Phase 1 Complete - Phase 2 Complete - Phase 3 In Progress (Query modes complete)
-**Owner**: Development Team
+## Example Complete Configuration
+
+```yaml
+# Engram Configuration File
+
+# Editor settings
+editor: hx
+default-artifact-type: feature
+
+# Search configuration
+search:
+  default-mode: hybrid
+  max-results: 20
+  include-context: true
+  context-depth: 2
+
+# Display settings
+display:
+  color-output: true
+  output-format: human
+  show-ids: true
+  show-timestamps: false
+  truncate-length: 100
+  pager: less
+
+# CLI behavior
+cli:
+  confirm-destructive: true
+  auto-save: false
+  save-interval: 300
+  show-progress: true
+  verbose: false
+  debug: false
+
+# Workspace settings
+workspace:
+  cortex-path: .
+  neuronas-path: project/neuronas
+  activations-path: .activations
+  auto-init: false
+
+# Validation
+validation:
+  enforce-state-transitions: true
+  require-mandatory-links: true
+  validate-frontmatter: true
+  strict-mode: false
+
+# Artifact defaults
+artifact-defaults:
+  requirement:
+    priority: 2
+    verification-method: test
+  issue:
+    status: open
+    priority: 3
+
+# Git integration
+git:
+  auto-commit: false
+  commit-template: "engram: {action} {artifact_type} '{title}'"
+  require-commit-message: true
+  track-neuronas: true
+
+# Indexing (optional - for large projects)
+indexing:
+  strategy: lazy
+  auto-sync: true
+  rebuild-on-startup: false
+  thread-count: 0
+  cache-size: 100
+
+# LLM settings (optional - for AI features)
+llm:
+  enabled: true
+  model: text-embedding-ada-002
+  endpoint: https://api.openai.com/v1
+  cache-embeddings: true
+  cache-ttl: 86400
+  timeout: 30
+  max-retries: 3
+```
+
+---
+
+## Next Steps
+
+1. Review and approve proposed configuration categories
+2. Prioritize which categories to implement first
+3. Update Config struct in `src/utils/config.zig` to include new fields
+4. Implement configuration parsing for new options
+5. Add configuration validation
+6. Update documentation and examples
+7. Add tests for new configuration options
+
+---
+
+**Status**: Ready for review and implementation planning
