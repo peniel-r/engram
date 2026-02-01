@@ -202,7 +202,7 @@ fn handleInit(allocator: Allocator, args: []const []const u8) !void {
 
     var config = init_cmd.InitConfig{
         .name = undefined,
-        .cortex_type = .zettelkasten,
+        .cortex_type = .alm,
         .default_language = "en",
         .force = false,
         .verbose = false,
@@ -1123,7 +1123,7 @@ fn printInitHelp() void {
         \\  name              Name of Cortex to create (required)
         \\
         \\Options:
-        \\  --type, -t        Cortex type: zettelkasten, alm, knowledge (default: zettelkasten)
+        \\  --type, -t        Cortex type: zettelkasten, alm, knowledge (default: alm)
         \\  --language, -l    Default language (default: en)
         \\  --force, -f       Force overwrite existing Cortex
         \\  --verbose, -v     Show verbose output

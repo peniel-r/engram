@@ -33,8 +33,8 @@ pub const InitConfig = struct {
     /// Cortex name (required)
     name: []const u8,
 
-    /// Cortex type (default: zettelkasten)
-    cortex_type: CortexType = .zettelkasten,
+    /// Cortex type (default: alm)
+    cortex_type: CortexType = .alm,
 
     /// Default language (default: en)
     default_language: []const u8 = "en",

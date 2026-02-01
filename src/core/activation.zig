@@ -25,7 +25,6 @@ pub const ActivationResult = struct {
     }
 };
 
-
 /// Neural activation for context-aware ranking
 pub const NeuralActivation = struct {
     graph: *const Graph,

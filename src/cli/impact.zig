@@ -298,7 +298,7 @@ fn sortResults(allocator: Allocator, results: []ImpactResult) void {
     _ = allocator;
     // Simple bubble sort (safely handle empty or single-element arrays)
     if (results.len <= 1) return;
-    
+
     for (0..results.len - 1) |i| {
         for (0..results.len - i - 1) |j| {
             if (results[j].level > results[j + 1].level or

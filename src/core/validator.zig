@@ -127,16 +127,16 @@ pub fn validateConnectionsLocation(body: []const u8) !void {
     while (line_iter.next()) |line| {
         const trimmed = std.mem.trim(u8, line, " \t\r");
         if (trimmed.len == 0) continue;
-        
+
         // Skip markdown headings
         if (trimmed[0] == '#') continue;
-        
+
         // Check if line looks like a connection (contains multiple colons)
         var colon_count: usize = 0;
         for (trimmed) |c| {
             if (c == ':') colon_count += 1;
         }
-        
+
         // Lines with 2+ colons might be legacy connection format
         if (colon_count >= 2 and !std.mem.startsWith(u8, trimmed, "http")) {
             // Check if any connection type is in the line
