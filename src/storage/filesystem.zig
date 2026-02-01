@@ -729,9 +729,8 @@ pub fn scanNeuronas(allocator: Allocator, directory: []const u8) ![]Neurona {
     }
 
     for (filepaths) |filepath| {
-        const neurona = readNeurona(allocator, filepath) catch |err| {
+        const neurona = readNeurona(allocator, filepath) catch {
             // Skip invalid files but continue scanning
-            std.debug.print("Warning: Skipping {s}: {}\n", .{ filepath, err });
             continue;
         };
         try neuronas.append(allocator, neurona);

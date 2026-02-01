@@ -109,6 +109,9 @@ pub fn loadGraph(allocator: Allocator, path: []const u8) !Graph {
 test "File I/O save/load empty graph" {
     const allocator = std.testing.allocator;
 
+    std.fs.cwd().deleteTree(".activations") catch {};
+    defer std.fs.cwd().deleteTree(".activations") catch {};
+
     var graph = Graph.init();
     defer graph.deinit(allocator);
 
@@ -126,6 +129,9 @@ test "File I/O save/load empty graph" {
 
 test "File I/O save/load complex graph" {
     const allocator = std.testing.allocator;
+
+    std.fs.cwd().deleteTree(".activations") catch {};
+    defer std.fs.cwd().deleteTree(".activations") catch {};
 
     var graph = Graph.init();
     defer graph.deinit(allocator);
@@ -175,6 +181,7 @@ test "File I/O ensureActivationsDir creates directory" {
     const allocator = std.testing.allocator;
 
     std.fs.cwd().deleteTree(".activations") catch {};
+    defer std.fs.cwd().deleteTree(".activations") catch {};
 
     try ensureActivationsDir(allocator);
 
@@ -188,6 +195,9 @@ test "File I/O ensureActivationsDir creates directory" {
 
 test "File I/O save to nested path creates parent directories" {
     const allocator = std.testing.allocator;
+
+    std.fs.cwd().deleteTree(".activations") catch {};
+    defer std.fs.cwd().deleteTree(".activations") catch {};
 
     var graph = Graph.init();
     defer graph.deinit(allocator);

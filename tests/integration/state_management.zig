@@ -3,13 +3,14 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Neurona = @import("../../src/core/neurona.zig").Neurona;
-const NeuronaType = @import("../../src/core/neurona.zig").NeuronaType;
-const Connection = @import("../../src/core/neurona.zig").Connection;
-const ConnectionType = @import("../../src/core/neurona.zig").ConnectionType;
-const Graph = @import("../../src/core/graph.zig").Graph;
-const state_machine = @import("../../src/core/state_machine.zig");
-const validator = @import("../../src/core/validator.zig");
+const Engram = @import("Engram");
+const Neurona = Engram.Neurona;
+const NeuronaType = Engram.NeuronaType;
+const Connection = Engram.Connection;
+const ConnectionType = Engram.ConnectionType;
+const Graph = Engram.core.graph.Graph;
+const state_machine = Engram.core.state_machine;
+const validator = Engram.core.validator;
 
 // ==================== ALM Workflow Tests ====================
 
@@ -194,10 +195,7 @@ test "Orphan detection finds unconnected nodes" {
     const neuronas = [_]Neurona{orphan};
 
     const orphans = try validator.findOrphans(&neuronas, &graph, allocator);
-    defer {
-        for (orphans) |o| allocator.free(o);
-        allocator.free(orphans);
-    }
+    defer allocator.free(orphans);
 
     // The orphan node should be detected
     try std.testing.expect(orphans.len > 0);
@@ -282,9 +280,6 @@ test "Full ALM workflow: requirement -> test -> artifact" {
     // Verify no orphans (all nodes connected)
     const neuronas = [_]Neurona{ requirement, test_case, artifact };
     const orphans = try validator.findOrphans(&neuronas, &graph, allocator);
-    defer {
-        for (orphans) |o| allocator.free(o);
-        allocator.free(orphans);
-    }
+    defer allocator.free(orphans);
     try std.testing.expectEqual(@as(usize, 0), orphans.len);
 }

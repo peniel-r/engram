@@ -226,6 +226,40 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_lifecycle_tests.step);
     _ = test_lifecycle_step; // Silence unused warning
 
+    // State management integration tests
+    const state_mod = b.createModule(.{
+        .root_source_file = b.path("tests/integration/state_management.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "Engram", .module = mod },
+        },
+    });
+
+    const state_tests = b.addTest(.{
+        .root_module = state_mod,
+    });
+
+    const run_state_tests = b.addRunArtifact(state_tests);
+    test_step.dependOn(&run_state_tests.step);
+
+    // Benchmark tests (test blocks in benchmarks.zig)
+    const bench_test_mod = b.createModule(.{
+        .root_source_file = b.path("tests/benchmarks.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "Engram", .module = mod },
+        },
+    });
+
+    const bench_test_exe = b.addTest(.{
+        .root_module = bench_test_mod,
+    });
+
+    const run_bench_tests = b.addRunArtifact(bench_test_exe);
+    test_step.dependOn(&run_bench_tests.step);
+
     // Just like flags, top level steps are also listed in the `--help` menu.
     //
     // The Zig build system is entirely implemented in userland, which means

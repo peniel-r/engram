@@ -603,7 +603,9 @@ test "Edge case - Empty cortex with semantic search enabled" {
     glove_index.dimension = 50;
     glove_index.loaded = true;
 
-    try std.fs.cwd().makePath(".activations/cache");
+    const cache_dir = try std.fs.path.join(allocator, &.{ cortex_path, ".activations", "cache" });
+    defer allocator.free(cache_dir);
+    try std.fs.cwd().makePath(cache_dir);
     try glove_index.saveCache(glove_cache_path);
 
     var vector_index = VectorIndex.init(allocator, glove_index.dimension);

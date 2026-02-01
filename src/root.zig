@@ -11,6 +11,8 @@ pub const core = struct {
     pub const graph = @import("core/graph.zig");
     pub const NeuralActivation = @import("core/activation.zig").NeuralActivation;
     pub const ActivationResult = @import("core/activation.zig").ActivationResult;
+    pub const state_machine = @import("core/state_machine.zig");
+    pub const validator = @import("core/validator.zig");
 };
 
 // Re-export storage modules

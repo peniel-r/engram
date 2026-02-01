@@ -229,6 +229,10 @@ pub const VectorIndex = struct {
 
 test "VectorIndex save/load with CRC and Metadata" {
     const allocator = std.testing.allocator;
+
+    std.fs.cwd().deleteTree(".activations") catch {};
+    defer std.fs.cwd().deleteTree(".activations") catch {};
+
     var index = VectorIndex.init(allocator, 3);
     defer index.deinit(allocator);
 

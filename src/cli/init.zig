@@ -131,7 +131,7 @@ fn validateExistingCortex(dirs: *const DirectoryStructure, force: bool) !void {
 
     // This looks like an existing Cortex
     if (force) {
-        std.debug.print("Warning: Overwriting existing Cortex at '{s}'\n", .{dirs.root});
+        // Overwriting is allowed
     } else {
         return error.CortexAlreadyExists;
     }
@@ -407,6 +407,7 @@ test "validateExistingCortex returns error when Cortex exists" {
 
     // Clean up from previous runs
     std.fs.cwd().deleteTree("test_existing_cortex") catch {};
+    defer std.fs.cwd().deleteTree("test_existing_cortex") catch {};
 
     // Create a temporary Cortex
     const test_config = InitConfig{
@@ -419,7 +420,7 @@ test "validateExistingCortex returns error when Cortex exists" {
     var dirs = try prepareDirectoryStructure(allocator, test_config.name);
     defer dirs.deinit(allocator);
 
-    // Create the Cortex
+    // Create Cortex
     try createDirectoryStructure(&dirs, false);
 
     // Create a simple cortex.json to mark it as a Cortex
@@ -438,6 +439,7 @@ test "validateExistingCortex succeeds when force is true" {
 
     // Clean up from previous runs
     std.fs.cwd().deleteTree("test_force_cortex") catch {};
+    defer std.fs.cwd().deleteTree("test_force_cortex") catch {};
 
     // Create a temporary Cortex
     const test_config = InitConfig{
@@ -450,7 +452,7 @@ test "validateExistingCortex succeeds when force is true" {
     var dirs = try prepareDirectoryStructure(allocator, test_config.name);
     defer dirs.deinit(allocator);
 
-    // Create the Cortex
+    // Create Cortex
     try createDirectoryStructure(&dirs, false);
 
     // Create a simple cortex.json
