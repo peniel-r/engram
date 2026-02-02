@@ -91,10 +91,6 @@ pub fn execute(allocator: Allocator, config: UpdateConfig) !void {
 
 /// Apply a field update to a Neurona
 fn applyUpdate(allocator: Allocator, neurona: *Neurona, update: FieldUpdate, verbose: bool, neuronas_dir: []const u8) !bool {
-    const field = update.field;
-    const value = update.value;
-
-    // Handle _llm metadata fields (flattened format: _llm_t, _llm_d, etc.)
     if (std.mem.eql(u8, field, "_llm_t")) {
         try updateLLMMetadata(allocator, &neurona, "short_title", value, verbose);
         return true;
