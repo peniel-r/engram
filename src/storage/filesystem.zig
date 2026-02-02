@@ -485,7 +485,8 @@ fn parseNeuronaType(type_str: []const u8) !NeuronaType {
 // ==================== Writing Functions ====================
 
 /// Write a Neurona struct to a Markdown file
-pub fn writeNeurona(allocator: Allocator, neurona: Neurona, filepath: []const u8) !void {
+/// If preserve_body is true, don't read the file (body was already updated externally)
+pub fn writeNeurona(allocator: Allocator, neurona: Neurona, filepath: []const u8, preserve_body: bool) !void {
     // Generate YAML frontmatter
     const yaml_content = try neuronaToYaml(allocator, neurona);
     defer allocator.free(yaml_content);
@@ -493,18 +494,20 @@ pub fn writeNeurona(allocator: Allocator, neurona: Neurona, filepath: []const u8
     // Preserve existing body content if file exists
     var body_content: []const u8 = "";
     defer allocator.free(body_content);
-    if (std.fs.cwd().openFile(filepath, .{})) |file| {
-        defer file.close();
-        const existing_content = file.readToEndAlloc(allocator, 10 * 1024 * 1024) catch "";
-        defer allocator.free(existing_content);
-        if (existing_content.len > 0) {
-            const fm = frontmatter.parse(allocator, existing_content) catch null;
-            if (fm) |*f| {
-                defer f.deinit(allocator);
-                body_content = try allocator.dupe(u8, f.body);
+    if (!preserve_body) {
+        if (std.fs.cwd().openFile(filepath, .{})) |file| {
+            defer file.close();
+            const existing_content = file.readToEndAlloc(allocator, 10 * 1024 * 1024) catch "";
+            defer allocator.free(existing_content);
+            if (existing_content.len > 0) {
+                const fm = frontmatter.parse(allocator, existing_content) catch null;
+                if (fm) |*f| {
+                    defer f.deinit(allocator);
+                    body_content = try allocator.dupe(u8, f.body);
+                }
             }
-        }
-    } else |_| {}
+        } else |_| {}
+    }
 
     // Generate complete Markdown content
     const content = try generateMarkdown(allocator, yaml_content, body_content);

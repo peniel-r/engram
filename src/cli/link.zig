@@ -71,7 +71,7 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
         allocator.free(source.updated);
         source.updated = try timestamp.nowDate(allocator);
 
-        try fs.writeNeurona(allocator, source, source_path);
+        try fs.writeNeurona(allocator, source, source_path, false);
 
         if (config.verbose) {
             std.debug.print("Linked {s} --[{s}]--> {s}\n", .{ source_id, config.connection_type, target_id });

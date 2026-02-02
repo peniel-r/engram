@@ -86,7 +86,7 @@ pub fn execute(allocator: Allocator, config: LinkArtifactConfig) !void {
         requirement.updated = try getCurrentTimestamp(allocator);
 
         // Write updated requirement
-        try writeNeurona(allocator, requirement, req_filepath);
+        try writeNeurona(allocator, requirement, req_filepath, false);
 
         if (config.verbose) {
             std.debug.print("Updated requirement {s}\n", .{config.requirement_id});

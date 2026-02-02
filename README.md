@@ -6,23 +6,24 @@ Built with **Zig 0.15.2**, Engram offers zero-overhead performance, manual memor
 
 ## 🚀 Features
 
-- **Graph-Aware Knowledge Management**: Create and link Neuronas (knowledge nodes) with 15+ semantic connection types.
 - **ALM First**: Built-in support for requirements, test cases, issues, artifacts, and features.
 - **High Performance**: Sub-millisecond cold start and ultra-fast graph traversal.
+- **Graph-Aware Knowledge Management**: Create and link Neuronas (knowledge nodes) with 15+ semantic connection types.
 - **Offline-First**: Plain-text storage using Markdown and YAML frontmatter.
 - **AI-Ready**: Structured metadata and JSON output for seamless LLM integration.
 - **Traceability**: Visualize dependency trees and perform impact analysis.
 - **Semantic Search**: Five query modes for intelligent search:
-   - **Filter Mode**: By type, tags, and connections (default)
-   - **Text Mode**: BM25 full-text search with relevance scoring
-   - **Vector Mode**: Cosine similarity search with embeddings
-   - **Hybrid Mode**: Combined BM25 + vector fusion (0.6/0.4 weights)
-   - **Activation Mode**: Neural propagation across graph connections
+  - **Filter Mode**: By type, tags, and connections (default)
+  - **Text Mode**: BM25 full-text search with relevance scoring
+  - **Vector Mode**: Cosine similarity search with embeddings
+  - **Hybrid Mode**: Combined BM25 + vector fusion (0.6/0.4 weights)
+  - **Activation Mode**: Neural propagation across graph connections
 - **HTML Documentation Viewer**: On-demand markdown-to-HTML conversion with browser rendering (cross-platform).
 
 ## 🛠️ Installation
 
 ### Prerequisites
+
 - [Zig 0.15.2](https://ziglang.org/download/) or higher.
 - [just](https://github.com/casey/just) - Command runner (optional, for using Justfile recipes)
 
@@ -39,10 +40,13 @@ This will perform the same installation steps as the automated scripts.
 ### Automated Installation
 
 #### Windows (PowerShell)
+
 ```powershell
 .\scripts\install.ps1
 ```
+
 This will:
+
 - Build Engram with ReleaseSafe optimization
 - Install to `%APPDATA%\engram`
 - Copy the manual and launch scripts
@@ -50,10 +54,13 @@ This will:
 - Restart your terminal to use `engram` command
 
 #### Unix/Linux/macOS (Bash)
+
 ```bash
 ./scripts/install.sh
 ```
+
 This will:
+
 - Build Engram with ReleaseSafe optimization
 - Install executable to `~/.local/bin`
 - Install data files to `~/.local/share/engram`
@@ -61,71 +68,84 @@ This will:
 - Restart your shell or run `source ~/.bashrc`/`source ~/.zshrc`
 
 ### Build from Source
+
 ```bash
 git clone https://github.com/yourusername/Engram.git
 cd Engram
 zig build -Doptimize=ReleaseSafe
 ```
+
 The binary will be available in `zig-out/bin/engram`.
 
 ## 📖 Usage
 
 ### Initialize a Cortex
+
 ```bash
 engram init my_project --type alm
 ```
 
 ### Create a Neurona
+
 ```bash
 engram new requirement "User Authentication" --tag auth
 engram new test_case "Login Test" --validates req.auth.user-authentication
 ```
 
 ### Link Neuronas
+
 ```bash
 engram link req.auth.user-authentication issue.auth.001 blocks
 ```
 
 ### Update Neuronas
+
 ```bash
 engram update test.001 --set "context.status=passing"
 engram update req.001 --set "context.status=implemented"
 ```
 
 ### Visualize Dependencies
+
 ```bash
 engram trace req.auth.user-authentication
 ```
 
 ### Impact Analysis
+
 ```bash
 engram impact req.auth
 ```
 
 ### Link Code Artifacts
+
 ```bash
 engram link-artifact req.auth zig --file src/auth.zig
 ```
 
 ### Check Status
+
 ```bash
 engram status
 engram status --type issue --filter "state:open AND priority:1"
 ```
 
 ### Release Readiness
+
 ```bash
 engram release-status
 engram release-status --verbose
 ```
 
 ### Project Metrics
+
 ```bash
 engram metrics
 engram metrics --last 7
 ```
 
 ### View Documentation
+
 ```bash
 # View quick reference in terminal
 engram man
@@ -135,6 +155,7 @@ engram man --html
 ```
 
 ### Query Interface
+
 ```bash
 # Filter mode (default) - by type, tags, connections
 engram query --type issue
@@ -237,7 +258,9 @@ For comprehensive AI agent documentation, see [docs/AI_AGENTS_GUIDE.md](docs/AI_
 ## 🧪 Development
 
 ### Running Tests
+
 Engram maintains a comprehensive test suite with leak detection enabled.
+
 ```bash
 # Run all tests
 zig build test
@@ -252,14 +275,17 @@ test_query_integration.bat
 See [QUERY_INTEGRATION_TESTS.md](QUERY_INTEGRATION_TESTS.md) for complete integration test documentation.
 
 ### Performance Benchmarks
+
 ```bash
 zig build bench
 ```
 
 ## 📄 License
+
 This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 📚 Documentation
+
 - [User Manual](docs/manual.md) - Complete guide for users and developers
 - [AI Agents Guide](docs/AI_AGENTS_GUIDE.md) - AI/LLM integration documentation
 - [Master Plan](docs/PLAN.md) - Complete project roadmap and architecture
