@@ -1037,7 +1037,7 @@ fn outputJson(allocator: Allocator, neuras: []const Neurona) !void {
     std.debug.print("[", .{});
     for (neuras, 0..) |neurona, i| {
         if (i > 0) std.debug.print(",", .{});
-        std.debug.print("{", .{});
+        std.debug.print("{{", .{});
         std.debug.print("\"id\":\"{s}\",", .{neurona.id});
         std.debug.print("\"title\":\"{s}\",", .{neurona.title});
         std.debug.print("\"type\":\"{s}\",", .{@tagName(neurona.type)});
@@ -1051,7 +1051,7 @@ fn outputJson(allocator: Allocator, neuras: []const Neurona) !void {
         std.debug.print("],", .{});
 
         // Context
-        std.debug.print("\"context\":{", .{});
+        std.debug.print("\"context\":{{", .{});
         switch (neurona.context) {
             .requirement => |ctx| {
                 std.debug.print("\"status\":\"{s}\",", .{ctx.status});
@@ -1075,11 +1075,11 @@ fn outputJson(allocator: Allocator, neuras: []const Neurona) !void {
             },
             else => {},
         }
-        std.debug.print("},", .{});
+        std.debug.print("}},", .{});
 
         // LLM metadata
         if (neurona.llm_metadata) |*meta| {
-            std.debug.print("\"_llm\":{", .{});
+            std.debug.print("\"_llm\":{{", .{});
             std.debug.print("\"t\":\"{s}\",", .{meta.short_title});
             std.debug.print("\"d\":{d},", .{meta.density});
             std.debug.print("\"strategy\":\"{s}\"", .{meta.strategy});
@@ -1092,12 +1092,12 @@ fn outputJson(allocator: Allocator, neuras: []const Neurona) !void {
                 std.debug.print("]", .{});
                 std.debug.print(",\"c\":{d}", .{meta.token_count});
             }
-            std.debug.print("},", .{});
+            std.debug.print("}},", .{});
         }
 
         // Connections count
         std.debug.print("\"connections\":{d}", .{neurona.connections.count()});
-        std.debug.print("}", .{});
+        std.debug.print("}}", .{});
     }
     std.debug.print("]\n", .{});
 }

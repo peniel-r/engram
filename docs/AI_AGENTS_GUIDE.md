@@ -1,205 +1,196 @@
 # Engram AI Agents Guide
 
-**Version 0.1.0** | **Last Updated: January 31, 2026**
+**Version 0.2.0** | **Last Updated: February 2, 2026**
 
 ---
 
 ## Overview
 
-This guide is specifically designed for **AI Agents and LLM-powered systems** to integrate with Engram. Engram is an Application Lifecycle Management (ALM) tool that provides structured data, optimized metadata, and AI-friendly APIs for seamless automation.
+Engram provides AI agents and automation systems with programmatic access to Application Lifecycle Management through structured JSON outputs and LLM-optimized data structures.
 
-### Why Engram for AI Agents?
+### Key Features for AI Agents
 
-Engram is built from the ground up for AI integration with:
-
-- **Structured JSON outputs** - Every command returns parseable JSON
-- **LLM-optimized metadata** - Token-efficient data structures
-- **Semantic search** - Vector embeddings for understanding meaning
-- **Intelligent caching** - LLM response caching to avoid redundant API calls
-- **Natural language queries** - Parse plain English queries programmatically
+- **Complete JSON API** - All commands output parseable JSON with full data
+- **LLM-optimized metadata** - Token-efficient `_llm` fields for quick consumption
+- **Semantic search** - Vector embeddings understand meaning beyond keywords
+- **Programmatic updates** - Full CRUD operations via `--set` flags
+- **Dependency tracking** - Trace relationships and impact analysis
 
 ---
 
 ## Quick Start for AI Agents
 
-### Basic AI Agent Workflow
+### Essential Workflow
 
 ```bash
-# 1. Initialize an ALM project
+# 1. Initialize project
 engram init my_project --type alm
 
-# 2. Get project structure as JSON
-engram status --json > project_structure.json
+# 2. Get project overview
+engram status --json
 
-# 3. Query for specific items
-engram query "type:requirement AND state:draft" --json > draft_requirements.json
+# 3. Query for items
+engram query --type requirement --state draft --json
 
-# 4. Analyze and make decisions
-# (AI processes JSON and determines actions)
-
-# 5. Execute actions based on analysis
-engram update req.auth --set "context.status=approved"
+# 4. Update items programmatically
+engram update req.auth --set "context.status=approved" \
+  --set "context.assignee=alice" \
+  --set "_llm_t=OAuth Login"
 ```
 
 ---
 
-## LLM-Optimized Data Structures
+## LLM Metadata Structure
 
-### Neurona Metadata Schema
+### _llm Fields
 
-Every Neurona contains `_llm` metadata optimized for AI consumption:
+Every Neurona can include `_llm` metadata for AI consumption:
 
 ```json
 {
   "_llm": {
     "t": "OAuth 2.0 Login",           // Short title (token efficient)
-    "d": 3,                            // Density/difficulty (1-4 scale)
-    "k": ["oauth", "login", "auth"],  // Top keywords for quick filtering
+    "d": 3,                            // Density (1-4 scale)
+    "k": ["oauth", "login", "auth"],  // Keywords for filtering
     "c": 850,                          // Token count
-    "strategy": "summary"              // Consumption strategy
+    "strategy": "summary"              // Content strategy
   }
 }
 ```
 
-### Token Optimization Strategies
-
-**Full Strategy** - Complete Neurona content:
-```json
-{
-  "_llm": {
-    "strategy": "full"
-  }
-}
-```
-
-**Summary Strategy** - Pre-generated summary (token-efficient):
-```json
-{
-  "_llm": {
-    "strategy": "summary",
-    "summary": "Implement OAuth 2.0 authentication with token refresh and user session management."
-  }
-}
-```
-
-**Hierarchical Strategy** - Drill-down on demand:
-```json
-{
-  "_llm": {
-    "strategy": "hierarchical",
-    "summary": "Authentication system with OAuth 2.0 support",
-    "sections": ["User Registration", "Login", "Token Management", "Session Handling"]
-  }
-}
-```
-
-### LLM Response Caching
-
-Engram automatically caches LLM responses:
+### Setting _llm Metadata
 
 ```bash
-# Cache location
-.activations/cache/
+# Set individual fields
+engram update req.auth --set "_llm_t=OAuth Login"
+engram update req.auth --set "_llm_d=3"
+engram update req.auth --set "_llm_k=oauth,login,auth"
 
-# Automatic invalidation when content changes
-# Reduces API calls and improves performance
+# Update multiple fields
+engram update req.auth --set "_llm_t=Short Title" --set "_llm_d=2" --set "_llm_c=500"
 ```
 
 ---
 
-## AI Agent Integration Patterns
+## Common AI Agent Patterns
 
-### Pattern 1: Automated Requirements Analysis
-
-```bash
-# Get all draft requirements
-engram query "type:requirement AND state:draft" --json | \
-  jq '.results[] | select(._llm.d >= 3)' | \
-  ai-analyze --complexity-risks
-
-# Get requirements without tests
-engram query "type:requirement AND state:approved AND NOT link(validates, type:test_case)" --json | \
-  ai-suggest-tests
-
-# Identify blocked requirements
-engram query "type:requirement AND state:blocked" --json | \
-  ai-impact-analysis
-```
-
-### Pattern 2: Smart Test Generation
+### Pattern 1: Requirements Analysis
 
 ```bash
-# Analyze a requirement and generate tests
-engram show req.auth.oauth2 --json | \
-  ai-generate-tests --framework pytest --coverage 90% > tests_generated.json
+# Get high-complexity requirements
+engram query --type requirement --json | \
+  jq '.[] | select(._llm.d >= 3)'
 
-# Create tests from JSON
-cat tests_generated.json | \
-  jq -r '.[] | "engram new test_case \"\(.title)\" --validates \(.validates)"' | \
-  bash
+# Find requirements without tests
+engram query --type requirement --state approved --json | \
+  jq '.[] | select(.connections.validates | length == 0)'
+
+# Get project metrics
+engram metrics --json
 ```
 
-### Pattern 3: Release Prediction
+### Pattern 2: Programmatic Updates
 
 ```bash
-# Get release status
-engram release-status --json > release_status.json
+# Update multiple fields
+engram update req.auth \
+  --set "context.status=implemented" \
+  --set "context.assignee=alice" \
+  --set "_llm_t=OAuth 2.0" \
+  --set content="Implementation completed with PKCE support"
 
-# AI predicts release date
-cat release_status.json | \
-  ai-predict-date --historical-data > predicted_release.json
-
-# Get detailed metrics
-engram metrics --json | \
-  ai-generate-velocity-report
+# Set content body
+engram update req.api --set content="## API Description\n\nDetailed specification..."
 ```
 
-### Pattern 4: Impact Analysis Automation
+### Pattern 3: Impact Analysis
 
 ```bash
 # Analyze code changes
-git diff HEAD~1 --name-only | \
-  while read file; do
-    engram impact "$file" --json --down
-  done | \
-  jq -s 'flatten | unique' | \
-  ai-affected-tests
+git diff HEAD~1 --name-only | while read file; do
+  engram impact "$file" --json
+done
 
-# Automated test selection for CI/CD
-engram impact src/auth/login.zig --json --down | \
-  jq -r '.[] | select(.type == "test_case") | .id' | \
-  xargs -I {} engram show {} --json
+# Get affected tests
+engram impact src/auth.zig --json | \
+  jq '.[] | select(.type == "test_case")'
 ```
 
-### Pattern 5: Natural Language Processing
+### Pattern 4: Release Readiness
 
 ```bash
-# Parse natural language queries
-engram query "show me all P1 issues blocking authentication" --json
+# Check release status
+engram release-status --json
 
-# Get structured results
-{
-  "results": [
-    {
-      "id": "issue.db.timeout",
-      "type": "issue",
-      "priority": 1,
-      "blocks": ["req.auth.login", "req.auth.oauth"]
-    }
-  ]
-}
+# Get blockers
+engram release-status --json | jq '.blocking_items[]'
+
+# Generate status report
+engram status --json | jq 'group_by(.type) | map({type: .[0].type, count: length})'
 ```
 
 ---
 
-## Command Reference for AI Agents
+## Essential Commands for AI Agents
 
-### Core Commands with JSON Output
-
-#### 1. status - List Project Artifacts
-
+### status - Project Overview
 ```bash
 engram status --json
+# Returns: [{id, title, type, status, priority, tags}, ...]
+```
+
+### query - Search and Filter
+```bash
+# Filter by type and state
+engram query --type requirement --state draft --json
+
+# Filter by multiple criteria
+engram query --type issue --priority 1 --json
+
+# Natural language search
+engram query "authentication problems" --json
+```
+
+### show - Get Item Details
+```bash
+engram show req.auth.oauth2 --json
+# Returns: {id, title, type, body, context, _llm, connections, ...}
+```
+
+### update - Programmatic Updates
+```bash
+# Single field
+engram update req.auth --set "context.status=implemented"
+
+# Multiple fields
+engram update req.auth \
+  --set "context.assignee=alice" \
+  --set "_llm_t=OAuth 2.0" \
+  --set content="Updated description..."
+
+# Content updates
+engram update req.api --set content="## API Spec\n\nDetailed description..."
+
+# LLM metadata
+engram update req.auth --set "_llm_d=3" --set "_llm_k=oauth,login,auth"
+```
+
+### trace - Dependency Analysis
+```bash
+engram trace req.auth.oauth2 --json --depth 2
+# Returns dependencies and relationships
+```
+
+### impact - Change Impact Analysis
+```bash
+engram impact src/auth.zig --json
+# Returns affected items and recommendations
+```
+
+### metrics - Project Statistics
+```bash
+engram metrics --json
+# Returns: {total_neuronas, by_type, completion_rate, test_coverage}
 ```
 
 **Response:**
@@ -624,116 +615,60 @@ echo "✅ Build successful. Deployment ready."
 
 ---
 
-## Search Modes for AI Agents
+## Search Modes
 
-### 1. Filter Mode - Structured Queries
-
+### Filter Mode - Fast Structured Queries
 ```bash
-# Precise filtering
 engram query --type requirement --state draft --json
-
-# Combine filters
-engram query --type issue --priority 1 --state open --json
+engram query --type issue --priority 1 --json
 ```
 
-### 2. Text Mode - Keyword Search (BM25)
-
+### Text Mode - Keyword Search
 ```bash
-# Full-text search with ranking
 engram query --mode text "authentication timeout" --json
-
-# Phrase search
-engram query --mode text '"OAuth 2.0 implementation"' --json
+engram query --mode text '"OAuth 2.0"' --json
 ```
 
-### 3. Vector Mode - Semantic Search
-
+### Vector Mode - Semantic Understanding
 ```bash
-# Find semantically similar items
-engram query --mode vector "user sign in problems" --json
-
-# Understands related concepts
-engram query --mode vector "performance issues" --json
-# Returns: "slow database queries", "high memory usage", etc.
+engram query --mode vector "user login problems" --json
+# Understands related concepts: signin, authentication, etc.
 ```
 
-### 4. Hybrid Mode - Combined Search
-
+### Hybrid Mode - Best Results
 ```bash
-# Best general search
 engram query --mode hybrid "login failure" --json
-
-# Combines keyword matching + semantic understanding
-```
-
-### 5. Activation Mode - Neural Propagation
-
-```bash
-# Follow connections through the graph
-engram query --mode activation "critical bug" --json
-
-# Explores related items through connections
+# Combines keywords + semantic search
 ```
 
 ---
 
-## EQL (Engram Query Language) Reference
+## Query Syntax (EQL)
 
-### Basic Syntax
-
-```
+### Basic Filters
+```bash
 type:requirement
 state:implemented
 priority:1
 tag:security
 ```
 
-### Logical Operators
-
-```
+### Logical Operations
+```bash
 type:requirement AND state:approved
 (type:issue OR type:bug) AND priority:1
-type:requirement AND NOT link(validates, type:test_case)
+type:requirement AND NOT state:implemented
 ```
 
-### Comparison Operators
-
-```
-priority:>=2
-priority:<=3
-priority!=1
-```
-
-### Content Matching
-
-```
-title:contains:oauth
-content:contains:authentication
-```
-
-### Connection Queries
-
-```
-link(validates, req.auth.oauth2)
-link(blocks, type:requirement)
-```
-
-### Complex Examples
-
+### Examples
 ```bash
-# Find all high-priority open issues
+# High-priority open issues
 engram query "type:issue AND priority:1 AND state:open" --json
 
-# Find requirements without tests
+# Requirements without tests
 engram query "type:requirement AND NOT link(validates, type:test_case)" --json
 
-# Find tests that are failing
-engram query "type:test_case AND state:failing" --json
-
-# Find items linked to a specific requirement
-engram query "link(validates, req.auth.oauth2)" --json
-
-# Find security-related requirements
+# Security requirements
 engram query "type:requirement AND tag:security" --json
 ```
 
@@ -741,409 +676,128 @@ engram query "type:requirement AND tag:security" --json
 
 ## State Transitions
 
-### Issues
-```json
-{
-  "states": ["open", "in_progress", "resolved", "closed"],
-  "valid_transitions": {
-    "open": ["in_progress", "resolved"],
-    "in_progress": ["resolved", "open"],
-    "resolved": ["closed", "open"],
-    "closed": ["open"]
-  }
-}
-```
-
-### Tests
-```json
-{
-  "states": ["not_run", "running", "passing", "failing"],
-  "valid_transitions": {
-    "not_run": ["running"],
-    "running": ["passing", "failing", "not_run"],
-    "passing": ["running", "failing"],
-    "failing": ["running", "passing"]
-  }
-}
-```
-
 ### Requirements
-```json
-{
-  "states": ["draft", "approved", "implemented"],
-  "valid_transitions": {
-    "draft": ["approved"],
-    "approved": ["implemented", "draft"],
-    "implemented": ["approved"]
-  }
-}
-```
+- draft → approved → implemented
+- Can transition backwards (implemented → approved)
+
+### Tests  
+- not_run → running → passing/failing
+- Can transition between passing/failing
+
+### Issues
+- open → in_progress → resolved → closed
+- Can reopen from resolved → open
+
+**Note:** State validation enforces valid transitions. Use force flag to bypass for initial setup.
 
 ---
 
-## Best Practices for AI Agents
+## Best Practices
 
-### 1. Always Use JSON Output
-
+### 1. Always Use --json Flag
 ```bash
-# Good
-engram status --json
-
-# Bad (hard to parse)
-engram status
-```
-
-### 2. Cache Frequently Accessed Data
-
-```bash
-# Cache status checks
-if [ ! -f status_cache.json ] || [ $(find status_cache.json -mmin +5) ]; then
-  engram status --json > status_cache.json
-fi
-```
-
-### 3. Use Semantic Search for Understanding
-
-```bash
-# Vector mode understands meaning
-engram query --mode vector "user authentication" --json
-```
-
-### 4. Leverage _llm Metadata
-
-```bash
-# Use token counts for optimization
-TOKEN_COUNT=$(engram show req.auth --json | jq '._llm.c')
-if [ $TOKEN_COUNT -gt 1000 ]; then
-  # Use summary instead
-  STRATEGY=$(engram show req.auth --json | jq '._llm.strategy')
-fi
-```
-
-### 5. Chain Commands for Complex Workflows
-
-```bash
-# Get requirements → Generate tests → Create tests
-engram query "type:requirement AND state:approved" --json | \
-  ai-generate-tests | \
-  jq -r '.[] | "engram new test_case \"\(.title)\" --validates \(.validates)"' | \
-  bash
-```
-
-### 6. Handle Errors Gracefully
-
-```bash
-# Check if Neurona exists before operating
-if engram show req.auth --json >/dev/null 2>&1; then
-  # Proceed with operations
-else
-  echo "Neurona not found. Handle gracefully."
-fi
-```
-
-### 7. Use Impact Analysis Before Changes
-
-```bash
-# Always analyze impact before modifying code
-IMPACT=$(engram impact src/auth.zig --json)
-AFFECTED_TESTS=$(echo $IMPACT | jq -r '.affected_items[] | select(.type == "test_case") | .id')
-
-if [ ! -z "$AFFECTED_TESTS" ]; then
-  echo "Warning: This will affect $AFFECTED_TESTS"
-fi
-```
-
----
-
-## Performance Optimization
-
-### 1. Use Filters to Limit Results
-
-```bash
-# Limit number of results
-engram query --mode text "authentication" --limit 10 --json
+engram status --json        # Parseable output
+engram show req.auth --json  # Complete data
 ```
 
 ### 2. Cache Expensive Operations
-
 ```bash
-# Rebuild index periodically, not on every query
-engram sync --force-rebuild
+# Cache status for 5 minutes
+if [ ! -f cache.json ] || [ $(find cache.json -mmin +5) ]; then
+  engram status --json > cache.json
+fi
 ```
 
-### 3. Use Specific Query Modes
-
+### 3. Use Batch Updates
 ```bash
-# Filter mode is fastest
-engram query --type requirement --json
-
-# Hybrid mode is slower but more accurate
-engram query --mode hybrid "authentication" --json
+# Multiple fields in one command
+engram update req.auth \
+  --set "context.status=implemented" \
+  --set "_llm_d=3" \
+  --set content="Updated description"
 ```
 
-### 4. Batch Operations
-
+### 4. Error Handling
 ```bash
-# Batch updates instead of one at a time
-engram update req.001 --set "status=implemented" \
-  --set "assignee=alice" \
-  --set "priority=1"
+# Check item exists before operations
+if engram show req.auth --json >/dev/null 2>&1; then
+  # Item exists, proceed
+else
+  echo "Item not found"
+fi
 ```
 
----
-
-## Troubleshooting for AI Agents
-
-### Issue: Neurona Not Found
-
+### 5. Use Semantic Search
 ```bash
-# Search instead of direct reference
-engram query --mode text "partial title" --json
-
-# Or list all and find
-engram status --json | jq '.results[] | select(.title | contains("auth"))'
-```
-
-### Issue: Invalid JSON Output
-
-```bash
-# Verify JSON is valid
-engram status --json | jq .
-
-# Check for errors
-engram status --json 2>&1 | jq '.error // .'
-```
-
-### Issue: Slow Queries
-
-```bash
-# Sync index
-engram sync --force-rebuild
-
-# Use filters
-engram query --type requirement --limit 100 --json
-```
-
-### Issue: Connections Not Updated
-
-```bash
-# Always sync after manual edits
-engram sync
+# Understand meaning beyond keywords
+engram query --mode vector "user login issues" --json
 ```
 
 ---
 
 ## Integration Examples
 
-### Python AI Agent
-
+### Python Agent
 ```python
-import json
-import subprocess
+import json, subprocess
 
-def run_engram(command):
-    """Run engram command and return JSON output"""
-    result = subprocess.run(
-        f"engram {command} --json",
-        shell=True,
-        capture_output=True,
-        text=True
-    )
-    return json.loads(result.stdout)
+def run_engram(cmd):
+    return json.loads(subprocess.run(f"engram {cmd} --json", 
+                              shell=True, capture_output=True, text=True).stdout)
 
-# Get project status
+# Get status and update items
 status = run_engram("status")
-print(f"Total items: {status['total']}")
-
-# Find untested requirements
-requirements = run_engram(
-    'query "type:requirement AND NOT link(validates, type:test_case)"'
-)
-
-for req in requirements['results']:
-    print(f"Untested: {req['title']}")
-
-# Check release readiness
-release = run_engram("release-status")
-if not release['ready']:
-    blockers = [b['id'] for b in release['blocking_items']]
-    print(f"Blocked by: {blockers}")
+for item in status:
+    if item.get('priority') == 1:
+        run_engram(f"update {item['id']} --set context.priority=1")
 ```
 
-### Node.js AI Agent
-
+### JavaScript Agent
 ```javascript
 const { execSync } = require('child_process');
 
-function runEngram(command) {
-    const output = execSync(`engram ${command} --json`, { encoding: 'utf-8' });
-    return JSON.parse(output);
+function runEngram(cmd) {
+    return JSON.parse(execSync(`engram ${cmd} --json`, { encoding: 'utf-8' }));
 }
 
-// Get project metrics
-const metrics = runEngram('metrics');
-console.log(`Coverage: ${metrics.test_coverage * 100}%`);
-
-// Find high-priority issues
+// Find high-priority items
 const issues = runEngram('query --type issue --priority 1');
-issues.results.forEach(issue => {
-    console.log(`P1 Issue: ${issue.title}`);
-});
-
-// Impact analysis
-const impact = runEngram('impact src/auth/login.zig');
-console.log('Affected items:', impact.affected_items.length);
-```
-
----
-
-## CI/CD Integration
-
-### GitHub Actions
-
-```yaml
-name: Engram Release Check
-
-on: [push, pull_request]
-
-jobs:
-  release-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      
-      - name: Install Engram
-        run: |
-          wget https://github.com/yourusername/Engram/releases/latest/download/engram
-          chmod +x engram
-          
-      - name: Check Release Readiness
-        run: |
-          ./engram init . --type alm
-          READY=$(./engram release-status --json | jq '.ready')
-          if [ "$READY" != "true" ]; then
-            echo "❌ Not ready for release"
-            exit 1
-          fi
-          echo "✅ Release ready"
-          
-      - name: Generate Release Notes
-        if: success()
-        run: |
-          ./engram query "type:requirement AND state:implemented" --json | \
-            jq -r '.results[] | "- \(.title)"' > RELEASE_NOTES.md
-```
-
-### Jenkins Pipeline
-
-```groovy
-pipeline {
-    agent any
-    
-    stages {
-        stage('Check Release Status') {
-            steps {
-                script {
-                    def status = sh(
-                        script: 'engram release-status --json',
-                        returnStdout: true
-                    ).trim()
-                    
-                    def ready = readJSON(text: status).ready
-                    
-                    if (!ready) {
-                        error("Release not ready")
-                    }
-                }
-            }
-        }
-        
-        stage('Run Tests') {
-            steps {
-                script {
-                    def tests = sh(
-                        script: 'engram query "type:test_case AND state:passing" --json',
-                        returnStdout: true
-                    ).trim()
-                    
-                    def testCount = readJSON(text: status).results.size()
-                    echo "Running ${testCount} tests"
-                }
-            }
-        }
-    }
-}
-```
-
----
-
-## API-Like Usage Patterns
-
-### RESTful Wrapper (Pseudo-code)
-
-```bash
-# GET /status
-engram status --json
-
-# GET /requirements
-engram query --type requirement --json
-
-# GET /requirements/{id}
-engram show req.auth --json
-
-# POST /requirements
-engram new requirement "New Feature"
-
-# PUT /requirements/{id}
-engram update req.auth --set "status=implemented"
-
-# DELETE /requirements/{id}
-engram delete req.auth
-
-# GET /requirements/{id}/trace
-engram trace req.auth --json
-
-# GET /impact?artifact=src/auth.zig
-engram impact src/auth.zig --json
+console.log('P1 Issues:', issues.length);
 ```
 
 ---
 
 ## Summary
 
-Engram provides AI agents with:
+### Core Commands for AI Agents
 
-1. **Structured JSON outputs** for easy parsing
-2. **LLM-optimized metadata** for token efficiency
-3. **Multiple search modes** including semantic understanding
-4. **Complete traceability** through dependency analysis
-5. **Automated workflows** for CI/CD integration
-6. **Natural language queries** for flexible interaction
-7. **Intelligent caching** for performance
-8. **Impact analysis** for change management
+```bash
+engram status --json           # Project overview
+engram query --json            # Search and filter  
+engram show <id> --json       # Get details
+engram update <id> --set ...  # Programmatic updates
+engram trace <id> --json       # Dependencies
+engram impact <file> --json    # Change impact
+```
 
-### Key Commands for AI Agents
+### Key Features
 
-- `engram status --json` - Project overview
-- `engram query --json` - Search and filter
-- `engram show <id> --json` - Get details
-- `engram trace <id> --json` - Dependency analysis
-- `engram impact <artifact> --json` - Change impact
-- `engram release-status --json` - Release readiness
-- `engram metrics --json` - Statistics
+- ✅ **Complete JSON API** - All data accessible programmatically
+- ✅ **LLM metadata** - Token-efficient `_llm` fields  
+- ✅ **Programmatic updates** - `--set content`, `--set context.*`, `--set _llm.*`
+- ✅ **Semantic search** - Vector embeddings understand meaning
+- ✅ **Dependency tracking** - Impact analysis and tracing
 
 ### Best Practices
 
-1. Always use `--json` flag for programmatic access
-2. Cache frequently accessed data
-3. Use semantic search for understanding
-4. Chain commands for complex workflows
-5. Handle errors gracefully
-6. Use impact analysis before changes
-7. Optimize queries with filters
+1. **Always use `--json`** for parseable output
+2. **Use batch updates** - Multiple `--set` flags in one command
+3. **Leverage `_llm` metadata** - Optimized for AI consumption
+4. **Cache expensive operations** - Status, queries, metrics
+5. **Handle errors gracefully** - Check existence before operations
 
-Engram is designed to be the bridge between human project management and AI automation. Use these patterns to build intelligent, automated workflows for your software projects.
+Engram provides complete programmatic access for AI agents and automation systems.
 
 ---
 
-*For more information, see the main Engram manual at docs/manual.md*
+*For complete documentation, see the Engram manual.*

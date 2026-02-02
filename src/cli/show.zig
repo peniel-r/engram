@@ -183,7 +183,7 @@ fn printJsonString(s: []const u8) void {
 /// JSON output for AI
 fn outputJson(allocator: Allocator, neurona: *const Neurona, filepath: []const u8, body: []const u8) !void {
     _ = allocator;
-    std.debug.print("{", .{});
+    std.debug.print("{{", .{});
     std.debug.print("\"id\":\"{s}\",", .{neurona.id});
     std.debug.print("\"title\":\"{s}\",", .{neurona.title});
     std.debug.print("\"type\":\"{s}\",", .{@tagName(neurona.type)});
@@ -208,7 +208,7 @@ fn outputJson(allocator: Allocator, neurona: *const Neurona, filepath: []const u
     std.debug.print(",", .{});
 
     // Context
-    std.debug.print("\"context\":{", .{});
+    std.debug.print("\"context\":{{", .{});
     switch (neurona.context) {
         .requirement => |ctx| {
             std.debug.print("\"status\":\"{s}\",", .{ctx.status});
@@ -226,17 +226,17 @@ fn outputJson(allocator: Allocator, neurona: *const Neurona, filepath: []const u
         },
         else => {},
     }
-    std.debug.print("},", .{});
+    std.debug.print("}},", .{});
 
     // LLM metadata
     if (neurona.llm_metadata) |*meta| {
-        std.debug.print("\"_llm\":{", .{});
+        std.debug.print("\"_llm\":{{", .{});
         std.debug.print("\"t\":\"{s}\",", .{meta.short_title});
         std.debug.print("\"d\":{d}", .{meta.density});
-        std.debug.print("}", .{});
+        std.debug.print("}}", .{});
     }
 
-    std.debug.print("}\n", .{});
+    std.debug.print("}}\n", .{});
 }
 
 // Example CLI usage:

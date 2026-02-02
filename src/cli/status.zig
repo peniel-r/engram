@@ -356,7 +356,7 @@ fn outputJson(issues: []*const Neurona) !void {
     std.debug.print("[", .{});
     for (issues, 0..) |issue, i| {
         if (i > 0) std.debug.print(",", .{});
-        std.debug.print("{", .{});
+        std.debug.print("{{", .{});
         std.debug.print("\"id\":\"{s}\",", .{issue.id});
         std.debug.print("\"title\":\"{s}\",", .{issue.title});
         std.debug.print("\"type\":\"{s}\",", .{@tagName(issue.type)});
@@ -367,7 +367,7 @@ fn outputJson(issues: []*const Neurona) !void {
             .test_case => |ctx| std.debug.print("{s}", .{ctx.status}),
             .issue => |ctx| std.debug.print("{s}", .{ctx.status}),
             .requirement => |ctx| std.debug.print("{s}", .{ctx.status}),
-            else => std.debug.print("[N/A]"),
+            else => std.debug.print("[N/A]", .{}),
         }
         std.debug.print("\",", .{});
 
@@ -377,13 +377,13 @@ fn outputJson(issues: []*const Neurona) !void {
             .test_case => |ctx| std.debug.print("{d}", .{ctx.priority}),
             .issue => |ctx| std.debug.print("{d}", .{ctx.priority}),
             .requirement => |ctx| std.debug.print("{d}", .{ctx.priority}),
-            else => std.debug.print("null"),
+            else => std.debug.print("null", .{}),
         }
-        std.debug.print(",");
+        std.debug.print(",", .{});
 
         // Tags count
         std.debug.print("\"tags\":{d}", .{issue.tags.items.len});
-        std.debug.print("}", .{});
+        std.debug.print("}}", .{});
     }
     std.debug.print("]\n", .{});
 }
