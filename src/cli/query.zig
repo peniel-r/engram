@@ -1015,27 +1015,89 @@ fn outputList(allocator: Allocator, neuras: []const Neurona) !void {
     std.debug.print("\n  Found {d} results\n", .{neuras.len});
 }
 
-/// JSON output for AI
+/// Print string as JSON-escaped value
+fn printJsonString(s: []const u8) void {
+    std.debug.print("\"", .{});
+    for (s) |c| {
+        switch (c) {
+            '"' => std.debug.print("\\\"", .{}),
+            '\\' => std.debug.print("\\\\", .{}),
+            '\n' => std.debug.print("\\n", .{}),
+            '\r' => std.debug.print("\\r", .{}),
+            '\t' => std.debug.print("\\t", .{}),
+            else => std.debug.print("{c}", .{c}),
+        }
+    }
+    std.debug.print("\"", .{});
+}
+
+/// JSON output for AI - complete neurona data
 fn outputJson(allocator: Allocator, neuras: []const Neurona) !void {
     _ = allocator;
     std.debug.print("[", .{});
     for (neuras, 0..) |neurona, i| {
         if (i > 0) std.debug.print(",", .{});
-        std.debug.print("{{", .{});
+        std.debug.print("{", .{});
         std.debug.print("\"id\":\"{s}\",", .{neurona.id});
         std.debug.print("\"title\":\"{s}\",", .{neurona.title});
         std.debug.print("\"type\":\"{s}\",", .{@tagName(neurona.type)});
 
+        // Tags
         std.debug.print("\"tags\":[", .{});
+        for (neurona.tags.items, 0..) |tag, ti| {
+            if (ti > 0) std.debug.print(",", .{});
+            printJsonString(tag);
+        }
+        std.debug.print("],", .{});
 
-        var tag_i: usize = 0;
-        for (neurona.tags.items) |tag| {
-            if (tag_i > 0) std.debug.print(",", .{});
-            std.debug.print("\"{s}\"", .{tag});
-            tag_i += 1;
+        // Context
+        std.debug.print("\"context\":{", .{});
+        switch (neurona.context) {
+            .requirement => |ctx| {
+                std.debug.print("\"status\":\"{s}\",", .{ctx.status});
+                std.debug.print("\"verification_method\":\"{s}\",", .{ctx.verification_method});
+                std.debug.print("\"priority\":{d}", .{ctx.priority});
+                if (ctx.assignee) |a| std.debug.print(",\"assignee\":\"{s}\"", .{a});
+            },
+            .test_case => |ctx| {
+                std.debug.print("\"status\":\"{s}\",", .{ctx.status});
+                std.debug.print("\"framework\":\"{s}\"", .{ctx.framework});
+                if (ctx.assignee) |a| std.debug.print(",\"assignee\":\"{s}\"", .{a});
+            },
+            .issue => |ctx| {
+                std.debug.print("\"status\":\"{s}\",", .{ctx.status});
+                std.debug.print("\"priority\":{d}", .{ctx.priority});
+                if (ctx.assignee) |a| std.debug.print(",\"assignee\":\"{s}\"", .{a});
+            },
+            .artifact => |ctx| {
+                std.debug.print("\"runtime\":\"{s}\",", .{ctx.runtime});
+                std.debug.print("\"file_path\":\"{s}\"", .{ctx.file_path});
+            },
+            else => {},
+        }
+        std.debug.print("},", .{});
+
+        // LLM metadata
+        if (neurona.llm_metadata) |*meta| {
+            std.debug.print("\"_llm\":{", .{});
+            std.debug.print("\"t\":\"{s}\",", .{meta.short_title});
+            std.debug.print("\"d\":{d},", .{meta.density});
+            std.debug.print("\"strategy\":\"{s}\"", .{meta.strategy});
+            if (meta.keywords.items.len > 0) {
+                std.debug.print(",\"k\":[", .{});
+                for (meta.keywords.items, 0..) |kw, ki| {
+                    if (ki > 0) std.debug.print(",", .{});
+                    printJsonString(kw);
+                }
+                std.debug.print("]", .{});
+                std.debug.print(",\"c\":{d}", .{meta.token_count});
+            }
+            std.debug.print("},", .{});
         }
 
-        std.debug.print("]}}", .{});
+        // Connections count
+        std.debug.print("\"connections\":{d}", .{neurona.connections.count()});
+        std.debug.print("}", .{});
     }
     std.debug.print("]\n", .{});
 }

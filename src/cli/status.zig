@@ -335,28 +335,55 @@ fn getPriorityString(issue: *const Neurona) ![]const u8 {
     return "[priority from context]";
 }
 
+/// Print string as JSON-escaped value
+fn printJsonString(s: []const u8) void {
+    std.debug.print("\"", .{});
+    for (s) |c| {
+        switch (c) {
+            '"' => std.debug.print("\\\"", .{}),
+            '\\' => std.debug.print("\\\\", .{}),
+            '\n' => std.debug.print("\\n", .{}),
+            '\r' => std.debug.print("\\r", .{}),
+            '\t' => std.debug.print("\\t", .{}),
+            else => std.debug.print("{c}", .{c}),
+        }
+    }
+    std.debug.print("\"", .{});
+}
+
 /// JSON output for AI
 fn outputJson(issues: []*const Neurona) !void {
     std.debug.print("[", .{});
     for (issues, 0..) |issue, i| {
         if (i > 0) std.debug.print(",", .{});
-        std.debug.print("{{", .{});
+        std.debug.print("{", .{});
         std.debug.print("\"id\":\"{s}\",", .{issue.id});
         std.debug.print("\"title\":\"{s}\",", .{issue.title});
         std.debug.print("\"type\":\"{s}\",", .{@tagName(issue.type)});
 
         // Get status from context
+        std.debug.print("\"status\":\"", .{});
         switch (issue.context) {
-            .test_case => |ctx| {
-                std.debug.print("\"status\":\"{s}\",", .{ctx.status});
-            },
-            else => {
-                std.debug.print("\"status\":\"[N/A]\",", .{});
-            },
+            .test_case => |ctx| std.debug.print("{s}", .{ctx.status}),
+            .issue => |ctx| std.debug.print("{s}", .{ctx.status}),
+            .requirement => |ctx| std.debug.print("{s}", .{ctx.status}),
+            else => std.debug.print("[N/A]"),
         }
+        std.debug.print("\",", .{});
 
-        std.debug.print("\"priority\":\"[from context]\"", .{});
-        std.debug.print("}}", .{});
+        // Get priority from context
+        std.debug.print("\"priority\":", .{});
+        switch (issue.context) {
+            .test_case => |ctx| std.debug.print("{d}", .{ctx.priority}),
+            .issue => |ctx| std.debug.print("{d}", .{ctx.priority}),
+            .requirement => |ctx| std.debug.print("{d}", .{ctx.priority}),
+            else => std.debug.print("null"),
+        }
+        std.debug.print(",");
+
+        // Tags count
+        std.debug.print("\"tags\":{d}", .{issue.tags.items.len});
+        std.debug.print("}", .{});
     }
     std.debug.print("]\n", .{});
 }
