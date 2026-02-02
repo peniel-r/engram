@@ -671,6 +671,31 @@ pub fn neuronaToYaml(allocator: Allocator, neurona: Neurona) ![]u8 {
     return try yaml_buf.toOwnedSlice(allocator);
 }
 
+/// Update only the body content of a Neurona file (preserves frontmatter)
+pub fn updateBody(allocator: Allocator, filepath: []const u8, new_body: []const u8) !void {
+    // Read existing file
+    const content = try std.fs.cwd().readFileAlloc(allocator, filepath, 10 * 1024 * 1024);
+    defer allocator.free(content);
+
+    // Extract frontmatter
+    const fm = try frontmatter.parse(allocator, content);
+    defer fm.deinit(allocator);
+
+    // Generate new file with old frontmatter + new body
+    const new_content = try generateMarkdown(allocator, fm.content, new_body);
+    defer allocator.free(new_content);
+
+    // Write back to file
+    const file = try std.fs.cwd().createFile(filepath, .{});
+    defer {
+        file.sync() catch |err| {
+            std.debug.print("Warning: Failed to sync file: {}\n", .{err});
+        };
+        file.close();
+    }
+    try file.writeAll(new_content);
+}
+
 /// Generate complete Markdown file content from Neurona
 fn generateMarkdown(allocator: Allocator, yaml_content: []const u8, body: []const u8) ![]u8 {
     var content = std.ArrayListUnmanaged(u8){};

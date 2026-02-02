@@ -11,6 +11,7 @@ const ConnectionType = @import("../core/neurona.zig").ConnectionType;
 const readNeurona = @import("../storage/filesystem.zig").readNeurona;
 const writeNeurona = @import("../storage/filesystem.zig").writeNeurona;
 const findNeuronaPath = @import("../storage/filesystem.zig").findNeuronaPath;
+const updateBody = @import("../storage/filesystem.zig").updateBody;
 const timestamp_mod = @import("../utils/timestamp.zig");
 const state_machine = @import("../core/state_machine.zig");
 
@@ -52,9 +53,13 @@ pub fn execute(allocator: Allocator, config: UpdateConfig) !void {
 
     // Step 2: Apply updates
     var updated = false;
-    for (config.sets.items) |*update| {
-        if (try applyUpdate(allocator, &neurona, update.*, config.verbose)) {
+    var body_updated = false;
+    for (config.sets.items) |*update_item| {
+        if (try applyUpdate(allocator, &neurona, update_item.*, config.verbose, config.neuronas_dir)) {
             updated = true;
+        }
+        if (std.mem.eql(u8, update_item.field, "content")) {
+            body_updated = true;
         }
     }
 
@@ -71,8 +76,10 @@ pub fn execute(allocator: Allocator, config: UpdateConfig) !void {
     neurona.updated = try allocator.dupe(u8, ts);
     allocator.free(ts);
 
-    // Step 4: Write back to file
-    try writeNeurona(allocator, neurona, filepath);
+    // Step 4: Write back to file (skip if body was already updated)
+    if (!body_updated) {
+        try writeNeurona(allocator, neurona, filepath, false);
+    }
 
     if (config.verbose) {
         std.debug.print("Updated {s}\n", .{config.id});
@@ -82,7 +89,7 @@ pub fn execute(allocator: Allocator, config: UpdateConfig) !void {
 }
 
 /// Apply a field update to a Neurona
-fn applyUpdate(allocator: Allocator, neurona: *Neurona, update: FieldUpdate, verbose: bool) !bool {
+fn applyUpdate(allocator: Allocator, neurona: *Neurona, update: FieldUpdate, verbose: bool, neuronas_dir: []const u8) !bool {
     const field = update.field;
     const value = update.value;
 
@@ -92,6 +99,16 @@ fn applyUpdate(allocator: Allocator, neurona: *Neurona, update: FieldUpdate, ver
     }
 
     // Handle direct fields
+    // Handle content field (markdown body, not frontmatter)
+    if (std.mem.eql(u8, field, "content")) {
+        // Update markdown body content (not frontmatter)
+        const body_filepath = try findNeuronaPath(allocator, neuronas_dir, neurona.id);
+        defer allocator.free(body_filepath);
+        try updateBody(allocator, body_filepath, value);
+        if (verbose) std.debug.print("  Set body content to: {s}...\n", .{value[0..@min(50, value.len)]});
+        return true;
+    }
+
     if (std.mem.eql(u8, field, "title")) {
         allocator.free(neurona.title);
         neurona.title = try allocator.dupe(u8, value);

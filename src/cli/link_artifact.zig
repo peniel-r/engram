@@ -120,7 +120,7 @@ fn linkArtifactFile(allocator: Allocator, config: LinkArtifactConfig, source_fil
             const artifact_filepath = try std.fs.path.join(allocator, &.{ config.neuronas_dir, filename_with_ext });
             defer allocator.free(artifact_filepath);
 
-            try writeNeurona(allocator, artifact, artifact_filepath);
+            try writeNeurona(allocator, artifact, artifact_filepath, false);
 
             // Add reverse connection to artifact
             const conn = Connection{
@@ -131,7 +131,7 @@ fn linkArtifactFile(allocator: Allocator, config: LinkArtifactConfig, source_fil
             try artifact.addConnection(allocator, conn);
 
             // Write artifact with connection
-            try writeNeurona(allocator, artifact, artifact_filepath);
+            try writeNeurona(allocator, artifact, artifact_filepath, false);
 
             return LinkResult{
                 .artifact_id = try allocator.dupe(u8, artifact_id),

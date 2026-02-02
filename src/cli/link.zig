@@ -101,7 +101,7 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
         allocator.free(target.updated);
         target.updated = try timestamp.nowDate(allocator);
 
-        try fs.writeNeurona(allocator, target, target_path);
+        try fs.writeNeurona(allocator, target, target_path, false);
 
         if (config.verbose) {
             std.debug.print("Linked {s} --[{s}]--> {s}\n", .{ target_id, @tagName(reverse_type), source_id });
