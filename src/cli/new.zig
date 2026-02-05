@@ -7,6 +7,7 @@ const Allocator = std.mem.Allocator;
 const editor = @import("../utils/editor.zig");
 const id_gen = @import("../utils/id_generator.zig");
 const timestamp = @import("../utils/timestamp.zig");
+const uri_parser = @import("../utils/uri_parser.zig");
 
 /// ALM-specific Neurona types for Engram
 pub const NeuronaType = enum {
@@ -48,6 +49,7 @@ pub const NewConfig = struct {
     parent: ?[]const u8 = null,
     validates: ?[]const u8 = null, // For test_case
     blocks: ?[]const u8 = null, // For issue
+    cortex_dir: ?[]const u8 = null, // Explicit cortex path override
 
     // Behavior flags
     interactive: bool = true,
@@ -198,16 +200,34 @@ fn getTemplate(type_str: []const u8) TemplateConfig {
 
 /// Main command handler
 pub fn execute(allocator: Allocator, config: NewConfig) !void {
-    // Step 1: Generate ID with type prefix
+    // Step 1: Determine cortex directory
+    // If config.cortex_dir is provided, use it directly (no allocation needed)
+    // Otherwise, auto-detect cortex and allocate the path
+    const cortex_dir = if (config.cortex_dir) |cd|
+        cd // Use provided path directly
+    else
+        uri_parser.findCortexDir(allocator) catch |err| {
+            if (err == error.CortexNotFound) {
+                std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
+                std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
+                std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+                std.process.exit(1);
+            }
+            return err;
+        };
+    // Free cortex_dir only if we allocated it (config.cortex_dir was null)
+    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+
+    // Step 2: Generate ID with type prefix
     const prefix = getTypePrefix(config.neurona_type);
     const neurona_id = try id_gen.fromTitleWithPrefix(allocator, prefix, config.title);
     defer allocator.free(neurona_id);
 
-    // Step 2: Get template config
+    // Step 3: Get template config
     const type_str = config.neurona_type.toString();
     const template = getTemplate(type_str);
 
-    // Step 3: Gather metadata
+    // Step 4: Gather metadata
     var context = std.StringHashMap([]const u8).init(allocator);
     defer {
         var it = context.iterator();
@@ -223,24 +243,24 @@ pub fn execute(allocator: Allocator, config: NewConfig) !void {
         try gatherContextAutomatic(allocator, &context, config, template);
     }
 
-    // Step 4: Build connections based on type
+    // Step 5: Build connections based on type
     var connections = std.ArrayList(Connection){};
     try connections.ensureTotalCapacity(allocator, 10);
     defer connections.deinit(allocator);
 
     try buildConnections(allocator, &connections, config);
 
-    // Step 5: Generate file content
+    // Step 6: Generate file content
     const content = try generateFileContent(allocator, neurona_id, config, template, context, connections.items);
     defer allocator.free(content);
 
-    // Step 6: Write to disk
-    const filename = try std.fmt.allocPrint(allocator, "neuronas/{s}.md", .{neurona_id});
+    // Step 7: Write to disk
+    const filename = try std.fmt.allocPrint(allocator, "{s}/neuronas/{s}.md", .{ cortex_dir, neurona_id });
     defer allocator.free(filename);
 
     try writeNeuronaFile(filename, content);
 
-    // Step 7: Output result
+    // Step 8: Output result
     if (config.json_output) {
         try outputJson(neurona_id, filename, config.neurona_type);
     } else {

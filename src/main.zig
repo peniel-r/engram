@@ -297,6 +297,7 @@ fn handleNew(allocator: Allocator, args: []const []const u8) !void {
         .interactive = true,
         .json_output = false,
         .auto_link = true,
+        .cortex_dir = null,
     };
 
     // Parse options
@@ -356,6 +357,14 @@ fn handleNew(allocator: Allocator, args: []const []const u8) !void {
             }
             i += 1;
             config.blocks = args[i];
+        } else if (std.mem.eql(u8, arg, "--cortex")) {
+            if (i + 1 >= args.len) {
+                std.debug.print("Error: --cortex requires a value\n", .{});
+                printNewHelp();
+                std.process.exit(1);
+            }
+            i += 1;
+            config.cortex_dir = args[i];
         } else if (std.mem.eql(u8, arg, "--json") or std.mem.eql(u8, arg, "-j")) {
             config.json_output = true;
         } else if (std.mem.eql(u8, arg, "--no-interactive")) {
@@ -1154,6 +1163,7 @@ fn printNewHelp() void {
         \\  --parent          Set parent Neurona ID
         \\  --validates       Set requirement this test validates (for test_case)
         \\  --blocks          Set issue this blocks (for issue)
+        \\  --cortex         Specify cortex directory path
         \\  --json, -j        Output as JSON
         \\  --no-interactive  Skip interactive prompts
         \\
@@ -1161,6 +1171,7 @@ fn printNewHelp() void {
         \\  engram new requirement "Support OAuth 2.0"
         \\  engram new test_case "OAuth Test" --validates req.auth.oauth2
         \\  engram new issue "OAuth library broken" --priority 1
+        \\  engram new requirement "Test" --cortex ./my_project
         \\
     , .{});
 }
