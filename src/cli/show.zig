@@ -18,6 +18,7 @@ pub const ShowConfig = struct {
     show_connections: bool = true,
     show_body: bool = true,
     json_output: bool = false,
+    cortex_dir: ?[]const u8 = null,
 };
 
 /// Main command handler
@@ -41,17 +42,35 @@ pub fn execute(allocator: Allocator, config: ShowConfig) !void {
         return;
     }
 
+    // Determine neuronas directory
+    const cortex_dir = config.cortex_dir orelse blk: {
+        const cd = uri_parser.findCortexDir(allocator) catch |err| {
+            if (err == error.CortexNotFound) {
+                std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
+                std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
+                std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+                std.process.exit(1);
+            }
+            return err;
+        };
+        break :blk cd;
+    };
+    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+
+    const neuronas_dir = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
+    defer allocator.free(neuronas_dir);
+
     // Resolve URI or use direct ID
     var resolved_id: ?[]const u8 = null;
     if (uri_parser.URI.isURI(config.id)) {
-        resolved_id = try uri_parser.resolveURIStr(allocator, config.id, "neuronas");
+        resolved_id = try uri_parser.resolveURIStr(allocator, config.id, neuronas_dir);
     } else {
         resolved_id = try allocator.dupe(u8, config.id);
     }
     defer if (resolved_id) |id| allocator.free(id);
 
     // Step1: Find and read Neurona file
-    const filepath = try findNeuronaPath(allocator, "neuronas", resolved_id.?);
+    const filepath = try findNeuronaPath(allocator, neuronas_dir, resolved_id.?);
     defer allocator.free(filepath);
 
     var neurona = try readNeurona(allocator, filepath);

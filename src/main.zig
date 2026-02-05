@@ -476,7 +476,7 @@ fn handleLink(allocator: Allocator, args: []const []const u8) !void {
 
 fn handleSync(allocator: Allocator, args: []const []const u8) !void {
     var config = sync_cmd.SyncConfig{
-        .directory = "neuronas",
+        .directory = null,
         .verbose = false,
         .rebuild_index = true,
         .force_rebuild = false,
@@ -674,7 +674,7 @@ fn handleDelete(allocator: Allocator, args: []const []const u8) !void {
                 std.process.exit(1);
             }
             i += 1;
-            config.neuronas_dir = args[i];
+            config.cortex_dir = args[i];
         } else if (std.mem.startsWith(u8, arg, "-")) {
             std.debug.print("Error: Unknown flag '{s}'\n", .{arg});
             printDeleteHelp();
@@ -787,7 +787,7 @@ fn handleUpdate(allocator: Allocator, args: []const []const u8) !void {
         .id = args[2],
         .sets = std.ArrayListUnmanaged(update_cmd.FieldUpdate){},
         .verbose = false,
-        .neuronas_dir = "neuronas",
+        .cortex_dir = null,
     };
     defer {
         for (config.sets.items) |*s| s.deinit(allocator);
@@ -851,7 +851,7 @@ fn handleImpact(allocator: Allocator, args: []const []const u8) !void {
         .max_depth = 10,
         .include_recommendations = true,
         .json_output = false,
-        .neuronas_dir = "neuronas",
+        .cortex_dir = null,
     };
 
     // Parse options
@@ -906,7 +906,7 @@ fn handleLinkArtifact(allocator: Allocator, args: []const []const u8) !void {
         .language_version = null,
         .safe_to_exec = false,
         .verbose = false,
-        .neuronas_dir = "neuronas",
+        .cortex_dir = null,
     };
     defer {
         for (config.source_files.items) |f| allocator.free(f);
@@ -966,7 +966,7 @@ fn handleReleaseStatus(allocator: Allocator, args: []const []const u8) !void {
         .include_issues = true,
         .json_output = false,
         .verbose = false,
-        .neuronas_dir = "neuronas",
+        .cortex_dir = null,
     };
 
     // Parse options
@@ -994,7 +994,7 @@ fn handleMetrics(allocator: Allocator, args: []const []const u8) !void {
         .last_days = null,
         .json_output = false,
         .verbose = false,
-        .neuronas_dir = "neuronas",
+        .cortex_dir = null,
     };
 
     var i: usize = 2;

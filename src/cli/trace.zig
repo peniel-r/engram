@@ -18,6 +18,7 @@ pub const TraceConfig = struct {
     max_depth: usize = 10,
     format: OutputFormat = .tree,
     json_output: bool = false,
+    cortex_dir: ?[]const u8 = null,
 };
 
 pub const Direction = enum {
@@ -47,8 +48,26 @@ pub const TraceNode = struct {
 
 /// Main command handler
 pub fn execute(allocator: Allocator, config: TraceConfig) !void {
+    // Determine neuronas directory
+    const cortex_dir = config.cortex_dir orelse blk: {
+        const cd = uri_parser.findCortexDir(allocator) catch |err| {
+            if (err == error.CortexNotFound) {
+                std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
+                std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
+                std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+                std.process.exit(1);
+            }
+            return err;
+        };
+        break :blk cd;
+    };
+    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+
+    const neuronas_dir = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
+    defer allocator.free(neuronas_dir);
+
     // Step 1: Load all Neuronas and build graph
-    const neuronas = scanNeuronas(allocator, "neuronas") catch |err| {
+    const neuronas = scanNeuronas(allocator, neuronas_dir) catch |err| {
         switch (err) {
             error.FileNotFound => {
                 std.debug.print("Error: No neuronas directory found. Please run 'engram init' first or ensure you're in a Cortex directory.\n", .{});
@@ -77,7 +96,7 @@ pub fn execute(allocator: Allocator, config: TraceConfig) !void {
     }
 
     // Step 2: Trace from target node
-    const trace_result = try trace(allocator, &graph, "neuronas", config);
+    const trace_result = try trace(allocator, &graph, neuronas_dir, config);
     defer {
         for (trace_result) |*n| n.deinit(allocator);
         allocator.free(trace_result);

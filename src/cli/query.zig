@@ -10,6 +10,7 @@ const storage = @import("../root.zig").storage;
 const Graph = @import("../core/graph.zig").Graph;
 const NeuralActivation = @import("../root.zig").core.NeuralActivation;
 const GloVeIndex = @import("../root.zig").storage.GloVeIndex;
+const uri_parser = @import("../utils/uri_parser.zig");
 
 /// Query mode for different search algorithms
 pub const QueryMode = enum {
@@ -38,6 +39,7 @@ pub const QueryConfig = struct {
     filters: []QueryFilter,
     limit: ?usize = null,
     json_output: bool = false,
+    cortex_dir: ?[]const u8 = null,
 };
 
 /// Query filter types
@@ -115,10 +117,31 @@ pub fn execute(allocator: Allocator, config: QueryConfig) !void {
     }
 }
 
+fn getNeuronasDir(allocator: Allocator, cortex_dir: ?[]const u8) ![]const u8 {
+    if (cortex_dir) |cd| {
+        return try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cd});
+    }
+    const cortex = uri_parser.findCortexDir(allocator) catch |err| {
+        if (err == error.CortexNotFound) {
+            std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
+            std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
+            std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+            std.process.exit(1);
+        }
+        return err;
+    };
+    const path = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex});
+    allocator.free(cortex);
+    return path;
+}
+
 /// Filter mode: Filter by type, tags, connections
 pub fn executeFilterQuery(allocator: Allocator, config: QueryConfig) !void {
     // Step 1: Scan all Neuronas
-    const neuronas = try storage.scanNeuronas(allocator, "neuronas");
+    const directory = try getNeuronasDir(allocator, config.cortex_dir);
+    defer allocator.free(directory);
+
+    const neuronas = try storage.scanNeuronas(allocator, directory);
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);
@@ -270,7 +293,10 @@ pub fn executeBM25Query(allocator: Allocator, config: QueryConfig) !void {
     }
 
     // Step 1: Scan all Neuronas
-    const neuronas = try storage.scanNeuronas(allocator, "neuronas");
+    const directory = try getNeuronasDir(allocator, config.cortex_dir);
+    defer allocator.free(directory);
+
+    const neuronas = try storage.scanNeuronas(allocator, directory);
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);
@@ -323,7 +349,10 @@ fn executeVectorQuery(allocator: Allocator, config: QueryConfig) !void {
     }
 
     // Step 1: Scan all Neuronas
-    const neuronas = try storage.scanNeuronas(allocator, "neuronas");
+    const directory = try getNeuronasDir(allocator, config.cortex_dir);
+    defer allocator.free(directory);
+
+    const neuronas = try storage.scanNeuronas(allocator, directory);
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);
@@ -390,7 +419,10 @@ fn executeHybridQuery(allocator: Allocator, config: QueryConfig) !void {
     }
 
     // Step 1: Scan all Neuronas
-    const neuronas = try storage.scanNeuronas(allocator, "neuronas");
+    const directory = try getNeuronasDir(allocator, config.cortex_dir);
+    defer allocator.free(directory);
+
+    const neuronas = try storage.scanNeuronas(allocator, directory);
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);
@@ -532,7 +564,10 @@ fn executeActivationQuery(allocator: Allocator, config: QueryConfig) !void {
     }
 
     // Step 1: Scan all Neuronas
-    const neuronas = try storage.scanNeuronas(allocator, "neuronas");
+    const directory = try getNeuronasDir(allocator, config.cortex_dir);
+    defer allocator.free(directory);
+
+    const neuronas = try storage.scanNeuronas(allocator, directory);
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);

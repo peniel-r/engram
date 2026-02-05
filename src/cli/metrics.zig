@@ -8,6 +8,7 @@ const Neurona = @import("../core/neurona.zig").Neurona;
 const NeuronaType = @import("../core/neurona.zig").NeuronaType;
 const Graph = @import("../core/graph.zig").Graph;
 const scanNeuronas = @import("../storage/filesystem.zig").scanNeuronas;
+const uri_parser = @import("../utils/uri_parser.zig");
 
 /// Metrics configuration
 pub const MetricsConfig = struct {
@@ -15,7 +16,7 @@ pub const MetricsConfig = struct {
     last_days: ?u32 = null,
     json_output: bool = false,
     verbose: bool = false,
-    neuronas_dir: []const u8 = "neuronas",
+    cortex_dir: ?[]const u8 = null,
 };
 
 /// Metrics report
@@ -35,8 +36,26 @@ pub const MetricsReport = struct {
 
 /// Main command handler
 pub fn execute(allocator: Allocator, config: MetricsConfig) !void {
+    // Determine neuronas directory
+    const cortex_dir = config.cortex_dir orelse blk: {
+        const cd = uri_parser.findCortexDir(allocator) catch |err| {
+            if (err == error.CortexNotFound) {
+                std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
+                std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
+                std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+                std.process.exit(1);
+            }
+            return err;
+        };
+        break :blk cd;
+    };
+    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+
+    const neuronas_dir = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
+    defer allocator.free(neuronas_dir);
+
     // Step 1: Load all Neuronas
-    const neuronas = try scanNeuronas(allocator, config.neuronas_dir);
+    const neuronas = try scanNeuronas(allocator, neuronas_dir);
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);

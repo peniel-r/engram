@@ -15,13 +15,14 @@ const findNeuronaPath = @import("../storage/filesystem.zig").findNeuronaPath;
 const updateBody = @import("../storage/filesystem.zig").updateBody;
 const timestamp_mod = @import("../utils/timestamp.zig");
 const state_machine = @import("../core/state_machine.zig");
+const uri_parser = @import("../utils/uri_parser.zig");
 
 /// Update configuration
 pub const UpdateConfig = struct {
     id: []const u8,
     sets: std.ArrayListUnmanaged(FieldUpdate),
     verbose: bool = false,
-    neuronas_dir: []const u8 = "neuronas",
+    cortex_dir: ?[]const u8 = null,
 };
 
 /// Field update specification
@@ -45,8 +46,26 @@ pub const UpdateOperator = enum {
 
 /// Main command handler
 pub fn execute(allocator: Allocator, config: UpdateConfig) !void {
+    // Determine neuronas directory
+    const cortex_dir = config.cortex_dir orelse blk: {
+        const cd = uri_parser.findCortexDir(allocator) catch |err| {
+            if (err == error.CortexNotFound) {
+                std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
+                std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
+                std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+                std.process.exit(1);
+            }
+            return err;
+        };
+        break :blk cd;
+    };
+    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+
+    const neuronas_dir = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
+    defer allocator.free(neuronas_dir);
+
     // Step 1: Find and load Neurona
-    const filepath = try findNeuronaPath(allocator, config.neuronas_dir, config.id);
+    const filepath = try findNeuronaPath(allocator, neuronas_dir, config.id);
     defer allocator.free(filepath);
 
     var neurona = try readNeurona(allocator, filepath);
@@ -56,7 +75,7 @@ pub fn execute(allocator: Allocator, config: UpdateConfig) !void {
     var updated = false;
     var body_updated = false;
     for (config.sets.items) |*update_item| {
-        if (try applyUpdate(allocator, &neurona, update_item.*, config.verbose, config.neuronas_dir)) {
+        if (try applyUpdate(allocator, &neurona, update_item.*, config.verbose, neuronas_dir)) {
             updated = true;
         }
         if (std.mem.eql(u8, update_item.field, "content")) {

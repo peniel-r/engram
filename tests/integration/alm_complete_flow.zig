@@ -219,7 +219,7 @@ test "End-to-End ALM Lifecycle" {
         .direction = .both,
         .max_depth = 5,
         .include_recommendations = true,
-        .neuronas_dir = test_dir,
+        .cortex_dir = test_dir,
     };
 
     const impact_results = try impact.analyzeImpact(allocator, &graph_v2, neuronas_v2, impact_config);
