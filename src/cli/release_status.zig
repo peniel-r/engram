@@ -616,7 +616,7 @@ test "ReleaseStatusConfig creates correctly" {
         .include_issues = true,
         .json_output = false,
         .verbose = false,
-        .neuronas_dir = "neuronas",
+        .cortex_dir = "neuronas",
     };
 
     try std.testing.expectEqual(@as(?[]const u8, null), config.requirements_filter);

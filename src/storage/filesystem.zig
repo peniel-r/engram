@@ -401,55 +401,110 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
         }
     }
 
-    // Tier 3 field: _llm (optional) - check for flattened _llm_ fields
-    const llm_t = yaml_data.get("_llm_t");
-    const llm_d = yaml_data.get("_llm_d");
-    const llm_k = yaml_data.get("_llm_k");
-    const llm_c = yaml_data.get("_llm_c");
-    const llm_strategy = yaml_data.get("_llm_strategy");
+    // Tier 3 field: _llm (optional) - check for nested _llm object or flattened _llm_ fields
+    var metadata_opt: ?LLMMetadata = null;
 
-    // If any _llm_ field exists, parse_as metadata
-    if (llm_t != null or llm_d != null or llm_k != null or llm_c != null or llm_strategy != null) {
-        var metadata = LLMMetadata{
-            .short_title = try allocator.dupe(u8, ""),
-            .density = 2,
-            .keywords = .{},
-            .token_count = 0,
-            .strategy = try allocator.dupe(u8, "summary"),
-        };
+    if (yaml_data.get("_llm")) |llm_val| {
+        switch (llm_val) {
+            .object => |llm_obj_opt| {
+                if (llm_obj_opt) |llm_obj| {
+                    var metadata = LLMMetadata{
+                        .short_title = try allocator.dupe(u8, ""),
+                        .density = 2,
+                        .keywords = .{},
+                        .token_count = 0,
+                        .strategy = try allocator.dupe(u8, "summary"),
+                    };
 
-        if (llm_t) |t_val| {
-            const short_title = getString(t_val, "");
-            if (short_title.len > 0) {
-                allocator.free(metadata.short_title);
-                metadata.short_title = try allocator.dupe(u8, short_title);
+                    if (llm_obj.get("t")) |t_val| {
+                        const short_title = getString(t_val, "");
+                        if (short_title.len > 0) {
+                            allocator.free(metadata.short_title);
+                            metadata.short_title = try allocator.dupe(u8, short_title);
+                        }
+                    }
+
+                    if (llm_obj.get("d")) |d_val| {
+                        metadata.density = @intCast(getInt(d_val, 2));
+                    }
+
+                    if (llm_obj.get("k")) |k_val| {
+                        const keywords = try getArray(k_val, allocator, &[_][]const u8{});
+                        for (keywords) |kw| {
+                            try metadata.keywords.append(allocator, kw);
+                        }
+                        allocator.free(keywords);
+                    }
+
+                    if (llm_obj.get("c")) |c_val| {
+                        metadata.token_count = @intCast(getInt(c_val, 0));
+                    }
+
+                    if (llm_obj.get("strategy")) |s_val| {
+                        const strategy = getString(s_val, "summary");
+                        if (strategy.len > 0) {
+                            allocator.free(metadata.strategy);
+                            metadata.strategy = try allocator.dupe(u8, strategy);
+                        }
+                    }
+                    metadata_opt = metadata;
+                }
+            },
+            else => {},
+        }
+    } else {
+        // Backward compatibility: check for flattened _llm_ fields
+        const llm_t = yaml_data.get("_llm_t");
+        const llm_d = yaml_data.get("_llm_d");
+        const llm_k = yaml_data.get("_llm_k");
+        const llm_c = yaml_data.get("_llm_c");
+        const llm_strategy = yaml_data.get("_llm_strategy");
+
+        if (llm_t != null or llm_d != null or llm_k != null or llm_c != null or llm_strategy != null) {
+            var metadata = LLMMetadata{
+                .short_title = try allocator.dupe(u8, ""),
+                .density = 2,
+                .keywords = .{},
+                .token_count = 0,
+                .strategy = try allocator.dupe(u8, "summary"),
+            };
+
+            if (llm_t) |t_val| {
+                const short_title = getString(t_val, "");
+                if (short_title.len > 0) {
+                    allocator.free(metadata.short_title);
+                    metadata.short_title = try allocator.dupe(u8, short_title);
+                }
             }
-        }
 
-        if (llm_d) |d_val| {
-            metadata.density = @intCast(getInt(d_val, 2));
-        }
-
-        if (llm_k) |k_val| {
-            const keywords = try getArray(k_val, allocator, &[_][]const u8{});
-            for (keywords) |kw| {
-                try metadata.keywords.append(allocator, kw);
+            if (llm_d) |d_val| {
+                metadata.density = @intCast(getInt(d_val, 2));
             }
-            allocator.free(keywords);
-        }
 
-        if (llm_c) |c_val| {
-            metadata.token_count = @intCast(getInt(c_val, 0));
-        }
-
-        if (llm_strategy) |s_val| {
-            const strategy = getString(s_val, "summary");
-            if (strategy.len > 0) {
-                allocator.free(metadata.strategy);
-                metadata.strategy = try allocator.dupe(u8, strategy);
+            if (llm_k) |k_val| {
+                const keywords = try getArray(k_val, allocator, &[_][]const u8{});
+                for (keywords) |kw| {
+                    try metadata.keywords.append(allocator, kw);
+                }
+                allocator.free(keywords);
             }
-        }
 
+            if (llm_c) |c_val| {
+                metadata.token_count = @intCast(getInt(c_val, 0));
+            }
+
+            if (llm_strategy) |s_val| {
+                const strategy = getString(s_val, "summary");
+                if (strategy.len > 0) {
+                    allocator.free(metadata.strategy);
+                    metadata.strategy = try allocator.dupe(u8, strategy);
+                }
+            }
+            metadata_opt = metadata;
+        }
+    }
+
+    if (metadata_opt) |metadata| {
         neurona.llm_metadata = metadata;
     }
 
@@ -575,20 +630,21 @@ pub fn neuronaToYaml(allocator: Allocator, neurona: Neurona) ![]u8 {
         try writer.print("hash: {s}\n", .{hash});
     }
 
-    // Tier 3 field: _llm (optional) - serialize as flattened fields
+    // Tier 3 field: _llm (optional) - serialize as nested object
     if (neurona.llm_metadata) |*meta| {
-        try writer.print("_llm_t: {s}\n", .{meta.short_title});
-        try writer.print("_llm_d: {d}\n", .{meta.density});
+        try writer.writeAll("_llm:\n");
+        try writer.print("  t: \"{s}\"\n", .{meta.short_title});
+        try writer.print("  d: {d}\n", .{meta.density});
         if (meta.keywords.items.len > 0) {
-            try writer.writeAll("_llm_k: [");
+            try writer.writeAll("  k: [");
             for (meta.keywords.items, 0..) |kw, i| {
                 if (i > 0) try writer.writeAll(", ");
                 try writer.print("\"{s}\"", .{kw});
             }
             try writer.writeAll("]\n");
         }
-        try writer.print("_llm_c: {d}\n", .{meta.token_count});
-        try writer.print("_llm_strategy: {s}\n", .{meta.strategy});
+        try writer.print("  c: {d}\n", .{meta.token_count});
+        try writer.print("  strategy: {s}\n", .{meta.strategy});
     }
 
     // Tier 3 field: context (optional)
@@ -913,7 +969,7 @@ test "writeNeurona writes valid Tier 1 file" {
 
     // Write to file
     const test_path = "test_write_tier1.md";
-    try writeNeurona(allocator, neurona, test_path);
+    try writeNeurona(allocator, neurona, test_path, false);
     defer std.fs.cwd().deleteFile(test_path) catch {};
 
     // Verify file exists and has correct content
@@ -942,7 +998,7 @@ test "writeNeurona write and read roundtrip Tier 2" {
 
     // Write to file
     const test_path = "test_write_tier2.md";
-    try writeNeurona(allocator, neurona, test_path);
+    try writeNeurona(allocator, neurona, test_path, false);
     defer std.fs.cwd().deleteFile(test_path) catch {};
 
     // Read back
@@ -1087,4 +1143,59 @@ pub fn getLatestModificationTime(directory: []const u8) !i64 {
         }
     }
     return latest;
+}
+
+test "writeNeurona write and read roundtrip Tier 3 LLMMetadata" {
+    const allocator = std.testing.allocator;
+
+    // Create test Neurona with LLM metadata
+    var neurona = try Neurona.init(allocator);
+    defer neurona.deinit(allocator);
+
+    allocator.free(neurona.id);
+    neurona.id = try allocator.dupe(u8, "test.003");
+    allocator.free(neurona.title);
+    neurona.title = try allocator.dupe(u8, "Test LLM Metadata");
+
+    var keywords = std.ArrayListUnmanaged([]const u8){};
+    try keywords.append(allocator, try allocator.dupe(u8, "ai"));
+    try keywords.append(allocator, try allocator.dupe(u8, "zig"));
+
+    neurona.llm_metadata = LLMMetadata{
+        .short_title = try allocator.dupe(u8, "Test Title"),
+        .density = 3,
+        .keywords = keywords,
+        .token_count = 150,
+        .strategy = try allocator.dupe(u8, "hierarchical"),
+    };
+
+    // Write to file
+    const test_path = "test_write_tier3_llm.md";
+    try writeNeurona(allocator, neurona, test_path, false);
+    defer std.fs.cwd().deleteFile(test_path) catch {};
+
+    // Verify file content structure
+    const content = try std.fs.cwd().readFileAlloc(allocator, test_path, 1024);
+    defer allocator.free(content);
+
+    try std.testing.expect(std.mem.indexOf(u8, content, "_llm:") != null);
+    try std.testing.expect(std.mem.indexOf(u8, content, "  t: \"Test Title\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, content, "  d: 3") != null);
+    try std.testing.expect(std.mem.indexOf(u8, content, "  k: [\"ai\", \"zig\"]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, content, "  c: 150") != null);
+    try std.testing.expect(std.mem.indexOf(u8, content, "  strategy: hierarchical") != null);
+
+    // Read back
+    var loaded = try readNeurona(allocator, test_path);
+    defer loaded.deinit(allocator);
+
+    try std.testing.expect(loaded.llm_metadata != null);
+    const meta = loaded.llm_metadata.?;
+    try std.testing.expectEqualStrings("Test Title", meta.short_title);
+    try std.testing.expectEqual(@as(u8, 3), meta.density);
+    try std.testing.expectEqual(@as(usize, 2), meta.keywords.items.len);
+    try std.testing.expectEqualStrings("ai", meta.keywords.items[0]);
+    try std.testing.expectEqualStrings("zig", meta.keywords.items[1]);
+    try std.testing.expectEqual(@as(u32, 150), meta.token_count);
+    try std.testing.expectEqualStrings("hierarchical", meta.strategy);
 }

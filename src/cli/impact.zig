@@ -443,7 +443,7 @@ test "ImpactConfig with default values" {
         .max_depth = 10,
         .include_recommendations = true,
         .json_output = false,
-        .neuronas_dir = "neuronas",
+        .cortex_dir = "neuronas",
     };
 
     try std.testing.expectEqualStrings("test.001", config.id);

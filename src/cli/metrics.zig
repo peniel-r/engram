@@ -289,7 +289,7 @@ test "MetricsConfig with default values" {
         .last_days = null,
         .json_output = false,
         .verbose = false,
-        .neuronas_dir = "neuronas",
+        .cortex_dir = "neuronas",
     };
 
     try std.testing.expectEqual(@as(?[]const u8, null), config.since_date);

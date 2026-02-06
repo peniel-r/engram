@@ -457,7 +457,7 @@ test "UpdateConfig creates correctly" {
         .id = "test.001",
         .sets = sets,
         .verbose = false,
-        .neuronas_dir = "neuronas",
+        .cortex_dir = "neuronas",
     };
 
     try std.testing.expectEqualStrings("test.001", config.id);
@@ -484,7 +484,7 @@ test "applyUpdate updates title" {
     };
     defer update.deinit(allocator);
 
-    const result = try applyUpdate(allocator, &neurona, update, false);
+    const result = try applyUpdate(allocator, &neurona, update, false, "test_neuronas");
     try std.testing.expect(result);
     try std.testing.expectEqualStrings("New Title", neurona.title);
 }

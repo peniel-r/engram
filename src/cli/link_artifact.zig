@@ -297,7 +297,7 @@ test "LinkArtifactConfig creates correctly" {
         .language_version = null,
         .safe_to_exec = false,
         .verbose = false,
-        .neuronas_dir = "neuronas",
+        .cortex_dir = "neuronas",
     };
 
     try std.testing.expectEqualStrings("req.auth", config.requirement_id);

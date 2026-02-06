@@ -160,11 +160,13 @@ test "execute links two neuronas" {
 
     // Setup test directory
     const test_dir = "test_neuronas_link";
-    try std.fs.cwd().makePath(test_dir);
+    const neuronas_subdir = try std.fs.path.join(allocator, &.{ test_dir, "neuronas" });
+    defer allocator.free(neuronas_subdir);
+    try std.fs.cwd().makePath(neuronas_subdir);
     defer std.fs.cwd().deleteTree(test_dir) catch {};
 
     // Create source neurona
-    const source_path = try std.fs.path.join(allocator, &.{ test_dir, "source.md" });
+    const source_path = try std.fs.path.join(allocator, &.{ neuronas_subdir, "source.md" });
     defer allocator.free(source_path);
     try std.fs.cwd().writeFile(.{ .sub_path = source_path, .data = 
         \\---
@@ -175,7 +177,7 @@ test "execute links two neuronas" {
     });
 
     // Create target neurona
-    const target_path = try std.fs.path.join(allocator, &.{ test_dir, "target.md" });
+    const target_path = try std.fs.path.join(allocator, &.{ neuronas_subdir, "target.md" });
     defer allocator.free(target_path);
     try std.fs.cwd().writeFile(.{ .sub_path = target_path, .data = 
         \\---
@@ -190,7 +192,7 @@ test "execute links two neuronas" {
         .source_id = "source",
         .target_id = "target",
         .connection_type = "parent",
-        .neuronas_dir = test_dir,
+        .cortex_dir = test_dir,
     };
 
     try execute(allocator, config);
@@ -209,11 +211,13 @@ test "execute bidirectional link" {
 
     // Setup test directory
     const test_dir = "test_neuronas_link_bi";
-    try std.fs.cwd().makePath(test_dir);
+    const neuronas_subdir = try std.fs.path.join(allocator, &.{ test_dir, "neuronas" });
+    defer allocator.free(neuronas_subdir);
+    try std.fs.cwd().makePath(neuronas_subdir);
     defer std.fs.cwd().deleteTree(test_dir) catch {};
 
     // Create source neurona
-    const source_path = try std.fs.path.join(allocator, &.{ test_dir, "source.md" });
+    const source_path = try std.fs.path.join(allocator, &.{ neuronas_subdir, "source.md" });
     defer allocator.free(source_path);
     try std.fs.cwd().writeFile(.{ .sub_path = source_path, .data = 
         \\---
@@ -224,7 +228,7 @@ test "execute bidirectional link" {
     });
 
     // Create target neurona
-    const target_path = try std.fs.path.join(allocator, &.{ test_dir, "target.md" });
+    const target_path = try std.fs.path.join(allocator, &.{ neuronas_subdir, "target.md" });
     defer allocator.free(target_path);
     try std.fs.cwd().writeFile(.{ .sub_path = target_path, .data = 
         \\---
@@ -240,7 +244,7 @@ test "execute bidirectional link" {
         .target_id = "target",
         .connection_type = "parent",
         .bidirectional = true,
-        .neuronas_dir = test_dir,
+        .cortex_dir = test_dir,
     };
 
     try execute(allocator, config);
@@ -265,11 +269,13 @@ test "execute resolves URIs for source and target" {
 
     // Setup test directory
     const test_dir = "test_uri_link";
-    try std.fs.cwd().makePath(test_dir);
+    const neuronas_subdir = try std.fs.path.join(allocator, &.{ test_dir, "neuronas" });
+    defer allocator.free(neuronas_subdir);
+    try std.fs.cwd().makePath(neuronas_subdir);
     defer std.fs.cwd().deleteTree(test_dir) catch {};
 
     // Create source neurona
-    const source_path = try std.fs.path.join(allocator, &.{ test_dir, "source.md" });
+    const source_path = try std.fs.path.join(allocator, &.{ neuronas_subdir, "source.md" });
     defer allocator.free(source_path);
     try std.fs.cwd().writeFile(.{ .sub_path = source_path, .data = 
         \\---
@@ -280,7 +286,7 @@ test "execute resolves URIs for source and target" {
     });
 
     // Create target neurona
-    const target_path = try std.fs.path.join(allocator, &.{ test_dir, "target.md" });
+    const target_path = try std.fs.path.join(allocator, &.{ neuronas_subdir, "target.md" });
     defer allocator.free(target_path);
     try std.fs.cwd().writeFile(.{ .sub_path = target_path, .data = 
         \\---
@@ -295,7 +301,7 @@ test "execute resolves URIs for source and target" {
         .source_id = "source",
         .target_id = "target",
         .connection_type = "parent",
-        .neuronas_dir = test_dir,
+        .cortex_dir = test_dir,
     };
 
     try execute(allocator, config);

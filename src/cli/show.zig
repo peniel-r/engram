@@ -251,7 +251,16 @@ fn outputJson(allocator: Allocator, neurona: *const Neurona, filepath: []const u
     if (neurona.llm_metadata) |*meta| {
         std.debug.print("\"_llm\":{{", .{});
         std.debug.print("\"t\":\"{s}\",", .{meta.short_title});
-        std.debug.print("\"d\":{d}", .{meta.density});
+        std.debug.print("\"d\":{d},", .{meta.density});
+        std.debug.print("\"c\":{d},", .{meta.token_count});
+        std.debug.print("\"strategy\":\"{s}\",", .{meta.strategy});
+
+        std.debug.print("\"k\":[", .{});
+        for (meta.keywords.items, 0..) |kw, i| {
+            if (i > 0) std.debug.print(",", .{});
+            printJsonString(kw);
+        }
+        std.debug.print("]", .{});
         std.debug.print("}}", .{});
     }
 
