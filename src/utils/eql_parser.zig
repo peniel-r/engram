@@ -22,6 +22,15 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+// ==================== Error Types ====================
+
+pub const ParseError = error{
+    MissingClosingParen,
+    InvalidFieldSyntax,
+    InvalidLinkSyntax,
+    OutOfMemory,
+} || Allocator.Error;
+
 // ==================== Data Structures ====================
 
 /// Parsed EQL query (flat structure - to be replaced by QueryAST in Phase 2)
@@ -205,8 +214,138 @@ pub const EQLParser = struct {
         return result;
     }
 
+    /// Parse query into a QueryAST (recursive descent parser)
+    pub fn parseAST(self: *EQLParser) ParseError!QueryAST {
+        const root = try self.parseExpression();
+        return QueryAST.init(root);
+    }
+
+    /// Parse expression: Expression -> Term { OR Term }
+    fn parseExpression(self: *EQLParser) ParseError!*QueryNode {
+        var left = try self.parseTerm();
+
+        while (self.pos < self.query.len) {
+            self.skipWhitespace();
+            if (self.pos >= self.query.len) break;
+
+            // Check for OR operator
+            if (!self.peekString("OR")) break;
+
+            // Consume OR
+            self.pos += 2;
+            self.skipWhitespace();
+
+            // Parse right term
+            const right = try self.parseTerm();
+
+            // Create OR node
+            const node = try self.allocator.create(QueryNode);
+            node.* = .{
+                .logical = LogicalOp{
+                    .left = left,
+                    .op = .@"or",
+                    .right = right,
+                },
+            };
+            left = node;
+        }
+
+        return left;
+    }
+
+    /// Parse term: Term -> Factor { AND Factor }
+    fn parseTerm(self: *EQLParser) ParseError!*QueryNode {
+        var left = try self.parseFactor();
+
+        while (self.pos < self.query.len) {
+            self.skipWhitespace();
+            if (self.pos >= self.query.len) break;
+
+            // Check for AND operator
+            if (!self.peekString("AND")) break;
+
+            // Consume AND
+            self.pos += 3;
+            self.skipWhitespace();
+
+            // Parse right factor
+            const right = try self.parseFactor();
+
+            // Create AND node
+            const node = try self.allocator.create(QueryNode);
+            node.* = .{
+                .logical = LogicalOp{
+                    .left = left,
+                    .op = .@"and",
+                    .right = right,
+                },
+            };
+            left = node;
+        }
+
+        return left;
+    }
+
+    /// Parse factor: Factor -> NOT Factor | ( Expression ) | Condition
+    fn parseFactor(self: *EQLParser) ParseError!*QueryNode {
+        self.skipWhitespace();
+
+        // Check for NOT
+        if (self.peekString("NOT")) {
+            // Consume NOT
+            self.pos += 3;
+            self.skipWhitespace();
+
+            // Parse nested factor
+            const child = try self.parseFactor();
+
+            // Create NOT node
+            const node = try self.allocator.create(QueryNode);
+            node.* = .{
+                .not = NotOp{
+                    .child = child,
+                },
+            };
+            return node;
+        }
+
+        // Check for opening parenthesis
+        if (self.peekChar('(')) {
+            // Consume '('
+            self.pos += 1;
+            self.skipWhitespace();
+
+            // Parse expression inside parentheses
+            const child = try self.parseExpression();
+            self.skipWhitespace();
+
+            // Expect closing parenthesis
+            if (!self.peekChar(')')) {
+                return error.MissingClosingParen;
+            }
+            self.pos += 1;
+
+            // Create group node
+            const node = try self.allocator.create(QueryNode);
+            node.* = .{
+                .group = GroupNode{
+                    .child = child,
+                },
+            };
+            return node;
+        }
+
+        // Parse condition
+        const cond = try self.parseCondition();
+        const node = try self.allocator.create(QueryNode);
+        node.* = .{
+            .condition = cond,
+        };
+        return node;
+    }
+
     /// Parse a single condition
-    fn parseCondition(self: *EQLParser) !EQLCondition {
+    fn parseCondition(self: *EQLParser) ParseError!EQLCondition {
         self.skipWhitespace();
 
         // Check for link condition: link(type, target)
@@ -219,7 +358,7 @@ pub const EQLParser = struct {
     }
 
     /// Parse link condition: link(type, target)
-    fn parseLinkCondition(self: *EQLParser) !EQLCondition {
+    fn parseLinkCondition(self: *EQLParser) ParseError!EQLCondition {
         // Consume "link("
         self.pos += 5;
         self.skipWhitespace();
@@ -262,7 +401,7 @@ pub const EQLParser = struct {
     }
 
     /// Parse field condition: field:op:value or field:value
-    fn parseFieldCondition(self: *EQLParser) !EQLCondition {
+    fn parseFieldCondition(self: *EQLParser) ParseError!EQLCondition {
         // Parse field name
         const field_start = self.pos;
         while (self.pos < self.query.len and
@@ -311,6 +450,8 @@ pub const EQLParser = struct {
         {
             // Stop at logical operators (AND, OR)
             if (self.peekString("AND") or self.peekString("OR")) break;
+            // Stop at closing parenthesis
+            if (self.peekString(")")) break;
             self.pos += 1;
         }
         const value = self.query[value_start..self.pos];
@@ -352,6 +493,12 @@ pub const EQLParser = struct {
     fn peekString(self: *EQLParser, s: []const u8) bool {
         if (self.pos + s.len > self.query.len) return false;
         return std.mem.eql(u8, self.query[self.pos .. self.pos + s.len], s);
+    }
+
+    /// Peek ahead to check if character matches
+    fn peekChar(self: *EQLParser, c: u8) bool {
+        if (self.pos >= self.query.len) return false;
+        return self.query[self.pos] == c;
     }
 };
 
@@ -658,4 +805,131 @@ test "AST: QueryAST initialization" {
 
     try std.testing.expectEqualStrings("type", ast.root.condition.field);
     try std.testing.expectEqualStrings("issue", ast.root.condition.value);
+}
+
+// ==================== Recursive Descent Parser Tests (Phase 2) ====================
+
+test "parseAST: simple condition" {
+    const allocator = std.testing.allocator;
+
+    var parser = EQLParser.init(allocator, "type:issue");
+    var ast = try parser.parseAST();
+    defer ast.deinit(allocator);
+
+    try std.testing.expect(ast.root.* == .condition);
+    try std.testing.expectEqualStrings("type", ast.root.condition.field);
+    try std.testing.expectEqualStrings("issue", ast.root.condition.value);
+}
+
+test "parseAST: AND expression" {
+    const allocator = std.testing.allocator;
+
+    var parser = EQLParser.init(allocator, "type:issue AND tag:p1");
+    var ast = try parser.parseAST();
+    defer ast.deinit(allocator);
+
+    try std.testing.expect(ast.root.* == .logical);
+    try std.testing.expectEqual(LogicOp.@"and", ast.root.logical.op);
+    try std.testing.expectEqualStrings("type", ast.root.logical.left.condition.field);
+    try std.testing.expectEqualStrings("tag", ast.root.logical.right.condition.field);
+}
+
+test "parseAST: OR expression" {
+    const allocator = std.testing.allocator;
+
+    var parser = EQLParser.init(allocator, "type:issue OR type:bug");
+    var ast = try parser.parseAST();
+    defer ast.deinit(allocator);
+
+    try std.testing.expect(ast.root.* == .logical);
+    try std.testing.expectEqual(LogicOp.@"or", ast.root.logical.op);
+    try std.testing.expectEqualStrings("type", ast.root.logical.left.condition.field);
+    try std.testing.expectEqualStrings("bug", ast.root.logical.right.condition.value);
+}
+
+test "parseAST: NOT operator" {
+    const allocator = std.testing.allocator;
+
+    var parser = EQLParser.init(allocator, "NOT status:implemented");
+    var ast = try parser.parseAST();
+    defer ast.deinit(allocator);
+
+    try std.testing.expect(ast.root.* == .not);
+    try std.testing.expectEqualStrings("status", ast.root.not.child.condition.field);
+    try std.testing.expectEqualStrings("implemented", ast.root.not.child.condition.value);
+}
+
+test "parseAST: parenthesized expression" {
+    const allocator = std.testing.allocator;
+
+    var parser = EQLParser.init(allocator, "(type:issue)");
+    var ast = try parser.parseAST();
+    defer ast.deinit(allocator);
+
+    try std.testing.expect(ast.root.* == .group);
+    try std.testing.expectEqualStrings("type", ast.root.group.child.condition.field);
+    try std.testing.expectEqualStrings("issue", ast.root.group.child.condition.value);
+}
+
+test "parseAST: nested AND expression with parentheses" {
+    const allocator = std.testing.allocator;
+
+    var parser = EQLParser.init(allocator, "(type:issue AND type:bug)");
+    var ast = try parser.parseAST();
+    defer ast.deinit(allocator);
+
+    try std.testing.expect(ast.root.* == .group);
+    try std.testing.expect(ast.root.group.child.* == .logical);
+    try std.testing.expectEqual(LogicOp.@"and", ast.root.group.child.logical.op);
+}
+
+test "parseAST: nested OR expression with parentheses" {
+    const allocator = std.testing.allocator;
+
+    var parser = EQLParser.init(allocator, "(type:issue OR type:bug)");
+    var ast = try parser.parseAST();
+    defer ast.deinit(allocator);
+
+    try std.testing.expect(ast.root.* == .group);
+    try std.testing.expect(ast.root.group.child.* == .logical);
+    try std.testing.expectEqual(LogicOp.@"or", ast.root.group.child.logical.op);
+}
+
+test "parseAST: NOT with parentheses" {
+    const allocator = std.testing.allocator;
+
+    var parser = EQLParser.init(allocator, "NOT (type:issue OR type:bug)");
+    var ast = try parser.parseAST();
+    defer ast.deinit(allocator);
+
+    try std.testing.expect(ast.root.* == .not);
+    try std.testing.expect(ast.root.not.child.* == .group);
+    try std.testing.expect(ast.root.not.child.group.child.* == .logical);
+}
+
+test "parseAST: grouped OR with AND" {
+    const allocator = std.testing.allocator;
+
+    var parser = EQLParser.init(allocator, "(type:issue OR type:bug) AND priority:1");
+    var ast = try parser.parseAST();
+    defer ast.deinit(allocator);
+
+    try std.testing.expect(ast.root.* == .logical);
+    try std.testing.expectEqual(LogicOp.@"and", ast.root.logical.op);
+    try std.testing.expect(ast.root.logical.left.* == .group);
+    try std.testing.expect(ast.root.logical.left.group.child.* == .logical);
+}
+
+test "parseAST: multiple OR operators" {
+    const allocator = std.testing.allocator;
+
+    var parser = EQLParser.init(allocator, "type:issue OR type:bug OR type:requirement");
+    var ast = try parser.parseAST();
+    defer ast.deinit(allocator);
+
+    try std.testing.expect(ast.root.* == .logical);
+    try std.testing.expectEqual(LogicOp.@"or", ast.root.logical.op);
+    try std.testing.expect(ast.root.logical.left.* == .logical);
+    try std.testing.expect(ast.root.logical.left.logical.left.* == .condition);
+    try std.testing.expectEqualStrings("issue", ast.root.logical.left.logical.left.condition.value);
 }
