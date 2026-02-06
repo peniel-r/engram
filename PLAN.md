@@ -13,7 +13,7 @@ Implement advanced features in the Engram Query Language (EQL) parser to support
 
 ## Implementation Phases
 
-### Phase 1: AST Design & Data Structures
+### Phase 1: AST Design & Data Structures ✅
 
 **Goal**: Move from flat lists to a recursive Abstract Syntax Tree (AST).
 
@@ -23,6 +23,19 @@ Implement advanced features in the Engram Query Language (EQL) parser to support
         - `logical`: `binary_op` (left: *Node, op: AND/OR, right:*Node)
         - `not`: `unary_op` (op: NOT, child: *Node)
         - `group`: `group_node` (child: *Node) - *Optional, might be implicit in AST structure*
+
+**Status**: COMPLETED ✅
+
+**Implementation**:
+- Added `QueryNode` tagged union in `src/utils/eql_parser.zig`
+- Added `LogicalOp` struct for binary operations (AND/OR)
+- Added `NotOp` struct for unary NOT operation
+- Added `GroupNode` struct for parenthesized expressions
+- Added `QueryAST` wrapper struct with `root: *QueryNode`
+- Kept existing `EQLQuery` for backward compatibility until Phase 2
+- Implemented proper `deinit` methods for all AST nodes
+- Added comprehensive unit tests for all AST node types
+- Updated grammar comment to reflect new capabilities
 
 ### Phase 2: Recursive Descent Parser
 

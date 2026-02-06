@@ -3,11 +3,10 @@
 // Parses structured query syntax like: "type:issue AND tag:p1"
 //
 // Grammar:
-//   EQL := Condition (LogicOp Condition)*
-//   Condition := FieldCondition | LinkCondition
-//   FieldCondition := field ':' [op ':'] value
-//   LinkCondition := 'link(' type ',' target ')'
-//   LogicOp := 'AND' | 'OR'
+//   Expression    -> Term { OR Term }
+//   Term          -> Factor { AND Factor }
+//   Factor        -> NOT Factor | ( Expression ) | Condition
+//   Condition     -> field ':' [op ':'] value | link(type, target)
 //
 // Examples:
 //   type:issue
@@ -16,13 +15,16 @@
 //   priority:gte:3
 //   title:contains:authentication
 //   link(validates, req.auth.001) AND type:test_case
+//   (type:issue OR type:bug) AND priority:1
+//   type:requirement AND NOT status:implemented
+//   ((A OR B) AND C) OR D
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 // ==================== Data Structures ====================
 
-/// Parsed EQL query
+/// Parsed EQL query (flat structure - to be replaced by QueryAST in Phase 2)
 pub const EQLQuery = struct {
     conditions: std.ArrayListUnmanaged(EQLCondition),
     logic_op: LogicOp = .@"and",
@@ -39,6 +41,67 @@ pub const EQLQuery = struct {
             cond.deinit(allocator);
         }
         self.conditions.deinit(allocator);
+    }
+};
+
+/// Query node in AST (Phase 1+)
+pub const QueryNode = union(enum) {
+    condition: EQLCondition,
+    logical: LogicalOp,
+    not: NotOp,
+    group: GroupNode,
+
+    pub fn deinit(self: *QueryNode, allocator: Allocator) void {
+        switch (self.*) {
+            .condition => |*cond| cond.deinit(allocator),
+            .logical => |*op| {
+                op.left.deinit(allocator);
+                allocator.destroy(op.left);
+                op.right.deinit(allocator);
+                allocator.destroy(op.right);
+            },
+            .not => |*op| {
+                op.child.deinit(allocator);
+                allocator.destroy(op.child);
+            },
+            .group => |*node| {
+                node.child.deinit(allocator);
+                allocator.destroy(node.child);
+            },
+        }
+    }
+};
+
+/// Binary logical operation (AND/OR)
+pub const LogicalOp = struct {
+    left: *QueryNode,
+    op: LogicOp,
+    right: *QueryNode,
+};
+
+/// Unary NOT operation
+pub const NotOp = struct {
+    child: *QueryNode,
+};
+
+/// Grouped expression (parentheses)
+pub const GroupNode = struct {
+    child: *QueryNode,
+};
+
+/// AST-based EQL query (Phase 1+)
+pub const QueryAST = struct {
+    root: *QueryNode,
+
+    pub fn init(root: *QueryNode) QueryAST {
+        return .{
+            .root = root,
+        };
+    }
+
+    pub fn deinit(self: *QueryAST, allocator: Allocator) void {
+        self.root.deinit(allocator);
+        allocator.destroy(self.root);
     }
 };
 
@@ -459,4 +522,140 @@ test "parse: complex query with link and field" {
     // Second condition: type
     try std.testing.expectEqualStrings("type", query.conditions.items[1].field);
     try std.testing.expectEqualStrings("test_case", query.conditions.items[1].value);
+}
+
+// ==================== AST Tests (Phase 1) ====================
+
+test "AST: condition node" {
+    const allocator = std.testing.allocator;
+
+    const node = try allocator.create(QueryNode);
+    node.* = .{
+        .condition = EQLCondition{
+            .field = try allocator.dupe(u8, "type"),
+            .op = .eq,
+            .value = try allocator.dupe(u8, "issue"),
+        },
+    };
+    defer {
+        node.deinit(allocator);
+        allocator.destroy(node);
+    }
+
+    try std.testing.expect(node.* == .condition);
+    try std.testing.expectEqualStrings("type", node.condition.field);
+    try std.testing.expectEqualStrings("issue", node.condition.value);
+}
+
+test "AST: logical node (AND)" {
+    const allocator = std.testing.allocator;
+
+    const left = try allocator.create(QueryNode);
+    left.* = .{
+        .condition = EQLCondition{
+            .field = try allocator.dupe(u8, "type"),
+            .op = .eq,
+            .value = try allocator.dupe(u8, "issue"),
+        },
+    };
+
+    const right = try allocator.create(QueryNode);
+    right.* = .{
+        .condition = EQLCondition{
+            .field = try allocator.dupe(u8, "tag"),
+            .op = .eq,
+            .value = try allocator.dupe(u8, "p1"),
+        },
+    };
+
+    const node = try allocator.create(QueryNode);
+    node.* = .{
+        .logical = LogicalOp{
+            .left = left,
+            .op = .@"and",
+            .right = right,
+        },
+    };
+    defer {
+        node.deinit(allocator);
+        allocator.destroy(node);
+    }
+
+    try std.testing.expect(node.* == .logical);
+    try std.testing.expectEqualStrings("type", node.logical.left.condition.field);
+    try std.testing.expectEqualStrings("tag", node.logical.right.condition.field);
+}
+
+test "AST: NOT node" {
+    const allocator = std.testing.allocator;
+
+    const child = try allocator.create(QueryNode);
+    child.* = .{
+        .condition = EQLCondition{
+            .field = try allocator.dupe(u8, "status"),
+            .op = .eq,
+            .value = try allocator.dupe(u8, "implemented"),
+        },
+    };
+
+    const node = try allocator.create(QueryNode);
+    node.* = .{
+        .not = NotOp{
+            .child = child,
+        },
+    };
+    defer {
+        node.deinit(allocator);
+        allocator.destroy(node);
+    }
+
+    try std.testing.expect(node.* == .not);
+    try std.testing.expectEqualStrings("status", node.not.child.condition.field);
+    try std.testing.expectEqualStrings("implemented", node.not.child.condition.value);
+}
+
+test "AST: group node" {
+    const allocator = std.testing.allocator;
+
+    const child = try allocator.create(QueryNode);
+    child.* = .{
+        .condition = EQLCondition{
+            .field = try allocator.dupe(u8, "type"),
+            .op = .eq,
+            .value = try allocator.dupe(u8, "issue"),
+        },
+    };
+
+    const node = try allocator.create(QueryNode);
+    node.* = .{
+        .group = GroupNode{
+            .child = child,
+        },
+    };
+    defer {
+        node.deinit(allocator);
+        allocator.destroy(node);
+    }
+
+    try std.testing.expect(node.* == .group);
+    try std.testing.expectEqualStrings("type", node.group.child.condition.field);
+}
+
+test "AST: QueryAST initialization" {
+    const allocator = std.testing.allocator;
+
+    const root = try allocator.create(QueryNode);
+    root.* = .{
+        .condition = EQLCondition{
+            .field = try allocator.dupe(u8, "type"),
+            .op = .eq,
+            .value = try allocator.dupe(u8, "issue"),
+        },
+    };
+
+    var ast = QueryAST.init(root);
+    defer ast.deinit(allocator);
+
+    try std.testing.expectEqualStrings("type", ast.root.condition.field);
+    try std.testing.expectEqualStrings("issue", ast.root.condition.value);
 }
