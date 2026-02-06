@@ -2,7 +2,10 @@
 
 ## Objective
 
-Implement advanced features in the Engram Query Language (EQL) parser to support robust querying capabilities, specifically **Logical Grouping (Parentheses)** and **Negation (NOT operator)**.
+Implement advanced features in the Engram Query Language (EQL) parser to support robust querying capabilities, specifically:
+- **Logical Grouping (Parentheses)** for expression precedence
+- **Negation (NOT operator)** for boolean logic
+- **Context Field Support** for ALM status/priority queries (Phase 5)
 
 ## Current State
 
@@ -77,7 +80,7 @@ Implement advanced features in the Engram Query Language (EQL) parser to support
   - Multiple OR operators (left-associative)
    - All 22 eql_parser tests pass
 
-### Phase 3: Query Evaluator 🚧
+### Phase 3: Query Evaluator ✅
 
 **Goal**: Execute AST against Neurona artifacts.
 
@@ -91,27 +94,95 @@ Implement advanced features in the Engram Query Language (EQL) parser to support
     - Update `src/cli/query_helpers.zig` to use new AST.
     - Update `src/cli/query.zig` to support new filter structure (or replace `QueryFilter` list with `QueryAST`).
 
-**Status**: WORK IN PROGRESS 🚧
+**Status**: COMPLETED ✅
 
 **Implementation**:
 - ✅ Added `evaluateAST()` function for recursive AST evaluation
 - ✅ Added helper functions: `evaluateCondition()`, `evaluateLinkCondition()`, `evaluateTagCondition()`, `evaluateStringOp()`, `evaluateBoolOp()`
+- ✅ Created `NeuronaView` struct to avoid circular imports with Neurona type
+- ✅ Fixed type signatures: `evaluateCondition` accepts value (not pointer)
 - ✅ Updated `query_helpers.zig` to use AST parser (`parseAST()`) with fallback to legacy parser
 - ✅ Added `executeASTQuery()` in `query_helpers.zig` and `executeFilterQueryWithAST()` in `query.zig`
-- ⚠️ Integration points implemented but encountering Zig module path constraints
-- ⚠️ Evaluator tests temporarily disabled due to import path issues
-- ⚠️ Requires resolution of type compatibility between evaluator and calling code
+- ✅ Added `createNeuronaView()` function to convert Neurona to NeuronaView for evaluation
+- ✅ All 9 evaluator tests passing
+- ✅ All 31 eql_parser tests passing
+- ✅ Full build (`zig build run`) succeeds
+- ✅ Module path constraints resolved using view pattern
 
-### Phase 4: Testing & Validation
+### Phase 4: Testing & Validation ✅
 
 **Goal**: Ensure correctness of complex queries.
 
 1. **Unit Tests**:
-    - `(type:issue OR type:bug) AND priority:1`
-    - `type:requirement AND NOT status:implemented`
-    - Nested parentheses `((A OR B) AND C) OR D`
+    - `(type:issue OR type:bug) AND priority:1` ✅
+    - `type:requirement AND NOT status:implemented` (adjusted to `type:requirement AND NOT type:issue`) ✅
+    - Nested parentheses `((A OR B) AND C) OR D` ✅
 2. **CLI Verification**:
-    - Run `engram query` with complex strings to verify output.
+    - Run `engram query` with complex strings to verify output. ✅
+
+**Status**: COMPLETED ✅
+
+**Implementation**:
+- ✅ Added 6 complex unit tests:
+  - `evaluateAST: complex OR + AND - both match` - Tests `(type:issue OR type:bug) AND tag:security`
+  - `evaluateAST: complex OR + AND - one match` - Tests when only part of query matches
+  - `evaluateAST: AND + NOT - with negation` - Tests `type:requirement AND NOT type:issue`
+  - `evaluateAST: AND + NOT - negation fails` - Tests contradictory conditions
+  - `evaluateAST: deeply nested parentheses` - Tests `((type:issue OR type:bug) AND tag:p1) OR type:requirement`
+  - `evaluateAST: deeply nested parentheses - no match` - Tests failure case
+- ✅ Created test cortex with sample data (5 neuronas)
+- ✅ Verified CLI queries with complex EQL strings:
+  - `type:issue` ✓
+  - `type:issue OR type:bug` ✓
+  - `(type:issue OR type:test_case) AND tag:bug` ✓
+  - `type:issue AND NOT type:test_case` ✓
+  - `((type:issue OR type:bug) AND tag:bug) OR type:requirement` ✓
+  - `type:test_case` ✓
+  - `tag:test` ✓
+  - `link(validates, req.user-authentication)` ✓
+- ✅ All 15 evaluator tests passing
+- ✅ All 37 eql_parser tests passing
+- ✅ All complex EQL queries work correctly in CLI
+
+**Note**: AGENTS.md examples use `status` and `state` fields which are not currently supported by evaluator. These require context field access which would need Neurona context fields in the view.
+
+### Phase 5: Context Field Support 🔄
+
+**Goal**: Add support for context field queries (`status`, `priority`, `assignee`) to enable full AGENTS.md examples.
+
+1. **Extend NeuronaView**:
+    - Add context field to NeuronaView struct
+    - Include status, priority, assignee for ALM types
+2. **Update Evaluator**:
+    - Add `context.status` field evaluation
+    - Add `context.priority` field evaluation
+    - Add `context.assignee` field evaluation
+3. **Integration**:
+    - Update `createNeuronaView()` to copy context data
+    - Handle context.* field parsing in parser
+4. **Testing**:
+    - Test `status:implemented`, `status:neq:implemented`
+    - Test `context.priority:1`, `priority:gte:3`
+    - Test `context.assignee:alice`
+    - Verify all AGENTS.md examples work
+
+**Status**: PENDING 🔄
+
+**Implementation**:
+- ⏳ Extend NeuronaView with context fields
+- ⏳ Update evaluateCondition() for context.* syntax
+- ⏳ Add context field parsing support
+- ⏳ Update createNeuronaView() with context data
+- ⏳ Add unit tests for context queries
+- ⏳ Verify AGENTS.md examples
+
+**Examples to support**:
+```eql
+type:requirement AND status:neq:implemented
+type:issue AND status:open
+type:requirement AND state:approved
+context.status:open AND context.priority:1
+```
 
 ## Technical Details
 
@@ -129,7 +200,9 @@ To avoid breaking changes immediately:
 
 ## Success Criteria
 
-- [ ] Parser correctly handles parentheses nesting.
-- [ ] Parser correctly handles `NOT` operator.
-- [ ] Evaluator correctly filters Neuronas based on complex logic.
+- [x] Parser correctly handles parentheses nesting.
+- [x] Parser correctly handles `NOT` operator.
+- [x] Evaluator correctly filters Neuronas based on complex logic.
 - [ ] `AGENTS.md` examples (reverted in previous step) can be uncommented and work.
+    - **Phase 5 Required**: Basic EQL examples work (type, tag, link)
+    - **Phase 5 Required**: `status` and `state` fields require context access (see Phase 5)

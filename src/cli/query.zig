@@ -207,14 +207,18 @@ pub fn executeFilterQueryWithAST(allocator: Allocator, config: QueryConfig, ast:
         allocator.free(neuronas);
     }
 
-    // Step 2: Apply AST evaluator
+    // Step 2: Apply AST evaluator with NeuronaView
     var results = std.ArrayListUnmanaged(*const Neurona){};
     defer results.deinit(allocator);
 
     var count: usize = 0;
 
     for (neuronas) |*neurona| {
-        if (eql_parser.evaluateAST(ast.root, neurona)) {
+        // Create NeuronaView for evaluation
+        var view = try createNeuronaView(allocator, neurona);
+        defer view.deinit(allocator);
+
+        if (eql_parser.evaluateAST(ast.root, &view)) {
             try results.append(allocator, neurona);
             count += 1;
 
@@ -241,6 +245,52 @@ pub fn executeFilterQueryWithAST(allocator: Allocator, config: QueryConfig, ast:
     } else {
         try outputList(allocator, output_neuronas.items);
     }
+}
+
+/// Create a NeuronaView from a Neurona for evaluation
+fn createNeuronaView(allocator: Allocator, neurona: *const Neurona) !@import("../utils/eql_parser.zig").NeuronaView {
+    const eql_parser = @import("../utils/eql_parser.zig");
+
+    var view = eql_parser.NeuronaView{
+        .id = neurona.id,
+        .type = switch (neurona.type) {
+            .concept => .concept,
+            .reference => .reference,
+            .artifact => .artifact,
+            .state_machine => .state_machine,
+            .lesson => .lesson,
+            .requirement => .requirement,
+            .test_case => .test_case,
+            .issue => .issue,
+            .feature => .feature,
+        },
+        .title = neurona.title,
+        .tags = neurona.tags.items,
+        .connections = .{},
+    };
+
+    // Copy connections
+    var conn_it = neurona.connections.iterator();
+    while (conn_it.next()) |entry| {
+        // Parse connection type from key (which is @tagName(connection_type))
+        const conn_type = eql_parser.connectionTypeFromString(entry.key_ptr.*) orelse continue;
+
+        var conn_list = eql_parser.ConnectionList{
+            .connection_type = conn_type,
+            .connections = .{},
+        };
+
+        for (entry.value_ptr.connections.items) |*conn| {
+            try conn_list.connections.append(allocator, .{
+                .target_id = try allocator.dupe(u8, conn.target_id),
+                .weight = conn.weight, // u8 from Neurona.Connection
+            });
+        }
+
+        try view.connections.put(allocator, entry.key_ptr.*, conn_list);
+    }
+
+    return view;
 }
 
 /// Check if Neurona matches all filters
