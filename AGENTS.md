@@ -13,12 +13,14 @@ This guide provides AI agents with a structured workflow for integrating with En
 ## Core Rules for AI Agents
 
 ### Development Rules
+
 - Review and update PLAN.md for implementation planning
 - Always ask for review before making commits
 - Work is NOT complete until `zig build run` succeeds
 - If `zig build run` fails, resolve and retry until success
 
 ### Zig Coding Standards
+
 - Use explicit allocator patterns
 - Never use global variables for large structs
 - Use `ArenaAllocator` for frame-scoped data
@@ -52,11 +54,11 @@ engram query --type requirement --state draft --json
 # Semantic search for understanding
 engram query --mode vector "authentication issues" --json
 
-# Find untested requirements
-engram query "type:requirement AND NOT link(validates, type:test_case)" --json
+# Find unimplemented requirements
+engram query "type:requirement AND status:neq:implemented" --json
 
 # Get blocked items
-engram query "type:issue AND state:open" --json
+engram query "type:issue AND status:open" --json
 ```
 
 ### Phase 3: Impact Analysis (Before Changes)
@@ -133,6 +135,7 @@ git commit -m "Implement feature with full test coverage"
 ## EQL Syntax Reference
 
 ### Basic Queries
+
 ```
 type:requirement
 state:implemented
@@ -141,16 +144,19 @@ tag:security
 ```
 
 ### Logical Operators
+
 ```
 type:requirement AND state:approved
-(type:issue OR type:bug) AND priority:1
-type:requirement AND NOT link(validates, type:test_case)
+type:issue OR type:bug
+type:requirement AND status:neq:implemented
 ```
 
 ### Connection Queries
+
 ```
 link(validates, req.auth.oauth2)
 link(blocks, type:requirement)
+link(validates, req.001) AND type:test_case
 ```
 
 ---
@@ -168,7 +174,9 @@ link(blocks, type:requirement)
 ## State Transitions
 
 ### Issues: open → in_progress → resolved → closed
+
 ### Tests: not_run → running → passing/failing
+
 ### Requirements: draft → approved → implemented
 
 ---
