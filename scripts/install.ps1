@@ -9,6 +9,13 @@ $ProjectRoot = Split-Path -Parent $ScriptDir
 $InstallDir = "$env:APPDATA\engram"
 
 Write-Host "Building Engram..." -ForegroundColor Cyan
+
+# Clean previous build
+if (Test-Path "$ProjectRoot\zig-out") {
+    Write-Host "Cleaning previous build..." -ForegroundColor Gray
+    Remove-Item -Recurse -Force "$ProjectRoot\zig-out"
+}
+
 try {
     zig build -Doptimize=ReleaseSafe
     if ($LASTEXITCODE -ne 0) {
