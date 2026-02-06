@@ -23,36 +23,16 @@ pub fn executeQueryWithText(allocator: Allocator, config: QueryConfig) !void {
     const is_eql = eql_parser.isEQLQuery(query_text);
 
     if (is_eql) {
-        // Parse as EQL
+        // Try to parse as AST first (new parser)
         var parser = EQLParser.init(allocator, query_text);
-        var eql_query = try parser.parse();
-        defer eql_query.deinit(allocator);
-
-        // Convert EQL to filters
-        const filters = try convertEQLToFilters(allocator, &eql_query);
-        defer {
-            for (filters) |*f| {
-                switch (f.*) {
-                    .type_filter => |*tf| tf.deinit(allocator),
-                    .tag_filter => |*tf| tf.deinit(allocator),
-                    .connection_filter => {},
-                    .field_filter => |*ff| allocator.free(ff.field),
-                }
-            }
-            allocator.free(filters);
-        }
-
-        const new_config = QueryConfig{
-            .mode = .filter,
-            .query_text = query_text,
-            .filters = filters,
-            .limit = config.limit,
-            .json_output = config.json_output,
+        var ast = parser.parseAST() catch {
+            // Fallback to old parser if AST parsing fails
+            return try executeLegacyEQLQuery(allocator, config, query_text);
         };
+        defer ast.deinit(allocator);
 
-        // Call the filter query function from query module
-        const query_module = @import("query.zig");
-        return try query_module.executeFilterQuery(allocator, new_config);
+        // Use AST evaluator for filtering
+        return try executeASTQuery(allocator, config, &ast);
     }
 
     // Fallback: treat as text search
@@ -67,6 +47,45 @@ pub fn executeQueryWithText(allocator: Allocator, config: QueryConfig) !void {
 
     const query_module = @import("query.zig");
     return try query_module.executeBM25Query(allocator, text_config);
+}
+
+/// Execute legacy EQL query (flat structure)
+fn executeLegacyEQLQuery(allocator: Allocator, config: QueryConfig, query_text: []const u8) !void {
+    var parser = EQLParser.init(allocator, query_text);
+    var eql_query = try parser.parse();
+    defer eql_query.deinit(allocator);
+
+    // Convert EQL to filters
+    const filters = try convertEQLToFilters(allocator, &eql_query);
+    defer {
+        for (filters) |*f| {
+            switch (f.*) {
+                .type_filter => |*tf| tf.deinit(allocator),
+                .tag_filter => |*tf| tf.deinit(allocator),
+                .connection_filter => {},
+                .field_filter => |*ff| allocator.free(ff.field),
+            }
+        }
+        allocator.free(filters);
+    }
+
+    const new_config = QueryConfig{
+        .mode = .filter,
+        .query_text = query_text,
+        .filters = filters,
+        .limit = config.limit,
+        .json_output = config.json_output,
+    };
+
+    // Call the filter query function from query module
+    const query_module = @import("query.zig");
+    return try query_module.executeFilterQuery(allocator, new_config);
+}
+
+/// Execute AST-based query
+fn executeASTQuery(allocator: Allocator, config: QueryConfig, ast: *const eql_parser.QueryAST) !void {
+    const query_module = @import("query.zig");
+    return try query_module.executeFilterQueryWithAST(allocator, config, ast);
 }
 
 /// Convert EQL query to QueryFilters

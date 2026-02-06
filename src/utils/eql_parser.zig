@@ -22,6 +22,10 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+// Import Neurona types for evaluator
+const root_module = @import("../root.zig");
+const Neurona = root_module.Neurona;
+
 // ==================== Error Types ====================
 
 pub const ParseError = error{
@@ -502,6 +506,115 @@ pub const EQLParser = struct {
     }
 };
 
+// ==================== Query Evaluator (Phase 3) ====================
+
+/// Evaluate AST node against a Neurona
+pub fn evaluateAST(node: *const QueryNode, neurona: *const Neurona) bool {
+    return switch (node.*) {
+        .condition => |cond| evaluateCondition(cond, neurona),
+        .logical => |op| {
+            const left_match = evaluateAST(op.left, neurona);
+            const right_match = evaluateAST(op.right, neurona);
+            return switch (op.op) {
+                .@"and" => left_match and right_match,
+                .@"or" => left_match or right_match,
+            };
+        },
+        .not => |op| !evaluateAST(op.child, neurona),
+        .group => |group| evaluateAST(group.child, neurona),
+    };
+}
+
+/// Evaluate a single EQLCondition against a Neurona
+fn evaluateCondition(cond: *const EQLCondition, neurona: *const Neurona) bool {
+    // Check for link condition
+    if (cond.link_type != null and cond.link_target != null) {
+        return evaluateLinkCondition(cond, neurona);
+    }
+
+    // Check for field condition
+    if (std.mem.eql(u8, cond.field, "type")) {
+        const type_str = @tagName(neurona.type);
+        return evaluateStringOp(type_str, cond.op, cond.value);
+    } else if (std.mem.eql(u8, cond.field, "tag")) {
+        return evaluateTagCondition(cond.value, cond.op, neurona);
+    } else if (std.mem.eql(u8, cond.field, "id")) {
+        const id_match = std.mem.eql(u8, neurona.id, cond.value);
+        return evaluateBoolOp(id_match, cond.op);
+    } else if (std.mem.eql(u8, cond.field, "title")) {
+        const title_match = std.mem.indexOf(u8, neurona.title, cond.value) != null;
+        return evaluateBoolOp(title_match, cond.op);
+    }
+
+    // Unknown field - default to false
+    return false;
+}
+
+/// Evaluate a link condition
+fn evaluateLinkCondition(cond: *const EQLCondition, neurona: *const Neurona) bool {
+    var conn_it = neurona.connections.iterator();
+    while (conn_it.next()) |entry| {
+        for (entry.value_ptr.connections.items) |*conn| {
+            // Check connection type
+            if (cond.link_type) |ct| {
+                const type_name = @tagName(conn.connection_type);
+                if (!std.mem.eql(u8, type_name, ct)) continue;
+            }
+
+            // Check target ID
+            if (cond.link_target) |target| {
+                if (!std.mem.eql(u8, conn.target_id, target)) continue;
+            }
+
+            // Both conditions matched
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Evaluate tag condition
+fn evaluateTagCondition(tag_value: []const u8, op: ConditionOp, neurona: *const Neurona) bool {
+    for (neurona.tags.items) |neurona_tag| {
+        const match = std.mem.eql(u8, neurona_tag, tag_value);
+        if (evaluateBoolOp(match, op)) return true;
+    }
+    return false;
+}
+
+/// Evaluate string comparison operation
+fn evaluateStringOp(left: []const u8, op: ConditionOp, right: []const u8) bool {
+    return switch (op) {
+        .eq => std.mem.eql(u8, left, right),
+        .neq => !std.mem.eql(u8, left, right),
+        .contains => std.mem.indexOf(u8, left, right) != null,
+        .not_contains => std.mem.indexOf(u8, left, right) == null,
+        .gt, .lt, .gte, .lte => {
+            // For now, treat numeric comparisons as string comparisons
+            // TODO: Implement proper numeric comparison
+            return switch (op) {
+                .gt => std.mem.order(u8, left, right) == .gt,
+                .lt => std.mem.order(u8, left, right) == .lt,
+                .gte => std.mem.order(u8, left, right) != .lt,
+                .lte => std.mem.order(u8, left, right) != .gt,
+                else => false,
+            };
+        },
+    };
+}
+
+/// Evaluate boolean operation
+fn evaluateBoolOp(left: bool, op: ConditionOp) bool {
+    return switch (op) {
+        .eq => left,
+        .neq => !left,
+        .contains => left,
+        .not_contains => !left,
+        // For boolean comparisons, other operators don't make sense
+        else => false,
+    };
+}
+
 // ==================== Helper Functions ====================
 
 /// Check if query string is EQL format (vs natural language)
@@ -932,4 +1045,169 @@ test "parseAST: multiple OR operators" {
     try std.testing.expect(ast.root.logical.left.* == .logical);
     try std.testing.expect(ast.root.logical.left.logical.left.* == .condition);
     try std.testing.expectEqualStrings("issue", ast.root.logical.left.logical.left.condition.value);
+}
+
+// ==================== Query Evaluator Tests (Phase 3) ====================
+// Note: Tests temporarily disabled due to import path constraints
+// TODO: Re-enable tests once module path issues are resolved
+
+test "evaluateAST: simple condition - type no match" {
+    const allocator = std.testing.allocator;
+
+    var neurona = try Neurona.init(allocator);
+    defer neurona.deinit(allocator);
+    neurona.type = .issue;
+
+    // Parse query: type:bug
+    var parser = EQLParser.init(allocator, "type:bug");
+    var ast = try parser.parseAST();
+    defer ast.deinit(allocator);
+
+    const result = evaluateAST(ast.root, &neurona);
+    try std.testing.expect(!result);
+}
+
+test "evaluateAST: AND expression - both match" {
+    const allocator = std.testing.allocator;
+
+    var neurona = try Neurona.init(allocator);
+    defer neurona.deinit(allocator);
+    neurona.type = .issue;
+    try neurona.tags.append(allocator, "p1");
+
+    // Parse query: type:issue AND tag:p1
+    var parser = EQLParser.init(allocator, "type:issue AND tag:p1");
+    var ast = try parser.parseAST();
+    defer ast.deinit(allocator);
+
+    const result = evaluateAST(ast.root, &neurona);
+    try std.testing.expect(result);
+}
+
+test "evaluateAST: AND expression - one match" {
+    const allocator = std.testing.allocator;
+
+    var neurona = try Neurona.init(allocator);
+    defer neurona.deinit(allocator);
+    neurona.type = .issue;
+    try neurona.tags.append(allocator, "p2");
+
+    // Parse query: type:issue AND tag:p1
+    var parser = EQLParser.init(allocator, "type:issue AND tag:p1");
+    var ast = try parser.parseAST();
+    defer ast.deinit(allocator);
+
+    const result = evaluateAST(ast.root, &neurona);
+    try std.testing.expect(!result);
+}
+
+test "evaluateAST: OR expression - one match" {
+    const allocator = std.testing.allocator;
+
+    var neurona = try Neurona.init(allocator);
+    defer neurona.deinit(allocator);
+    neurona.type = .issue;
+    try neurona.tags.append(allocator, "p2");
+
+    // Parse query: type:issue OR type:bug
+    var parser = EQLParser.init(allocator, "type:issue OR type:bug");
+    var ast = try parser.parseAST();
+    defer ast.deinit(allocator);
+
+    const result = evaluateAST(ast.root, &neurona);
+    try std.testing.expect(result);
+}
+
+test "evaluateAST: OR expression - no match" {
+    const allocator = std.testing.allocator;
+
+    var neurona = try Neurona.init(allocator);
+    defer neurona.deinit(allocator);
+    neurona.type = .requirement;
+
+    // Parse query: type:issue OR type:bug
+    var parser = EQLParser.init(allocator, "type:issue OR type:bug");
+    var ast = try parser.parseAST();
+    defer ast.deinit(allocator);
+
+    const result = evaluateAST(ast.root, &neurona);
+    try std.testing.expect(!result);
+}
+
+test "evaluateAST: NOT operator - negation" {
+    const allocator = std.testing.allocator;
+
+    var neurona = try Neurona.init(allocator);
+    defer neurona.deinit(allocator);
+    neurona.type = .issue;
+
+    // Parse query: NOT type:issue
+    var parser = EQLParser.init(allocator, "NOT type:issue");
+    var ast = try parser.parseAST();
+    defer ast.deinit(allocator);
+
+    const result = evaluateAST(ast.root, &neurona);
+    try std.testing.expect(!result);
+}
+
+test "evaluateAST: NOT operator - negation with match" {
+    const allocator = std.testing.allocator;
+
+    var neurona = try Neurona.init(allocator);
+    defer neurona.deinit(allocator);
+    neurona.type = .requirement;
+
+    // Parse query: NOT type:issue
+    var parser = EQLParser.init(allocator, "NOT type:issue");
+    var ast = try parser.parseAST();
+    defer ast.deinit(allocator);
+
+    const result = evaluateAST(ast.root, &neurona);
+    try std.testing.expect(result);
+}
+
+test "evaluateAST: parenthesized expression with AND" {
+    const allocator = std.testing.allocator;
+
+    var neurona = try Neurona.init(allocator);
+    defer neurona.deinit(allocator);
+    neurona.type = .issue;
+    try neurona.tags.append(allocator, "p1");
+
+    // Parse query: (type:issue OR type:bug) AND tag:p1
+    var parser = EQLParser.init(allocator, "(type:issue OR type:bug) AND tag:p1");
+    var ast = try parser.parseAST();
+    defer ast.deinit(allocator);
+
+    const result = evaluateAST(ast.root, &neurona);
+    try std.testing.expect(result);
+}
+
+test "evaluateAST: link condition" {
+    const allocator = std.testing.allocator;
+    const ConnectionList = @import("../core/neurona.zig").ConnectionList;
+
+    var neurona = try Neurona.init(allocator);
+    defer neurona.deinit(allocator);
+    neurona.type = .test_case;
+
+    // Add connection
+    var conn_list = try allocator.create(ConnectionList);
+    conn_list.* = .{
+        .connection_type = .validates,
+        .connections = std.ArrayList(@import("../core/neurona.zig").Connection).init(allocator),
+    };
+    try conn_list.connections.append(allocator, .{
+        .target_id = "req.001",
+        .weight = 1.0,
+    });
+    try neurona.connections.put(allocator, "validates", conn_list.*);
+
+    // Parse query: link(validates, req.001)
+    var parser = EQLParser.init(allocator, "link(validates, req.001)");
+    var ast = try parser.parseAST();
+    defer ast.deinit(allocator);
+
+    const result = evaluateAST(ast.root, &neurona);
+    try std.testing.expect(result);
 }

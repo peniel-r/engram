@@ -75,21 +75,32 @@ Implement advanced features in the Engram Query Language (EQL) parser to support
   - NOT with parentheses
   - Grouped OR with AND
   - Multiple OR operators (left-associative)
-- All 22 eql_parser tests pass
+   - All 22 eql_parser tests pass
 
-### Phase 3: Query Evaluator
+### Phase 3: Query Evaluator 🚧
 
-**Goal**: Execute the AST against Neurona artifacts.
+**Goal**: Execute AST against Neurona artifacts.
 
 1. **Evaluator Logic**:
     - Implement `evaluate(node: *QueryNode, neurona: *Neurona) bool`.
-    - Recursively traverse the tree.
+    - Recursively traverse tree.
     - `AND`: returns `eval(left) && eval(right)`.
     - `OR`: returns `eval(left) || eval(right)`.
     - `NOT`: returns `!eval(child)`.
 2. **Integration**:
-    - Update `src/cli/query_helpers.zig` to use the new AST.
-    - Update `src/cli/query.zig` to support the new filter structure (or replace `QueryFilter` list with `QueryAST`).
+    - Update `src/cli/query_helpers.zig` to use new AST.
+    - Update `src/cli/query.zig` to support new filter structure (or replace `QueryFilter` list with `QueryAST`).
+
+**Status**: WORK IN PROGRESS 🚧
+
+**Implementation**:
+- ✅ Added `evaluateAST()` function for recursive AST evaluation
+- ✅ Added helper functions: `evaluateCondition()`, `evaluateLinkCondition()`, `evaluateTagCondition()`, `evaluateStringOp()`, `evaluateBoolOp()`
+- ✅ Updated `query_helpers.zig` to use AST parser (`parseAST()`) with fallback to legacy parser
+- ✅ Added `executeASTQuery()` in `query_helpers.zig` and `executeFilterQueryWithAST()` in `query.zig`
+- ⚠️ Integration points implemented but encountering Zig module path constraints
+- ⚠️ Evaluator tests temporarily disabled due to import path issues
+- ⚠️ Requires resolution of type compatibility between evaluator and calling code
 
 ### Phase 4: Testing & Validation
 

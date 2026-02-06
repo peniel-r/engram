@@ -193,6 +193,56 @@ pub fn executeFilterQuery(allocator: Allocator, config: QueryConfig) !void {
     }
 }
 
+/// Filter mode using AST evaluator (Phase 3)
+pub fn executeFilterQueryWithAST(allocator: Allocator, config: QueryConfig, ast: *const @import("../utils/eql_parser.zig").QueryAST) !void {
+    const eql_parser = @import("../utils/eql_parser.zig");
+
+    // Step 1: Scan all Neuronas
+    const directory = try getNeuronasDir(allocator, config.cortex_dir);
+    defer allocator.free(directory);
+
+    const neuronas = try storage.scanNeuronas(allocator, directory);
+    defer {
+        for (neuronas) |*n| n.deinit(allocator);
+        allocator.free(neuronas);
+    }
+
+    // Step 2: Apply AST evaluator
+    var results = std.ArrayListUnmanaged(*const Neurona){};
+    defer results.deinit(allocator);
+
+    var count: usize = 0;
+
+    for (neuronas) |*neurona| {
+        if (eql_parser.evaluateAST(ast.root, neurona)) {
+            try results.append(allocator, neurona);
+            count += 1;
+
+            if (config.limit) |limit| {
+                if (count >= limit) break;
+            }
+        }
+    }
+
+    // Step 3: Sort results (by id for now)
+    const sorted = try results.toOwnedSlice(allocator);
+    defer allocator.free(sorted);
+
+    // Step 4: Output - Dereference pointers for output
+    var output_neuronas = std.ArrayListUnmanaged(Neurona){};
+    defer output_neuronas.deinit(allocator);
+
+    for (sorted) |n| {
+        try output_neuronas.append(allocator, n.*);
+    }
+
+    if (config.json_output) {
+        try outputJson(allocator, output_neuronas.items);
+    } else {
+        try outputList(allocator, output_neuronas.items);
+    }
+}
+
 /// Check if Neurona matches all filters
 fn matchesFilters(neurona: *const Neurona, filters: []const QueryFilter) bool {
     if (filters.len == 0) return true;
