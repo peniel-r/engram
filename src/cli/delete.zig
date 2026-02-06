@@ -4,18 +4,37 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const fs = @import("../storage/filesystem.zig");
+const uri_parser = @import("../utils/uri_parser.zig");
 
 /// Configuration for Delete command
 pub const DeleteConfig = struct {
     id: []const u8,
-    neuronas_dir: []const u8 = "neuronas",
+    cortex_dir: ?[]const u8 = null,
     verbose: bool = false,
 };
 
 /// Execute delete command
 pub fn execute(allocator: Allocator, config: DeleteConfig) !void {
+    // Determine neuronas directory
+    const cortex_dir = config.cortex_dir orelse blk: {
+        const cd = uri_parser.findCortexDir(allocator) catch |err| {
+            if (err == error.CortexNotFound) {
+                std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
+                std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
+                std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+                std.process.exit(1);
+            }
+            return err;
+        };
+        break :blk cd;
+    };
+    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+
+    const neuronas_dir = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
+    defer allocator.free(neuronas_dir);
+
     // 1. Find Neurona file
-    const filepath = try fs.findNeuronaPath(allocator, config.neuronas_dir, config.id);
+    const filepath = try fs.findNeuronaPath(allocator, neuronas_dir, config.id);
     defer allocator.free(filepath);
 
     // 2. Delete file

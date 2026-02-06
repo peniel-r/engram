@@ -10,6 +10,7 @@ const storage = @import("../root.zig").storage;
 const Graph = @import("../core/graph.zig").Graph;
 const NeuralActivation = @import("../root.zig").core.NeuralActivation;
 const GloVeIndex = @import("../root.zig").storage.GloVeIndex;
+const uri_parser = @import("../utils/uri_parser.zig");
 
 /// Query mode for different search algorithms
 pub const QueryMode = enum {
@@ -38,6 +39,7 @@ pub const QueryConfig = struct {
     filters: []QueryFilter,
     limit: ?usize = null,
     json_output: bool = false,
+    cortex_dir: ?[]const u8 = null,
 };
 
 /// Query filter types
@@ -115,10 +117,31 @@ pub fn execute(allocator: Allocator, config: QueryConfig) !void {
     }
 }
 
+fn getNeuronasDir(allocator: Allocator, cortex_dir: ?[]const u8) ![]const u8 {
+    if (cortex_dir) |cd| {
+        return try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cd});
+    }
+    const cortex = uri_parser.findCortexDir(allocator) catch |err| {
+        if (err == error.CortexNotFound) {
+            std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
+            std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
+            std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+            std.process.exit(1);
+        }
+        return err;
+    };
+    const path = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex});
+    allocator.free(cortex);
+    return path;
+}
+
 /// Filter mode: Filter by type, tags, connections
 pub fn executeFilterQuery(allocator: Allocator, config: QueryConfig) !void {
     // Step 1: Scan all Neuronas
-    const neuronas = try storage.scanNeuronas(allocator, "neuronas");
+    const directory = try getNeuronasDir(allocator, config.cortex_dir);
+    defer allocator.free(directory);
+
+    const neuronas = try storage.scanNeuronas(allocator, directory);
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);
@@ -270,7 +293,10 @@ pub fn executeBM25Query(allocator: Allocator, config: QueryConfig) !void {
     }
 
     // Step 1: Scan all Neuronas
-    const neuronas = try storage.scanNeuronas(allocator, "neuronas");
+    const directory = try getNeuronasDir(allocator, config.cortex_dir);
+    defer allocator.free(directory);
+
+    const neuronas = try storage.scanNeuronas(allocator, directory);
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);
@@ -323,7 +349,10 @@ fn executeVectorQuery(allocator: Allocator, config: QueryConfig) !void {
     }
 
     // Step 1: Scan all Neuronas
-    const neuronas = try storage.scanNeuronas(allocator, "neuronas");
+    const directory = try getNeuronasDir(allocator, config.cortex_dir);
+    defer allocator.free(directory);
+
+    const neuronas = try storage.scanNeuronas(allocator, directory);
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);
@@ -390,7 +419,10 @@ fn executeHybridQuery(allocator: Allocator, config: QueryConfig) !void {
     }
 
     // Step 1: Scan all Neuronas
-    const neuronas = try storage.scanNeuronas(allocator, "neuronas");
+    const directory = try getNeuronasDir(allocator, config.cortex_dir);
+    defer allocator.free(directory);
+
+    const neuronas = try storage.scanNeuronas(allocator, directory);
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);
@@ -532,7 +564,10 @@ fn executeActivationQuery(allocator: Allocator, config: QueryConfig) !void {
     }
 
     // Step 1: Scan all Neuronas
-    const neuronas = try storage.scanNeuronas(allocator, "neuronas");
+    const directory = try getNeuronasDir(allocator, config.cortex_dir);
+    defer allocator.free(directory);
+
+    const neuronas = try storage.scanNeuronas(allocator, directory);
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);
@@ -1015,7 +1050,23 @@ fn outputList(allocator: Allocator, neuras: []const Neurona) !void {
     std.debug.print("\n  Found {d} results\n", .{neuras.len});
 }
 
-/// JSON output for AI
+/// Print string as JSON-escaped value
+fn printJsonString(s: []const u8) void {
+    std.debug.print("\"", .{});
+    for (s) |c| {
+        switch (c) {
+            '"' => std.debug.print("\\\"", .{}),
+            '\\' => std.debug.print("\\\\", .{}),
+            '\n' => std.debug.print("\\n", .{}),
+            '\r' => std.debug.print("\\r", .{}),
+            '\t' => std.debug.print("\\t", .{}),
+            else => std.debug.print("{c}", .{c}),
+        }
+    }
+    std.debug.print("\"", .{});
+}
+
+/// JSON output for AI - complete neurona data
 fn outputJson(allocator: Allocator, neuras: []const Neurona) !void {
     _ = allocator;
     std.debug.print("[", .{});
@@ -1026,16 +1077,62 @@ fn outputJson(allocator: Allocator, neuras: []const Neurona) !void {
         std.debug.print("\"title\":\"{s}\",", .{neurona.title});
         std.debug.print("\"type\":\"{s}\",", .{@tagName(neurona.type)});
 
+        // Tags
         std.debug.print("\"tags\":[", .{});
+        for (neurona.tags.items, 0..) |tag, ti| {
+            if (ti > 0) std.debug.print(",", .{});
+            printJsonString(tag);
+        }
+        std.debug.print("],", .{});
 
-        var tag_i: usize = 0;
-        for (neurona.tags.items) |tag| {
-            if (tag_i > 0) std.debug.print(",", .{});
-            std.debug.print("\"{s}\"", .{tag});
-            tag_i += 1;
+        // Context
+        std.debug.print("\"context\":{{", .{});
+        switch (neurona.context) {
+            .requirement => |ctx| {
+                std.debug.print("\"status\":\"{s}\",", .{ctx.status});
+                std.debug.print("\"verification_method\":\"{s}\",", .{ctx.verification_method});
+                std.debug.print("\"priority\":{d}", .{ctx.priority});
+                if (ctx.assignee) |a| std.debug.print(",\"assignee\":\"{s}\"", .{a});
+            },
+            .test_case => |ctx| {
+                std.debug.print("\"status\":\"{s}\",", .{ctx.status});
+                std.debug.print("\"framework\":\"{s}\"", .{ctx.framework});
+                if (ctx.assignee) |a| std.debug.print(",\"assignee\":\"{s}\"", .{a});
+            },
+            .issue => |ctx| {
+                std.debug.print("\"status\":\"{s}\",", .{ctx.status});
+                std.debug.print("\"priority\":{d}", .{ctx.priority});
+                if (ctx.assignee) |a| std.debug.print(",\"assignee\":\"{s}\"", .{a});
+            },
+            .artifact => |ctx| {
+                std.debug.print("\"runtime\":\"{s}\",", .{ctx.runtime});
+                std.debug.print("\"file_path\":\"{s}\"", .{ctx.file_path});
+            },
+            else => {},
+        }
+        std.debug.print("}},", .{});
+
+        // LLM metadata
+        if (neurona.llm_metadata) |*meta| {
+            std.debug.print("\"_llm\":{{", .{});
+            std.debug.print("\"t\":\"{s}\",", .{meta.short_title});
+            std.debug.print("\"d\":{d},", .{meta.density});
+            std.debug.print("\"strategy\":\"{s}\"", .{meta.strategy});
+            if (meta.keywords.items.len > 0) {
+                std.debug.print(",\"k\":[", .{});
+                for (meta.keywords.items, 0..) |kw, ki| {
+                    if (ki > 0) std.debug.print(",", .{});
+                    printJsonString(kw);
+                }
+                std.debug.print("]", .{});
+                std.debug.print(",\"c\":{d}", .{meta.token_count});
+            }
+            std.debug.print("}},", .{});
         }
 
-        std.debug.print("]}}", .{});
+        // Connections count
+        std.debug.print("\"connections\":{d}", .{neurona.connections.count()});
+        std.debug.print("}}", .{});
     }
     std.debug.print("]\n", .{});
 }

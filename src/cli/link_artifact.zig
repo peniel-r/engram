@@ -14,6 +14,7 @@ const writeNeurona = @import("../storage/filesystem.zig").writeNeurona;
 const findNeuronaPath = @import("../storage/filesystem.zig").findNeuronaPath;
 const generateId = @import("../utils/id_generator.zig").generateId;
 const getCurrentTimestamp = @import("../utils/timestamp.zig").getCurrentTimestamp;
+const uri_parser = @import("../utils/uri_parser.zig");
 
 /// Link artifact configuration
 pub const LinkArtifactConfig = struct {
@@ -25,7 +26,7 @@ pub const LinkArtifactConfig = struct {
     safe_to_exec: bool = false,
     verbose: bool = false,
     json_output: bool = false,
-    neuronas_dir: []const u8 = "neuronas",
+    cortex_dir: ?[]const u8 = null,
 };
 
 /// Artifact link result
@@ -44,8 +45,26 @@ pub const LinkResult = struct {
 
 /// Main command handler
 pub fn execute(allocator: Allocator, config: LinkArtifactConfig) !void {
+    // Determine neuronas directory
+    const cortex_dir = config.cortex_dir orelse blk: {
+        const cd = uri_parser.findCortexDir(allocator) catch |err| {
+            if (err == error.CortexNotFound) {
+                std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
+                std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
+                std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+                std.process.exit(1);
+            }
+            return err;
+        };
+        break :blk cd;
+    };
+    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+
+    const neuronas_dir = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
+    defer allocator.free(neuronas_dir);
+
     // Step 1: Verify requirement exists
-    const req_filepath = try findNeuronaPath(allocator, config.neuronas_dir, config.requirement_id);
+    const req_filepath = try findNeuronaPath(allocator, neuronas_dir, config.requirement_id);
     defer allocator.free(req_filepath);
 
     var requirement = try readNeurona(allocator, req_filepath);
@@ -64,7 +83,7 @@ pub fn execute(allocator: Allocator, config: LinkArtifactConfig) !void {
     }
 
     for (config.source_files.items) |source_file| {
-        const result = try linkArtifactFile(allocator, config, source_file);
+        const result = try linkArtifactFile(allocator, config, source_file, neuronas_dir);
         try results.append(allocator, result);
     }
 
@@ -86,7 +105,7 @@ pub fn execute(allocator: Allocator, config: LinkArtifactConfig) !void {
         requirement.updated = try getCurrentTimestamp(allocator);
 
         // Write updated requirement
-        try writeNeurona(allocator, requirement, req_filepath);
+        try writeNeurona(allocator, requirement, req_filepath, false);
 
         if (config.verbose) {
             std.debug.print("Updated requirement {s}\n", .{config.requirement_id});
@@ -102,13 +121,13 @@ pub fn execute(allocator: Allocator, config: LinkArtifactConfig) !void {
 }
 
 /// Link a single source file to requirement
-fn linkArtifactFile(allocator: Allocator, config: LinkArtifactConfig, source_file: []const u8) !LinkResult {
+fn linkArtifactFile(allocator: Allocator, config: LinkArtifactConfig, source_file: []const u8, neuronas_dir: []const u8) !LinkResult {
     // Extract filename from path
     const filename = std.fs.path.basename(source_file);
 
     // Check if artifact already exists
     const artifact_id = try generateArtifactId(allocator, filename);
-    const existing_path = findNeuronaPath(allocator, config.neuronas_dir, artifact_id) catch |err| {
+    const existing_path = findNeuronaPath(allocator, neuronas_dir, artifact_id) catch |err| {
         if (err == error.NeuronaNotFound) {
             // Create new artifact
             var artifact = try createArtifact(allocator, config, source_file, artifact_id);
@@ -117,10 +136,10 @@ fn linkArtifactFile(allocator: Allocator, config: LinkArtifactConfig, source_fil
             const filename_with_ext = try std.fmt.allocPrint(allocator, "{s}.md", .{artifact_id});
             defer allocator.free(filename_with_ext);
 
-            const artifact_filepath = try std.fs.path.join(allocator, &.{ config.neuronas_dir, filename_with_ext });
+            const artifact_filepath = try std.fs.path.join(allocator, &.{ neuronas_dir, filename_with_ext });
             defer allocator.free(artifact_filepath);
 
-            try writeNeurona(allocator, artifact, artifact_filepath);
+            try writeNeurona(allocator, artifact, artifact_filepath, false);
 
             // Add reverse connection to artifact
             const conn = Connection{
@@ -131,7 +150,7 @@ fn linkArtifactFile(allocator: Allocator, config: LinkArtifactConfig, source_fil
             try artifact.addConnection(allocator, conn);
 
             // Write artifact with connection
-            try writeNeurona(allocator, artifact, artifact_filepath);
+            try writeNeurona(allocator, artifact, artifact_filepath, false);
 
             return LinkResult{
                 .artifact_id = try allocator.dupe(u8, artifact_id),

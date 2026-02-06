@@ -18,6 +18,7 @@ pub const ShowConfig = struct {
     show_connections: bool = true,
     show_body: bool = true,
     json_output: bool = false,
+    cortex_dir: ?[]const u8 = null,
 };
 
 /// Main command handler
@@ -41,17 +42,35 @@ pub fn execute(allocator: Allocator, config: ShowConfig) !void {
         return;
     }
 
+    // Determine neuronas directory
+    const cortex_dir = config.cortex_dir orelse blk: {
+        const cd = uri_parser.findCortexDir(allocator) catch |err| {
+            if (err == error.CortexNotFound) {
+                std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
+                std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
+                std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+                std.process.exit(1);
+            }
+            return err;
+        };
+        break :blk cd;
+    };
+    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+
+    const neuronas_dir = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
+    defer allocator.free(neuronas_dir);
+
     // Resolve URI or use direct ID
     var resolved_id: ?[]const u8 = null;
     if (uri_parser.URI.isURI(config.id)) {
-        resolved_id = try uri_parser.resolveURIStr(allocator, config.id, "neuronas");
+        resolved_id = try uri_parser.resolveURIStr(allocator, config.id, neuronas_dir);
     } else {
         resolved_id = try allocator.dupe(u8, config.id);
     }
     defer if (resolved_id) |id| allocator.free(id);
 
     // Step1: Find and read Neurona file
-    const filepath = try findNeuronaPath(allocator, "neuronas", resolved_id.?);
+    const filepath = try findNeuronaPath(allocator, neuronas_dir, resolved_id.?);
     defer allocator.free(filepath);
 
     var neurona = try readNeurona(allocator, filepath);
@@ -63,7 +82,7 @@ pub fn execute(allocator: Allocator, config: ShowConfig) !void {
 
     // Step 3: Output
     if (config.json_output) {
-        try outputJson(&neurona, filepath);
+        try outputJson(allocator, &neurona, filepath, body);
     } else {
         try outputHuman(&neurona, body, config.show_connections, config.show_body);
     }
@@ -164,16 +183,78 @@ fn outputHuman(neurona: *const Neurona, body: []const u8, show_connections: bool
     }
 }
 
+/// Print string as JSON-escaped value
+fn printJsonString(s: []const u8) void {
+    std.debug.print("\"", .{});
+    for (s) |c| {
+        switch (c) {
+            '"' => std.debug.print("\\\"", .{}),
+            '\\' => std.debug.print("\\\\", .{}),
+            '\n' => std.debug.print("\\n", .{}),
+            '\r' => std.debug.print("\\r", .{}),
+            '\t' => std.debug.print("\\t", .{}),
+            else => std.debug.print("{c}", .{c}),
+        }
+    }
+    std.debug.print("\"", .{});
+}
+
 /// JSON output for AI
-fn outputJson(neurona: *const Neurona, filepath: []const u8) !void {
+fn outputJson(allocator: Allocator, neurona: *const Neurona, filepath: []const u8, body: []const u8) !void {
+    _ = allocator;
     std.debug.print("{{", .{});
-    std.debug.print("\"success\":true,", .{});
     std.debug.print("\"id\":\"{s}\",", .{neurona.id});
     std.debug.print("\"title\":\"{s}\",", .{neurona.title});
     std.debug.print("\"type\":\"{s}\",", .{@tagName(neurona.type)});
     std.debug.print("\"filepath\":\"{s}\",", .{filepath});
-    std.debug.print("\"tags\":{d},", .{neurona.tags.items.len});
-    std.debug.print("\"connections\":{d}", .{neurona.connections.count()});
+    std.debug.print("\"language\":\"{s}\",", .{neurona.language});
+    std.debug.print("\"updated\":\"{s}\",", .{neurona.updated});
+
+    // Tags
+    std.debug.print("\"tags\":[", .{});
+    for (neurona.tags.items, 0..) |tag, i| {
+        if (i > 0) std.debug.print(",", .{});
+        printJsonString(tag);
+    }
+    std.debug.print("],", .{});
+
+    // Connections count
+    std.debug.print("\"connections\":{d},", .{neurona.connections.count()});
+
+    // Body content (escaped for JSON)
+    std.debug.print("\"body\":", .{});
+    printJsonString(body);
+    std.debug.print(",", .{});
+
+    // Context
+    std.debug.print("\"context\":{{", .{});
+    switch (neurona.context) {
+        .requirement => |ctx| {
+            std.debug.print("\"status\":\"{s}\",", .{ctx.status});
+            std.debug.print("\"verification_method\":\"{s}\"", .{ctx.verification_method});
+        },
+        .test_case => |ctx| {
+            std.debug.print("\"status\":\"{s}\",", .{ctx.status});
+            std.debug.print("\"framework\":\"{s}\"", .{ctx.framework});
+        },
+        .issue => |ctx| {
+            std.debug.print("\"status\":\"{s}\"", .{ctx.status});
+        },
+        .artifact => |ctx| {
+            std.debug.print("\"runtime\":\"{s}\"", .{ctx.runtime});
+        },
+        else => {},
+    }
+    std.debug.print("}},", .{});
+
+    // LLM metadata
+    if (neurona.llm_metadata) |*meta| {
+        std.debug.print("\"_llm\":{{", .{});
+        std.debug.print("\"t\":\"{s}\",", .{meta.short_title});
+        std.debug.print("\"d\":{d}", .{meta.density});
+        std.debug.print("}}", .{});
+    }
+
     std.debug.print("}}\n", .{});
 }
 

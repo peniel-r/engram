@@ -85,8 +85,11 @@ pub fn findCortexDir(allocator: Allocator) ![]const u8 {
 
         const parent_path = std.fs.path.dirname(current_path);
         if (parent_path) |p| {
+            // Dupe parent_path BEFORE freeing current_path
+            // because dirname returns a slice into current_path
+            const parent_owned = try allocator.dupe(u8, p);
             allocator.free(current_path);
-            current_path = try allocator.dupe(u8, p);
+            current_path = parent_owned;
         } else {
             break;
         }

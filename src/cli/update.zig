@@ -8,18 +8,21 @@ const Neurona = @import("../core/neurona.zig").Neurona;
 const NeuronaType = @import("../core/neurona.zig").NeuronaType;
 const Connection = @import("../core/neurona.zig").Connection;
 const ConnectionType = @import("../core/neurona.zig").ConnectionType;
+const LLMMetadata = @import("../core/neurona.zig").LLMMetadata;
 const readNeurona = @import("../storage/filesystem.zig").readNeurona;
 const writeNeurona = @import("../storage/filesystem.zig").writeNeurona;
 const findNeuronaPath = @import("../storage/filesystem.zig").findNeuronaPath;
+const updateBody = @import("../storage/filesystem.zig").updateBody;
 const timestamp_mod = @import("../utils/timestamp.zig");
 const state_machine = @import("../core/state_machine.zig");
+const uri_parser = @import("../utils/uri_parser.zig");
 
 /// Update configuration
 pub const UpdateConfig = struct {
     id: []const u8,
     sets: std.ArrayListUnmanaged(FieldUpdate),
     verbose: bool = false,
-    neuronas_dir: []const u8 = "neuronas",
+    cortex_dir: ?[]const u8 = null,
 };
 
 /// Field update specification
@@ -43,8 +46,26 @@ pub const UpdateOperator = enum {
 
 /// Main command handler
 pub fn execute(allocator: Allocator, config: UpdateConfig) !void {
+    // Determine neuronas directory
+    const cortex_dir = config.cortex_dir orelse blk: {
+        const cd = uri_parser.findCortexDir(allocator) catch |err| {
+            if (err == error.CortexNotFound) {
+                std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
+                std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
+                std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+                std.process.exit(1);
+            }
+            return err;
+        };
+        break :blk cd;
+    };
+    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+
+    const neuronas_dir = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
+    defer allocator.free(neuronas_dir);
+
     // Step 1: Find and load Neurona
-    const filepath = try findNeuronaPath(allocator, config.neuronas_dir, config.id);
+    const filepath = try findNeuronaPath(allocator, neuronas_dir, config.id);
     defer allocator.free(filepath);
 
     var neurona = try readNeurona(allocator, filepath);
@@ -52,9 +73,13 @@ pub fn execute(allocator: Allocator, config: UpdateConfig) !void {
 
     // Step 2: Apply updates
     var updated = false;
-    for (config.sets.items) |*update| {
-        if (try applyUpdate(allocator, &neurona, update.*, config.verbose)) {
+    var body_updated = false;
+    for (config.sets.items) |*update_item| {
+        if (try applyUpdate(allocator, &neurona, update_item.*, config.verbose, neuronas_dir)) {
             updated = true;
+        }
+        if (std.mem.eql(u8, update_item.field, "content")) {
+            body_updated = true;
         }
     }
 
@@ -71,8 +96,10 @@ pub fn execute(allocator: Allocator, config: UpdateConfig) !void {
     neurona.updated = try allocator.dupe(u8, ts);
     allocator.free(ts);
 
-    // Step 4: Write back to file
-    try writeNeurona(allocator, neurona, filepath);
+    // Step 4: Write back to file (skip if body was already updated)
+    if (!body_updated) {
+        try writeNeurona(allocator, neurona, filepath, false);
+    }
 
     if (config.verbose) {
         std.debug.print("Updated {s}\n", .{config.id});
@@ -82,69 +109,90 @@ pub fn execute(allocator: Allocator, config: UpdateConfig) !void {
 }
 
 /// Apply a field update to a Neurona
-fn applyUpdate(allocator: Allocator, neurona: *Neurona, update: FieldUpdate, verbose: bool) !bool {
-    const field = update.field;
-    const value = update.value;
-
-    // Handle context.field syntax (e.g., context.status)
-    if (std.mem.startsWith(u8, field, "context.")) {
-        return try applyContextUpdate(allocator, neurona, field["context.".len..], value, verbose);
-    }
-
-    // Handle direct fields
-    if (std.mem.eql(u8, field, "title")) {
-        allocator.free(neurona.title);
-        neurona.title = try allocator.dupe(u8, value);
-        if (verbose) std.debug.print("  Set title to: {s}\n", .{value});
+fn applyUpdate(allocator: Allocator, neurona: *Neurona, update: FieldUpdate, verbose: bool, neuronas_dir: []const u8) !bool {
+    if (std.mem.eql(u8, update.field, "content")) {
+        // Update markdown body content (not frontmatter)
+        const body_filepath = try findNeuronaPath(allocator, neuronas_dir, neurona.id);
+        defer allocator.free(body_filepath);
+        try updateBody(allocator, body_filepath, update.value);
+        if (verbose) std.debug.print("  Set body content to: {s}...\n", .{update.value[0..@min(50, update.value.len)]});
         return true;
     }
 
-    if (std.mem.eql(u8, field, "type")) {
-        neurona.type = parseNeuronaType(value) catch {
-            std.debug.print("Error: Invalid type '{s}'\n", .{value});
+    if (std.mem.eql(u8, update.field, "_llm_t")) {
+        return try updateLLMMetadata(allocator, neurona, "short_title", update.value, verbose);
+    }
+    if (std.mem.eql(u8, update.field, "_llm_d")) {
+        return try updateLLMMetadata(allocator, neurona, "density", update.value, verbose);
+    }
+    if (std.mem.eql(u8, update.field, "_llm_k")) {
+        return try updateLLMMetadata(allocator, neurona, "keywords", update.value, verbose);
+    }
+    if (std.mem.eql(u8, update.field, "_llm_c")) {
+        return try updateLLMMetadata(allocator, neurona, "token_count", update.value, verbose);
+    }
+    if (std.mem.eql(u8, update.field, "_llm_strategy")) {
+        return try updateLLMMetadata(allocator, neurona, "strategy", update.value, verbose);
+    }
+
+    if (std.mem.eql(u8, update.field, "title")) {
+        allocator.free(neurona.title);
+        neurona.title = try allocator.dupe(u8, update.value);
+        if (verbose) std.debug.print("  Set title to: {s}\n", .{update.value});
+        return true;
+    }
+
+    if (std.mem.eql(u8, update.field, "type")) {
+        neurona.type = parseNeuronaType(update.value) catch {
+            std.debug.print("Error: Invalid type '{s}'\n", .{update.value});
             return false;
         };
-        if (verbose) std.debug.print("  Set type to: {s}\n", .{value});
+        if (verbose) std.debug.print("  Set type to: {s}\n", .{update.value});
         return true;
     }
 
-    if (std.mem.eql(u8, field, "language")) {
+    if (std.mem.eql(u8, update.field, "language")) {
         allocator.free(neurona.language);
-        neurona.language = try allocator.dupe(u8, value);
-        if (verbose) std.debug.print("  Set language to: {s}\n", .{value});
+        neurona.language = try allocator.dupe(u8, update.value);
+        if (verbose) std.debug.print("  Set language to: {s}\n", .{update.value});
         return true;
     }
 
-    if (std.mem.eql(u8, field, "tag")) {
+    if (std.mem.eql(u8, update.field, "tag")) {
         if (update.operator == .append) {
-            try neurona.tags.append(allocator, try allocator.dupe(u8, value));
-            if (verbose) std.debug.print("  Added tag: {s}\n", .{value});
+            try neurona.tags.append(allocator, try allocator.dupe(u8, update.value));
+            if (verbose) std.debug.print("  Added tag: {s}\n", .{update.value});
         } else if (update.operator == .remove) {
             // Remove tag if exists
             var found: usize = 0;
             for (neurona.tags.items, 0..) |tag, i| {
-                if (std.mem.eql(u8, tag, value)) {
+                if (std.mem.eql(u8, tag, update.value)) {
                     found = i;
                     break;
                 }
             }
-            if (found > 0 or (neurona.tags.items.len > 0 and std.mem.eql(u8, neurona.tags.items[0], value))) {
+            if (found > 0 or (neurona.tags.items.len > 0 and std.mem.eql(u8, neurona.tags.items[0], update.value))) {
                 allocator.free(neurona.tags.orderedRemove(found));
-                if (verbose) std.debug.print("  Removed tag: {s}\n", .{value});
+                if (verbose) std.debug.print("  Removed tag: {s}\n", .{update.value});
                 return true;
             }
         }
         return true;
     }
 
-    if (std.mem.eql(u8, field, "hash")) {
+    if (std.mem.eql(u8, update.field, "hash")) {
         if (neurona.hash) |h| allocator.free(h);
-        neurona.hash = try allocator.dupe(u8, value);
-        if (verbose) std.debug.print("  Set hash to: {s}\n", .{value});
+        neurona.hash = try allocator.dupe(u8, update.value);
+        if (verbose) std.debug.print("  Set hash to: {s}\n", .{update.value});
         return true;
     }
 
-    std.debug.print("Error: Unknown field '{s}'\n", .{field});
+    // Handle context.* fields
+    if (std.mem.startsWith(u8, update.field, "context.")) {
+        return try applyContextUpdate(allocator, neurona, update.field["context.".len..], update.value, verbose);
+    }
+
+    std.debug.print("Error: Unknown field '{s}'\n", .{update.field});
     return false;
 }
 
@@ -316,6 +364,61 @@ fn applyContextUpdate(allocator: Allocator, neurona: *Neurona, context_field: []
 
     std.debug.print("Error: Unknown context field '{s}'\n", .{context_field});
     return false;
+}
+
+/// Update LLM metadata field
+fn updateLLMMetadata(allocator: Allocator, neurona: *Neurona, field: []const u8, value: []const u8, verbose: bool) !bool {
+    // Initialize metadata if not exists
+    if (neurona.llm_metadata == null) {
+        neurona.llm_metadata = LLMMetadata{
+            .short_title = try allocator.dupe(u8, ""),
+            .density = 2,
+            .keywords = .{},
+            .token_count = 0,
+            .strategy = try allocator.dupe(u8, "summary"),
+        };
+    }
+
+    const meta = if (neurona.llm_metadata) |*m| m else unreachable;
+
+    if (std.mem.eql(u8, field, "short_title")) {
+        allocator.free(meta.short_title);
+        meta.short_title = try allocator.dupe(u8, value);
+        if (verbose) std.debug.print("  Set _llm.short_title to: {s}\n", .{value});
+        return true;
+    } else if (std.mem.eql(u8, field, "density")) {
+        meta.density = std.fmt.parseInt(u8, value, 10) catch {
+            std.debug.print("Error: Invalid density '{s}'\n", .{value});
+            return false;
+        };
+        if (verbose) std.debug.print("  Set _llm.density to: {d}\n", .{meta.density});
+        return true;
+    } else if (std.mem.eql(u8, field, "keywords")) {
+        // Split comma-separated keywords
+        var it = std.mem.splitScalar(u8, value, ',');
+        meta.keywords.deinit(allocator);
+        meta.keywords = .{};
+        while (it.next()) |kw| {
+            const trimmed = std.mem.trim(u8, kw, " ");
+            if (trimmed.len > 0) {
+                try meta.keywords.append(allocator, try allocator.dupe(u8, trimmed));
+            }
+        }
+        if (verbose) std.debug.print("  Set _llm.keywords to: {d} items\n", .{meta.keywords.items.len});
+        return true;
+    } else if (std.mem.eql(u8, field, "token_count")) {
+        meta.token_count = std.fmt.parseInt(u32, value, 10) catch 0;
+        if (verbose) std.debug.print("  Set _llm.token_count to: {d}\n", .{meta.token_count});
+        return true;
+    } else if (std.mem.eql(u8, field, "strategy")) {
+        allocator.free(meta.strategy);
+        meta.strategy = try allocator.dupe(u8, value);
+        if (verbose) std.debug.print("  Set _llm.strategy to: {s}\n", .{value});
+        return true;
+    } else {
+        // Unknown field
+        return false;
+    }
 }
 
 /// Parse Neurona type from string

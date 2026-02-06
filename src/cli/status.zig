@@ -9,6 +9,7 @@ const Neurona = @import("../core/neurona.zig").Neurona;
 const NeuronaType = @import("../core/neurona.zig").NeuronaType;
 const storage = @import("../root.zig").storage;
 const state_filters = @import("../utils/state_filters.zig");
+const uri_parser = @import("../utils/uri_parser.zig");
 
 /// Status configuration
 pub const StatusConfig = struct {
@@ -19,6 +20,7 @@ pub const StatusConfig = struct {
     filter_str: ?[]const u8 = null, // EQL filter string: "state:open AND priority:1"
     sort_by: SortField = .priority,
     json_output: bool = false,
+    cortex_dir: ?[]const u8 = null,
 };
 
 pub const SortField = enum {
@@ -29,6 +31,24 @@ pub const SortField = enum {
 
 /// Main command handler
 pub fn execute(allocator: Allocator, config: StatusConfig) !void {
+    // Determine neuronas directory
+    const cortex_dir = config.cortex_dir orelse blk: {
+        const cd = uri_parser.findCortexDir(allocator) catch |err| {
+            if (err == error.CortexNotFound) {
+                std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
+                std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
+                std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+                std.process.exit(1);
+            }
+            return err;
+        };
+        break :blk cd;
+    };
+    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+
+    const neuronas_dir = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
+    defer allocator.free(neuronas_dir);
+
     // Step 1: Parse EQL filter if provided
     var filter_expr: ?state_filters.FilterExpression = null;
     defer {
@@ -40,7 +60,7 @@ pub fn execute(allocator: Allocator, config: StatusConfig) !void {
     }
 
     // Step 2: Scan all Neuronas
-    const neuronas = try storage.scanNeuronas(allocator, "neuronas");
+    const neuronas = try storage.scanNeuronas(allocator, neuronas_dir);
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);
@@ -335,6 +355,22 @@ fn getPriorityString(issue: *const Neurona) ![]const u8 {
     return "[priority from context]";
 }
 
+/// Print string as JSON-escaped value
+fn printJsonString(s: []const u8) void {
+    std.debug.print("\"", .{});
+    for (s) |c| {
+        switch (c) {
+            '"' => std.debug.print("\\\"", .{}),
+            '\\' => std.debug.print("\\\\", .{}),
+            '\n' => std.debug.print("\\n", .{}),
+            '\r' => std.debug.print("\\r", .{}),
+            '\t' => std.debug.print("\\t", .{}),
+            else => std.debug.print("{c}", .{c}),
+        }
+    }
+    std.debug.print("\"", .{});
+}
+
 /// JSON output for AI
 fn outputJson(issues: []*const Neurona) !void {
     std.debug.print("[", .{});
@@ -346,16 +382,27 @@ fn outputJson(issues: []*const Neurona) !void {
         std.debug.print("\"type\":\"{s}\",", .{@tagName(issue.type)});
 
         // Get status from context
+        std.debug.print("\"status\":\"", .{});
         switch (issue.context) {
-            .test_case => |ctx| {
-                std.debug.print("\"status\":\"{s}\",", .{ctx.status});
-            },
-            else => {
-                std.debug.print("\"status\":\"[N/A]\",", .{});
-            },
+            .test_case => |ctx| std.debug.print("{s}", .{ctx.status}),
+            .issue => |ctx| std.debug.print("{s}", .{ctx.status}),
+            .requirement => |ctx| std.debug.print("{s}", .{ctx.status}),
+            else => std.debug.print("[N/A]", .{}),
         }
+        std.debug.print("\",", .{});
 
-        std.debug.print("\"priority\":\"[from context]\"", .{});
+        // Get priority from context
+        std.debug.print("\"priority\":", .{});
+        switch (issue.context) {
+            .test_case => |ctx| std.debug.print("{d}", .{ctx.priority}),
+            .issue => |ctx| std.debug.print("{d}", .{ctx.priority}),
+            .requirement => |ctx| std.debug.print("{d}", .{ctx.priority}),
+            else => std.debug.print("null", .{}),
+        }
+        std.debug.print(",", .{});
+
+        // Tags count
+        std.debug.print("\"tags\":{d}", .{issue.tags.items.len});
         std.debug.print("}}", .{});
     }
     std.debug.print("]\n", .{});

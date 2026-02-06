@@ -18,11 +18,29 @@ pub const LinkConfig = struct {
     weight: u8 = 50,
     bidirectional: bool = false,
     verbose: bool = false,
-    neuronas_dir: []const u8 = "neuronas",
+    cortex_dir: ?[]const u8 = null,
 };
 
 /// Execute the link command
 pub fn execute(allocator: Allocator, config: LinkConfig) !void {
+    // Determine neuronas directory
+    const cortex_dir = config.cortex_dir orelse blk: {
+        const cd = uri_parser.findCortexDir(allocator) catch |err| {
+            if (err == error.CortexNotFound) {
+                std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
+                std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
+                std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+                std.process.exit(1);
+            }
+            return err;
+        };
+        break :blk cd;
+    };
+    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+
+    const neuronas_dir = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
+    defer allocator.free(neuronas_dir);
+
     // 1. Validate connection type
     const conn_type = ConnectionType.fromString(config.connection_type) orelse {
         std.debug.print("Error: Invalid connection type '{s}'.\n", .{config.connection_type});
@@ -30,26 +48,26 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
     };
 
     // Resolve source URI or use direct ID
-    const source_id = try uri_parser.resolveOrFallback(allocator, config.source_id, config.neuronas_dir);
+    const source_id = try uri_parser.resolveOrFallback(allocator, config.source_id, neuronas_dir);
     defer allocator.free(source_id);
 
     // Resolve target URI or use direct ID
-    const target_id = try uri_parser.resolveOrFallback(allocator, config.target_id, config.neuronas_dir);
+    const target_id = try uri_parser.resolveOrFallback(allocator, config.target_id, neuronas_dir);
     defer allocator.free(target_id);
 
     // 2. Find source Neurona
-    const source_path = fs.findNeuronaPath(allocator, config.neuronas_dir, source_id) catch |err| {
+    const source_path = fs.findNeuronaPath(allocator, neuronas_dir, source_id) catch |err| {
         if (err == error.NeuronaNotFound) {
-            std.debug.print("Error: Source Neurona '{s}' not found in {s}.\n", .{ source_id, config.neuronas_dir });
+            std.debug.print("Error: Source Neurona '{s}' not found in {s}.\n", .{ source_id, neuronas_dir });
         }
         return err;
     };
     defer allocator.free(source_path);
 
     // 3. Find target Neurona
-    const target_path = fs.findNeuronaPath(allocator, config.neuronas_dir, target_id) catch |err| {
+    const target_path = fs.findNeuronaPath(allocator, neuronas_dir, target_id) catch |err| {
         if (err == error.NeuronaNotFound) {
-            std.debug.print("Error: Target Neurona '{s}' not found in {s}.\n", .{ target_id, config.neuronas_dir });
+            std.debug.print("Error: Target Neurona '{s}' not found in {s}.\n", .{ target_id, neuronas_dir });
         }
         return err;
     };
@@ -71,7 +89,7 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
         allocator.free(source.updated);
         source.updated = try timestamp.nowDate(allocator);
 
-        try fs.writeNeurona(allocator, source, source_path);
+        try fs.writeNeurona(allocator, source, source_path, false);
 
         if (config.verbose) {
             std.debug.print("Linked {s} --[{s}]--> {s}\n", .{ source_id, config.connection_type, target_id });
@@ -101,7 +119,7 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
         allocator.free(target.updated);
         target.updated = try timestamp.nowDate(allocator);
 
-        try fs.writeNeurona(allocator, target, target_path);
+        try fs.writeNeurona(allocator, target, target_path, false);
 
         if (config.verbose) {
             std.debug.print("Linked {s} --[{s}]--> {s}\n", .{ target_id, @tagName(reverse_type), source_id });

@@ -10,10 +10,12 @@ const Graph = @import("../core/graph.zig").Graph;
 const storage = @import("../root.zig").storage;
 const validator = @import("../core/validator.zig");
 const benchmark = @import("../root.zig").utils.benchmark;
+const uri_parser = @import("../utils/uri_parser.zig");
 
 /// Sync configuration
 pub const SyncConfig = struct {
-    directory: []const u8 = "neuronas",
+    directory: ?[]const u8 = null,
+    cortex_dir: ?[]const u8 = null,
     verbose: bool = false,
     rebuild_index: bool = false,
     force_rebuild: bool = false,
@@ -21,10 +23,28 @@ pub const SyncConfig = struct {
 
 /// Main command handler
 pub fn execute(allocator: Allocator, config: SyncConfig) !void {
+    // Step 0: Determine cortex directory and neuronas directory
+    const cortex_dir = if (config.cortex_dir) |cd|
+        cd // Use provided path directly
+    else
+        uri_parser.findCortexDir(allocator) catch |err| {
+            if (err == error.CortexNotFound) {
+                std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
+                std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
+                std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+                std.process.exit(1);
+            }
+            return err;
+        };
+    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+
+    const directory = config.directory orelse try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
+    defer if (config.directory == null) allocator.free(directory);
+
     var reports = std.ArrayListUnmanaged(benchmark.BenchmarkReport){};
     defer reports.deinit(allocator);
 
-    // Step 0: Cold Start Timer
+    // Step 1: Cold Start Timer
     var cold_start_timer = try benchmark.Timer.start();
     const index_path = try storage.index.getGraphIndexPath(allocator);
     defer allocator.free(index_path);
@@ -62,12 +82,12 @@ pub fn execute(allocator: Allocator, config: SyncConfig) !void {
     }
 
     if (config.verbose) {
-        std.debug.print("Scanning directory: {s}\n", .{config.directory});
+        std.debug.print("Scanning directory: {s}\n", .{directory});
     }
 
     // Step 1: Scan all Neuronas
     var scan_timer = try benchmark.Timer.start();
-    const neuronas = try storage.scanNeuronas(allocator, config.directory);
+    const neuronas = try storage.scanNeuronas(allocator, directory);
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);
@@ -117,7 +137,7 @@ pub fn execute(allocator: Allocator, config: SyncConfig) !void {
 
     // Step 4: Build/Load Vector Index (Issue 1.2)
     var vector_timer = try benchmark.Timer.start();
-    try syncVectors(allocator, neuronas, config.verbose, config.force_rebuild, config.directory);
+    try syncVectors(allocator, neuronas, config.verbose, config.force_rebuild, directory);
     const vector_ms = vector_timer.readMs();
     try reports.append(allocator, .{
         .operation = "Vector Sync",
@@ -339,7 +359,7 @@ test "SyncConfig with default values" {
         .rebuild_index = true,
     };
 
-    try std.testing.expectEqualStrings("neuronas", config.directory);
+    try std.testing.expectEqualStrings("neuronas", config.directory.?);
     try std.testing.expectEqual(false, config.verbose);
     try std.testing.expectEqual(true, config.rebuild_index);
 }
@@ -377,7 +397,7 @@ test "SyncConfig with custom values" {
         .rebuild_index = false,
     };
 
-    try std.testing.expectEqualStrings("custom_neuronas", config.directory);
+    try std.testing.expectEqualStrings("custom_neuronas", config.directory.?);
     try std.testing.expectEqual(true, config.verbose);
     try std.testing.expectEqual(false, config.rebuild_index);
 }

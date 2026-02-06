@@ -297,6 +297,7 @@ fn handleNew(allocator: Allocator, args: []const []const u8) !void {
         .interactive = true,
         .json_output = false,
         .auto_link = true,
+        .cortex_dir = null,
     };
 
     // Parse options
@@ -356,6 +357,14 @@ fn handleNew(allocator: Allocator, args: []const []const u8) !void {
             }
             i += 1;
             config.blocks = args[i];
+        } else if (std.mem.eql(u8, arg, "--cortex")) {
+            if (i + 1 >= args.len) {
+                std.debug.print("Error: --cortex requires a value\n", .{});
+                printNewHelp();
+                std.process.exit(1);
+            }
+            i += 1;
+            config.cortex_dir = args[i];
         } else if (std.mem.eql(u8, arg, "--json") or std.mem.eql(u8, arg, "-j")) {
             config.json_output = true;
         } else if (std.mem.eql(u8, arg, "--no-interactive")) {
@@ -467,7 +476,7 @@ fn handleLink(allocator: Allocator, args: []const []const u8) !void {
 
 fn handleSync(allocator: Allocator, args: []const []const u8) !void {
     var config = sync_cmd.SyncConfig{
-        .directory = "neuronas",
+        .directory = null,
         .verbose = false,
         .rebuild_index = true,
         .force_rebuild = false,
@@ -665,7 +674,7 @@ fn handleDelete(allocator: Allocator, args: []const []const u8) !void {
                 std.process.exit(1);
             }
             i += 1;
-            config.neuronas_dir = args[i];
+            config.cortex_dir = args[i];
         } else if (std.mem.startsWith(u8, arg, "-")) {
             std.debug.print("Error: Unknown flag '{s}'\n", .{arg});
             printDeleteHelp();
@@ -778,7 +787,7 @@ fn handleUpdate(allocator: Allocator, args: []const []const u8) !void {
         .id = args[2],
         .sets = std.ArrayListUnmanaged(update_cmd.FieldUpdate){},
         .verbose = false,
-        .neuronas_dir = "neuronas",
+        .cortex_dir = null,
     };
     defer {
         for (config.sets.items) |*s| s.deinit(allocator);
@@ -842,7 +851,7 @@ fn handleImpact(allocator: Allocator, args: []const []const u8) !void {
         .max_depth = 10,
         .include_recommendations = true,
         .json_output = false,
-        .neuronas_dir = "neuronas",
+        .cortex_dir = null,
     };
 
     // Parse options
@@ -897,7 +906,7 @@ fn handleLinkArtifact(allocator: Allocator, args: []const []const u8) !void {
         .language_version = null,
         .safe_to_exec = false,
         .verbose = false,
-        .neuronas_dir = "neuronas",
+        .cortex_dir = null,
     };
     defer {
         for (config.source_files.items) |f| allocator.free(f);
@@ -957,7 +966,7 @@ fn handleReleaseStatus(allocator: Allocator, args: []const []const u8) !void {
         .include_issues = true,
         .json_output = false,
         .verbose = false,
-        .neuronas_dir = "neuronas",
+        .cortex_dir = null,
     };
 
     // Parse options
@@ -985,7 +994,7 @@ fn handleMetrics(allocator: Allocator, args: []const []const u8) !void {
         .last_days = null,
         .json_output = false,
         .verbose = false,
-        .neuronas_dir = "neuronas",
+        .cortex_dir = null,
     };
 
     var i: usize = 2;
@@ -1154,6 +1163,7 @@ fn printNewHelp() void {
         \\  --parent          Set parent Neurona ID
         \\  --validates       Set requirement this test validates (for test_case)
         \\  --blocks          Set issue this blocks (for issue)
+        \\  --cortex         Specify cortex directory path
         \\  --json, -j        Output as JSON
         \\  --no-interactive  Skip interactive prompts
         \\
@@ -1161,6 +1171,7 @@ fn printNewHelp() void {
         \\  engram new requirement "Support OAuth 2.0"
         \\  engram new test_case "OAuth Test" --validates req.auth.oauth2
         \\  engram new issue "OAuth library broken" --priority 1
+        \\  engram new requirement "Test" --cortex ./my_project
         \\
     , .{});
 }
