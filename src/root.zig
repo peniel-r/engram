@@ -41,6 +41,10 @@ pub const utils = struct {
     pub const token_counter = @import("utils/token_counter.zig");
     pub const summary = @import("utils/summary.zig");
     pub const benchmark = @import("benchmark.zig");
+    pub const HelpGenerator = @import("utils/help_generator.zig").HelpGenerator;
+    pub const FileOps = @import("utils/file_ops.zig").FileOps;
+    pub const NeuronaWithBody = @import("utils/file_ops.zig").NeuronaWithBody;
+    pub const ErrorReporter = @import("utils/error_reporter.zig").ErrorReporter;
 };
 
 // Re-export CLI (for integration tests)

@@ -7,9 +7,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const NeuronaType = @import("../core/neurona.zig").NeuronaType;
 const Neurona = @import("../core/neurona.zig").Neurona;
-const fs = @import("../storage/filesystem.zig");
-const readNeurona = fs.readNeurona;
-const readBodyContent = fs.readBodyContent;
+const FileOps = @import("../utils/file_ops.zig").FileOps;
 const uri_parser = @import("../utils/uri_parser.zig");
 const config_util = @import("../utils/config.zig");
 const editor_util = @import("../utils/editor.zig");
@@ -68,22 +66,15 @@ pub fn execute(allocator: Allocator, config: ShowConfig) !void {
     }
     defer if (resolved_id) |id| allocator.free(id);
 
-    // Step1: Find and read Neurona file using unified API
-    const filepath = try fs.findNeuronaPath(allocator, neuronas_dir, resolved_id.?);
-    defer allocator.free(filepath);
+    // Read neurona with body using unified API
+    var result = try FileOps.readNeuronaWithBody(allocator, neuronas_dir, resolved_id.?);
+    defer result.deinit(allocator);
 
-    var neurona = try readNeurona(allocator, filepath);
-    defer neurona.deinit(allocator);
-
-    // Step 2: Read body content
-    const body = try readBodyContent(allocator, filepath);
-    defer allocator.free(body);
-
-    // Step 3: Output
+    // Output
     if (config.json_output) {
-        try outputJson(allocator, &neurona, filepath, body);
+        try outputJson(allocator, &result.neurona, result.filepath, result.body);
     } else {
-        try outputHuman(&neurona, body, config.show_connections, config.show_body);
+        try outputHuman(&result.neurona, result.body, config.show_connections, config.show_body);
     }
 }
 
@@ -287,7 +278,7 @@ test "findNeuronaPath returns direct .md file" {
     defer allocator.free(filepath_with_id); // Fix: Free allocated path
     try std.fs.cwd().writeFile(.{ .sub_path = filepath_with_id, .data = "---\nid: test.001\n---\n" });
 
-    const result = try fs.findNeuronaPath(allocator, test_dir, "test.001");
+    const result = try FileOps.findNeuronaFile(allocator, test_dir, "test.001");
     defer allocator.free(result);
 
     // Should return path as-is since we passed full path

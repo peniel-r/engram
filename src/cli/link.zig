@@ -9,6 +9,7 @@ const ConnectionType = neurona_core.ConnectionType;
 const Connection = neurona_core.Connection;
 const timestamp = @import("../utils/timestamp.zig");
 const uri_parser = @import("../utils/uri_parser.zig");
+const ErrorReporter = @import("../utils/error_reporter.zig").ErrorReporter;
 
 /// Configuration for Link command
 pub const LinkConfig = struct {
@@ -26,21 +27,19 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
     // Determine neuronas directory
     const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
         if (err == error.CortexNotFound) {
-            std.debug.print("Error: No cortex found in current directory or within 3 directory levels.\n", .{});
-            std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
-            std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+            ErrorReporter.cortexNotFound();
             std.process.exit(1);
         }
         return err;
     };
-    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+    defer allocator.free(cortex_dir);
 
     const neuronas_dir = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
     defer allocator.free(neuronas_dir);
 
     // 1. Validate connection type
     const conn_type = ConnectionType.fromString(config.connection_type) orelse {
-        std.debug.print("Error: Invalid connection type '{s}'.\n", .{config.connection_type});
+        ErrorReporter.invalidConnectionType(config.connection_type);
         return error.InvalidConnectionType;
     };
 
@@ -162,6 +161,14 @@ test "execute links two neuronas" {
     try std.fs.cwd().makePath(neuronas_subdir);
     defer std.fs.cwd().deleteTree(test_dir) catch {};
 
+    // Create cortex.json
+    const cortex_json_path = try std.fs.path.join(allocator, &.{ test_dir, "cortex.json" });
+    defer allocator.free(cortex_json_path);
+    try std.fs.cwd().writeFile(.{
+        .sub_path = cortex_json_path,
+        .data = "{\"name\":\"test\",\"type\":\"alm\"}",
+    });
+
     // Create source neurona
     const source_path = try std.fs.path.join(allocator, &.{ neuronas_subdir, "source.md" });
     defer allocator.free(source_path);
@@ -212,6 +219,14 @@ test "execute bidirectional link" {
     defer allocator.free(neuronas_subdir);
     try std.fs.cwd().makePath(neuronas_subdir);
     defer std.fs.cwd().deleteTree(test_dir) catch {};
+
+    // Create cortex.json
+    const cortex_json_path = try std.fs.path.join(allocator, &.{ test_dir, "cortex.json" });
+    defer allocator.free(cortex_json_path);
+    try std.fs.cwd().writeFile(.{
+        .sub_path = cortex_json_path,
+        .data = "{\"name\":\"test\",\"type\":\"alm\"}",
+    });
 
     // Create source neurona
     const source_path = try std.fs.path.join(allocator, &.{ neuronas_subdir, "source.md" });
@@ -270,6 +285,14 @@ test "execute resolves URIs for source and target" {
     defer allocator.free(neuronas_subdir);
     try std.fs.cwd().makePath(neuronas_subdir);
     defer std.fs.cwd().deleteTree(test_dir) catch {};
+
+    // Create cortex.json
+    const cortex_json_path = try std.fs.path.join(allocator, &.{ test_dir, "cortex.json" });
+    defer allocator.free(cortex_json_path);
+    try std.fs.cwd().writeFile(.{
+        .sub_path = cortex_json_path,
+        .data = "{\"name\":\"test\",\"type\":\"alm\"}",
+    });
 
     // Create source neurona
     const source_path = try std.fs.path.join(allocator, &.{ neuronas_subdir, "source.md" });

@@ -4,6 +4,10 @@ const Allocator = std.mem.Allocator;
 // Import CLI parser utilities
 const LegacyParser = @import("utils/cli_parser.zig").LegacyParser;
 
+// Import help generator
+const HelpGenerator = @import("utils/help_generator.zig").HelpGenerator;
+const command_metadata = @import("utils/command_metadata.zig");
+
 // Import all CLI command modules
 const init_cmd = @import("cli/init.zig");
 const new_cmd = @import("cli/new.zig");
@@ -1134,406 +1138,157 @@ fn printHelp() void {
 }
 
 fn printInitHelp() void {
-    std.debug.print(
-        \\Initialize a new Cortex
-        \\
-        \\Usage:
-        \\  engram init <name> [options]
-        \\
-        \\Arguments:
-        \\  name              Name of Cortex to create (required)
-        \\
-        \\Options:
-        \\  --type, -t        Cortex type: zettelkasten, alm, knowledge (default: alm)
-        \\  --language, -l    Default language (default: en)
-        \\  --force, -f       Force overwrite existing Cortex
-        \\  --verbose, -v     Show verbose output
-        \\
-        \\Examples:
-        \\  engram init my_notes
-        \\  engram init my_project --type alm
-        \\  engram init knowledge_base --type knowledge --language es
-        \\
-    , .{});
+    const metadata = command_metadata.command_registry[0]; // init command
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    HelpGenerator.print(allocator, metadata) catch |err| {
+        std.debug.print("Error generating help: {}\n", .{err});
+    };
 }
 
 fn printNewHelp() void {
-    std.debug.print(
-        \\Create a new Neurona
-        \\
-        \\Usage:
-        \\  engram new <type> <title> [options]
-        \\
-        \\Arguments:
-        \\  type              Neurona type: requirement, test_case, issue, artifact, feature (required)
-        \\  title             Title of the Neurona (required)
-        \\
-        \\Options:
-        \\  --tag, -t         Add a tag (can be repeated)
-        \\  --assignee        Assign to a person
-        \\  --priority, -p    Set priority (1-5)
-        \\  --parent          Set parent Neurona ID
-        \\  --validates       Set requirement this test validates (for test_case)
-        \\  --blocks          Set issue this blocks (for issue)
-        \\  --cortex         Specify cortex directory path
-        \\  --json, -j        Output as JSON
-        \\  --no-interactive  Skip interactive prompts
-        \\
-        \\Examples:
-        \\  engram new requirement "Support OAuth 2.0"
-        \\  engram new test_case "OAuth Test" --validates req.auth.oauth2
-        \\  engram new issue "OAuth library broken" --priority 1
-        \\  engram new requirement "Test" --cortex ./my_project
-        \\
-    , .{});
+    const metadata = command_metadata.command_registry[1]; // new command
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    HelpGenerator.print(allocator, metadata) catch |err| {
+        std.debug.print("Error generating help: {}\n", .{err});
+    };
 }
 
 fn printShowHelp() void {
-    std.debug.print(
-        \\Display a Neurona
-        \\
-        \\Usage:
-        \\  engram show <id> [options]
-        \\
-        \\Arguments:
-        \\  id                Neurona ID or URI (required)
-        \\                    Format: neurona://<cortex>/<neurona-id>
-        \\                    Use "config" to open the configuration file
-        \\
-        \\Options:
-        \\  --no-connections  Don't show connections
-        \\  --no-body         Don't show body content
-        \\  --json, -j        Output as JSON
-        \\
-        \\Examples:
-        \\  engram show test.001
-        \\  engram show neurona://my_cortex/req.auth.001
-        \\  engram show req.auth.oauth2 --no-body
-        \\  engram show test.oauth.001 --json
-        \\  engram show config
-        \\
-    , .{});
+    const metadata = command_metadata.command_registry[2]; // show command
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    HelpGenerator.print(allocator, metadata) catch |err| {
+        std.debug.print("Error generating help: {}\n", .{err});
+    };
 }
 
 fn printLinkHelp() void {
-    std.debug.print(
-        \\Link two Neuronas
-        \\
-        \\Usage:
-        \\  engram link <source_id> <target_id> <type> [options]
-        \\
-        \\Arguments:
-        \\  source_id         ID or URI of the source Neurona
-        \\                    Format: neurona://<cortex>/<neurona-id>
-        \\  target_id         ID or URI of the target Neurona
-        \\  type              Type of connection (e.g., parent, relates_to, validates)
-        \\
-        \\Options:
-        \\  --weight, -w      Connection weight (0-100, default: 50)
-        \\  --bidirectional, -b  Create reverse connection
-        \\  --verbose, -v     Show verbose output
-        \\
-        \\Examples:
-        \\  engram link note.1 note.2 relates_to
-        \\  engram link neurona://ctx1/n1 neurona://ctx1/n2 relates_to
-        \\  engram link req.auth test.auth validates --bidirectional
-        \\
-    , .{});
+    const metadata = command_metadata.command_registry[3]; // link command
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    HelpGenerator.print(allocator, metadata) catch |err| {
+        std.debug.print("Error generating help: {}\n", .{err});
+    };
 }
 
 fn printSyncHelp() void {
-    std.debug.print(
-        \\Rebuild graph index
-        \\
-        \\Usage:
-        \\  engram sync [options]
-        \\
-        \\Options:
-        \\  --verbose, -v     Show verbose output
-        \\  --no-rebuild      Skip index rebuild
-        \\  --directory, -d   Directory to scan (default: neuronas)
-        \\
-        \\Examples:
-        \\  engram sync
-        \\  engram sync --verbose
-        \\
-    , .{});
+    const metadata = command_metadata.command_registry[4]; // sync command
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    HelpGenerator.print(allocator, metadata) catch |err| {
+        std.debug.print("Error generating help: {}\n", .{err});
+    };
 }
 
 fn printTraceHelp() void {
-    std.debug.print(
-        \\Trace dependencies between Neuronas
-        \\
-        \\Usage:
-        \\  engram trace <neurona_id> [options]
-        \\
-        \\Arguments:
-        \\  neurona_id       ID or URI of Neurona to trace from (required)
-        \\                    Format: neurona://<cortex>/<neurona-id>
-        \\
-        \\Options:
-        \\  --up, -u         Trace upstream (parents/dependencies) instead of downstream
-        \\  --depth, -d      Maximum trace depth (default: 10)
-        \\  --format, -f     Output format: tree, list (default: tree)
-        \\  --json, -j       Output as JSON
-        \\
-        \\Examples:
-        \\  engram trace req.auth
-        \\  engram trace neurona://my_cortex/req.auth.001
-        \\  engram trace req.auth --up
-        \\  engram trace req.auth --depth 3
-        \\
-    , .{});
+    const metadata = command_metadata.command_registry[6]; // trace command
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    HelpGenerator.print(allocator, metadata) catch |err| {
+        std.debug.print("Error generating help: {}\n", .{err});
+    };
 }
 
 fn printStatusHelp() void {
-    std.debug.print(
-        \\List status
-        \\
-        \\Usage:
-        \\  engram status [options]
-        \\
-        \\Options:
-        \\  --type, -t       Filter by type
-        \\  --status         Filter by status
-        \\  --filter, -f     EQL filter expression (e.g., "state:open AND priority:1")
-        \\  --sort-by, -s    Sort by: priority, created, assignee (default: priority)
-        \\  --json, -j       Output as JSON
-        \\
-        \\Filter Syntax:
-        \\  field:value                    Match field equals value
-        \\  field:operator:value           Use specific operator (eq, neq, gt, lt, gte, lte, contains)
-        \\  "condition1 AND condition2"    Both must match
-        \\  "condition1 OR condition2"     Either must match
-        \\
-        \\  Supported Fields:
-        \\    type, id, title, language, state (alias for context.status),
-        \\    context.status, context.priority, context.assignee, etc.
-        \\
-        \\Examples:
-        \\  engram status
-        \\  engram status --type issue
-        \\  engram status --filter "state:open AND priority:1"
-        \\  engram status --filter "type:test_case AND context.status:passing"
-        \\  engram status --status open --sort-by created
-        \\
-    , .{});
+    const metadata = command_metadata.command_registry[7]; // status command
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    HelpGenerator.print(allocator, metadata) catch |err| {
+        std.debug.print("Error generating help: {}\n", .{err});
+    };
 }
 
 fn printQueryHelp() void {
-    std.debug.print(
-        \\Query interface
-        \\
-        \\Usage:
-        \\  engram query [options] [query_string]
-        \\
-        \\Options:
-        \\  --mode, -m      Query mode: filter, text, vector, hybrid, activation (default: auto-detect)
-        \\  --limit, -l      Limit results (default: 50)
-        \\  --json, -j       Output as JSON
-        \\
-        \\Query Modes:
-        \\  auto-detect       Auto-detect EQL or natural language (default with query_string)
-        \\  filter            Filter by type, tags, connections
-        \\  text              BM25 full-text search
-        \\  vector            Vector similarity search
-        \\  hybrid             Combined BM25 + vector search
-        \\  activation         Neural propagation across graph
-        \\
-        \\EQL Query Syntax (Engram Query Language):
-        \\  Field Conditions:
-        \\    type:issue                      Match by type
-        \\    tag:security                    Match by tag
-        \\    priority:gte:3                  Numeric comparison
-        \\    title:contains:auth             String matching
-        \\
-        \\  Logical Operators:
-        \\    type:issue AND tag:p1           Both conditions must match
-        \\    type:requirement OR type:feature  Either condition must match
-        \\
-        \\  Link Conditions:
-        \\    link(validates, req.auth.001)   Find items validating a requirement
-        \\    link(blocked_by, issue.001)     Find items blocked by an issue
-        \\
-        \\  Comparison Operators:
-        \\    eq, neq, gt, lt, gte, lte       Numeric comparisons
-        \\    contains, not_contains           String matching
-        \\
-        \\Examples:
-        \\  EQL Queries:
-        \\    engram query "type:issue"
-        \\    engram query "type:issue AND tag:p1"
-        \\    engram query "priority:gte:3"
-        \\    engram query "title:contains:authentication OR tag:security"
-        \\    engram query "link(validates, req.auth.001) AND type:test_case"
-        \\    engram query "(type:issue OR type:requirement) AND state:open"
-        \\
-        \\  Text Search (natural language):
-        \\    engram query "authentication"
-        \\    engram query "user login failure"
-        \\
-        \\  Explicit Mode:
-        \\    engram query --mode text "authentication"
-        \\    engram query --mode vector "user login"
-        \\    engram query --mode hybrid "login failure"
-        \\
-    , .{});
+    const metadata = command_metadata.command_registry[8]; // query command
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    HelpGenerator.print(allocator, metadata) catch |err| {
+        std.debug.print("Error generating help: {}\n", .{err});
+    };
 }
 
 fn printDeleteHelp() void {
-    std.debug.print(
-        \\Delete a Neurona
-        \\
-        \\Usage:
-        \\  engram delete <id> [options]
-        \\
-        \\Arguments:
-        \\  id                Neurona ID to delete (required)
-        \\
-        \\Options:
-        \\  --verbose, -v    Show verbose output
-        \\  --neuronas-dir, -d   Directory containing neuronas (default: neuronas)
-        \\
-        \\Examples:
-        \\  engram delete test.001
-        \\  engram delete req.auth.oauth2 --verbose
-        \\
-    , .{});
+    const metadata = command_metadata.command_registry[5]; // delete command
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    HelpGenerator.print(allocator, metadata) catch |err| {
+        std.debug.print("Error generating help: {}\n", .{err});
+    };
 }
 
 fn printUpdateHelp() void {
-    std.debug.print(
-        \\Update Neurona fields programmatically
-        \\
-        \\Usage:
-        \\  engram update <id> [options]
-        \\
-        \\Arguments:
-        \\  id                Neurona ID to update (required)
-        \\
-        \\Options:
-        \\  --set <field=value> Set field to value (can be repeated)
-        \\                    Examples: --set title="New Title"
-        \\                              --set context.status=passing
-        \\                              --set tag=bug
-        \\  --verbose, -v    Show verbose output
-        \\
-        \\Examples:
-        \\  engram update test.001 --set context.status=passing
-        \\  engram update req.auth --set title="OAuth 2.0 Support"
-        \\  engram update issue.001 --set context.status=resolved
-        \\
-    , .{});
+    const metadata = command_metadata.command_registry[9]; // update command
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    HelpGenerator.print(allocator, metadata) catch |err| {
+        std.debug.print("Error generating help: {}\n", .{err});
+    };
 }
 
 fn printImpactHelp() void {
-    std.debug.print(
-        \\Perform impact analysis for code changes
-        \\
-        \\Usage:
-        \\  engram impact <neurona_id> [options]
-        \\
-        \\Arguments:
-        \\  neurona_id       ID of Neurona to analyze (required)
-        \\
-        \\Options:
-        \\  --up, -u         Trace upstream (dependencies) only
-        \\  --down, -d        Trace downstream (dependents) only
-        \\  --depth           Maximum trace depth (default: 10)
-        \\  --json, -j       Output as JSON
-        \\
-        \\Examples:
-        \\  engram impact req.auth
-        \\  engram impact src.main.zig --down
-        \\  engram impact test.auth.login --depth 3
-        \\
-    , .{});
+    const metadata = command_metadata.command_registry[10]; // impact command
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    HelpGenerator.print(allocator, metadata) catch |err| {
+        std.debug.print("Error generating help: {}\n", .{err});
+    };
 }
 
 fn printLinkArtifactHelp() void {
-    std.debug.print(
-        \\Link source files to requirements
-        \\
-        \\Usage:
-        \\  engram link-artifact <requirement_id> <runtime> [options]
-        \\
-        \\Arguments:
-        \\  requirement_id    Requirement ID to link artifact to (required)
-        \\  runtime          Programming runtime (e.g., zig, python, node) (required)
-        \\
-        \\Options:
-        \\  --file, -f       Source file path (can be repeated)
-        \\  --version         Language version
-        \\  --safe            Mark artifact as safe to execute
-        \\  --verbose, -v    Show verbose output
-        \\
-        \\Examples:
-        \\  engram link-artifact req.auth zig --file src/auth.zig
-        \\  engram link-artifact req.oauth2 node --file src/oauth2.ts --safe
-        \\
-    , .{});
+    const metadata = command_metadata.command_registry[11]; // link-artifact command
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    HelpGenerator.print(allocator, metadata) catch |err| {
+        std.debug.print("Error generating help: {}\n", .{err});
+    };
 }
 
 fn printReleaseStatusHelp() void {
-    std.debug.print(
-        \\Check release readiness
-        \\
-        \\Usage:
-        \\  engram release-status [options]
-        \\
-        \\Options:
-        \\  --verbose, -v    Show detailed breakdown
-        \\  --json, -j       Output as JSON
-        \\
-        \\Examples:
-        \\  engram release-status
-        \\  engram release-status --verbose
-        \\  engram release-status --json
-        \\
-    , .{});
+    const metadata = command_metadata.command_registry[12]; // release-status command
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    HelpGenerator.print(allocator, metadata) catch |err| {
+        std.debug.print("Error generating help: {}\n", .{err});
+    };
 }
 
 fn printMetricsHelp() void {
-    std.debug.print(
-        \\Display project metrics
-        \\
-        \\Usage:
-        \\  engram metrics [options]
-        \\
-        \\Options:
-        \\  --since           Show metrics since date (format: YYYY-MM-DD)
-        \\  --last            Show metrics for last N days
-        \\  --json, -j       Output as JSON
-        \\  --verbose, -v    Show verbose output
-        \\
-        \\Examples:
-        \\  engram metrics
-        \\  engram metrics --since 2026-01-01
-        \\  engram metrics --last 7
-        \\  engram metrics --json
-        \\
-    , .{});
+    const metadata = command_metadata.command_registry[13]; // metrics command
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    HelpGenerator.print(allocator, metadata) catch |err| {
+        std.debug.print("Error generating help: {}\n", .{err});
+    };
+}
+
+fn printManHelp() void {
+    const metadata = command_metadata.command_registry[14]; // man command
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    HelpGenerator.print(allocator, metadata) catch |err| {
+        std.debug.print("Error generating help: {}\n", .{err});
+    };
 }
 
 fn printVersion() void {
     std.debug.print("Engram version 0.1.0\n", .{});
-}
-
-fn printManHelp() void {
-    std.debug.print(
-        \\Show manual
-        \\
-        \\Usage:
-        \\  engram man [options]
-        \\
-        \\Options:
-        \\  --html            Open full manual in browser
-        \\
-        \\Examples:
-        \\  engram man         Show quick reference
-        \\  engram man --html  Open full manual in browser
-        \\
-    , .{});
 }
 
 // ==================== Tests ====================
