@@ -303,74 +303,74 @@ fn handleNew(allocator: Allocator, args: []const []const u8) !void {
         .cortex_dir = null,
     };
 
-    // Parse options
+    // Parse options using CLI parser
     var i: usize = 4;
     while (i < args.len) : (i += 1) {
         const arg = args[i];
 
-        if (std.mem.eql(u8, arg, "--tag") or std.mem.eql(u8, arg, "-t")) {
-            if (i + 1 >= args.len) {
+        if (LegacyParser.parseFlag(args, "--tag", "-t", &i)) {
+            i += 1; // Skip to next arg for value
+            if (i >= args.len) {
                 std.debug.print("Error: --tag requires a value\n", .{});
                 printNewHelp();
                 std.process.exit(1);
             }
-            i += 1;
             _ = args[i]; // Would add to tags list in full implementation
-        } else if (std.mem.eql(u8, arg, "--assignee")) {
-            if (i + 1 >= args.len) {
+        } else if (LegacyParser.parseFlag(args, "--assignee", null, &i)) {
+            i += 1; // Skip to next arg for value
+            if (i >= args.len) {
                 std.debug.print("Error: --assignee requires a value\n", .{});
                 printNewHelp();
                 std.process.exit(1);
             }
-            i += 1;
             config.assignee = args[i];
-        } else if (std.mem.eql(u8, arg, "--priority") or std.mem.eql(u8, arg, "-p")) {
-            if (i + 1 >= args.len) {
+        } else if (LegacyParser.parseFlag(args, "--priority", "-p", &i)) {
+            i += 1; // Skip to next arg for value
+            if (i >= args.len) {
                 std.debug.print("Error: --priority requires a value\n", .{});
                 printNewHelp();
                 std.process.exit(1);
             }
-            i += 1;
             config.priority = std.fmt.parseInt(u8, args[i], 10) catch {
                 std.debug.print("Error: Invalid priority '{s}'\n", .{args[i]});
                 printNewHelp();
                 std.process.exit(1);
             };
-        } else if (std.mem.eql(u8, arg, "--parent")) {
-            if (i + 1 >= args.len) {
+        } else if (LegacyParser.parseFlag(args, "--parent", null, &i)) {
+            i += 1; // Skip to next arg for value
+            if (i >= args.len) {
                 std.debug.print("Error: --parent requires a value\n", .{});
                 printNewHelp();
                 std.process.exit(1);
             }
-            i += 1;
             config.parent = args[i];
-        } else if (std.mem.eql(u8, arg, "--validates")) {
-            if (i + 1 >= args.len) {
+        } else if (LegacyParser.parseFlag(args, "--validates", null, &i)) {
+            i += 1; // Skip to next arg for value
+            if (i >= args.len) {
                 std.debug.print("Error: --validates requires a value\n", .{});
                 printNewHelp();
                 std.process.exit(1);
             }
-            i += 1;
             config.validates = args[i];
-        } else if (std.mem.eql(u8, arg, "--blocks")) {
-            if (i + 1 >= args.len) {
+        } else if (LegacyParser.parseFlag(args, "--blocks", null, &i)) {
+            i += 1; // Skip to next arg for value
+            if (i >= args.len) {
                 std.debug.print("Error: --blocks requires a value\n", .{});
                 printNewHelp();
                 std.process.exit(1);
             }
-            i += 1;
             config.blocks = args[i];
-        } else if (std.mem.eql(u8, arg, "--cortex")) {
-            if (i + 1 >= args.len) {
+        } else if (LegacyParser.parseFlag(args, "--cortex", null, &i)) {
+            i += 1; // Skip to next arg for value
+            if (i >= args.len) {
                 std.debug.print("Error: --cortex requires a value\n", .{});
                 printNewHelp();
                 std.process.exit(1);
             }
-            i += 1;
             config.cortex_dir = args[i];
-        } else if (std.mem.eql(u8, arg, "--json") or std.mem.eql(u8, arg, "-j")) {
+        } else if (LegacyParser.parseFlag(args, "--json", "-j", &i)) {
             config.json_output = true;
-        } else if (std.mem.eql(u8, arg, "--no-interactive")) {
+        } else if (LegacyParser.parseFlag(args, "--no-interactive", null, &i)) {
             config.interactive = false;
         } else if (std.mem.startsWith(u8, arg, "-")) {
             std.debug.print("Error: Unknown flag '{s}'\n", .{arg});
@@ -806,18 +806,18 @@ fn handleUpdate(allocator: Allocator, args: []const []const u8) !void {
         config.sets.deinit(allocator);
     }
 
-    // Parse options
+    // Parse options using CLI parser
     var i: usize = 3;
     while (i < args.len) : (i += 1) {
         const arg = args[i];
 
-        if (std.mem.eql(u8, arg, "--set")) {
-            if (i + 1 >= args.len) {
+        if (LegacyParser.parseFlag(args, "--set", null, &i)) {
+            i += 1; // Skip to next arg for value
+            if (i >= args.len) {
                 std.debug.print("Error: --set requires a value (format: field=value)\n", .{});
                 printUpdateHelp();
                 std.process.exit(1);
             }
-            i += 1;
             const set_value = args[i];
 
             // Parse field=value format
@@ -835,7 +835,7 @@ fn handleUpdate(allocator: Allocator, args: []const []const u8) !void {
                 .operator = .set,
             };
             try config.sets.append(allocator, update);
-        } else if (std.mem.eql(u8, arg, "--verbose") or std.mem.eql(u8, arg, "-v")) {
+        } else if (LegacyParser.parseFlag(args, "--verbose", "-v", &i)) {
             config.verbose = true;
         } else if (std.mem.startsWith(u8, arg, "-")) {
             std.debug.print("Error: Unknown flag '{s}'\n", .{arg});
