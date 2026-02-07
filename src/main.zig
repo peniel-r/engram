@@ -1,6 +1,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+// Import CLI parser utilities
+const LegacyParser = @import("utils/cli_parser.zig").LegacyParser;
+
 // Import all CLI command modules
 const init_cmd = @import("cli/init.zig");
 const new_cmd = @import("cli/new.zig");
@@ -394,24 +397,24 @@ fn handleShow(allocator: Allocator, args: []const []const u8) !void {
         .cortex_dir = null,
     };
 
-    // Parse options
+    // Parse options using CLI parser
     var i: usize = 3;
     while (i < args.len) : (i += 1) {
         const arg = args[i];
 
-        if (std.mem.eql(u8, arg, "--no-connections")) {
+        if (LegacyParser.parseFlag(args, "--no-connections", null, &i)) {
             config.show_connections = false;
-        } else if (std.mem.eql(u8, arg, "--no-body")) {
+        } else if (LegacyParser.parseFlag(args, "--no-body", null, &i)) {
             config.show_body = false;
-        } else if (std.mem.eql(u8, arg, "--json") or std.mem.eql(u8, arg, "-j")) {
+        } else if (LegacyParser.parseFlag(args, "--json", "-j", &i)) {
             config.json_output = true;
-        } else if (std.mem.eql(u8, arg, "--cortex")) {
-            if (i + 1 >= args.len) {
+        } else if (LegacyParser.parseFlag(args, "--cortex", null, &i)) {
+            i += 1; // Skip to next arg for value
+            if (i >= args.len) {
                 std.debug.print("Error: --cortex requires a value\n", .{});
                 printShowHelp();
                 std.process.exit(1);
             }
-            i += 1;
             config.cortex_dir = args[i];
         } else if (std.mem.startsWith(u8, arg, "-")) {
             std.debug.print("Error: Unknown flag '{s}'\n", .{arg});
@@ -597,42 +600,42 @@ fn handleStatus(allocator: Allocator, args: []const []const u8) !void {
         .json_output = false,
     };
 
-    // Parse options
+    // Parse options using CLI parser
     var i: usize = 2;
     while (i < args.len) : (i += 1) {
         const arg = args[i];
 
-        if (std.mem.eql(u8, arg, "--type") or std.mem.eql(u8, arg, "-t")) {
-            if (i + 1 >= args.len) {
+        if (LegacyParser.parseFlag(args, "--type", "-t", &i)) {
+            i += 1; // Skip to next arg for value
+            if (i >= args.len) {
                 std.debug.print("Error: --type requires a value\n", .{});
                 printStatusHelp();
                 std.process.exit(1);
             }
-            i += 1;
             config.type_filter = args[i];
-        } else if (std.mem.eql(u8, arg, "--status")) {
-            if (i + 1 >= args.len) {
+        } else if (LegacyParser.parseFlag(args, "--status", null, &i)) {
+            i += 1; // Skip to next arg for value
+            if (i >= args.len) {
                 std.debug.print("Error: --status requires a value\n", .{});
                 printStatusHelp();
                 std.process.exit(1);
             }
-            i += 1;
             config.status_filter = args[i];
-        } else if (std.mem.eql(u8, arg, "--filter") or std.mem.eql(u8, arg, "-f")) {
-            if (i + 1 >= args.len) {
+        } else if (LegacyParser.parseFlag(args, "--filter", "-f", &i)) {
+            i += 1; // Skip to next arg for value
+            if (i >= args.len) {
                 std.debug.print("Error: --filter requires a value\n", .{});
                 printStatusHelp();
                 std.process.exit(1);
             }
-            i += 1;
             config.filter_str = args[i];
-        } else if (std.mem.eql(u8, arg, "--sort-by") or std.mem.eql(u8, arg, "-s")) {
-            if (i + 1 >= args.len) {
+        } else if (LegacyParser.parseFlag(args, "--sort-by", "-s", &i)) {
+            i += 1; // Skip to next arg for value
+            if (i >= args.len) {
                 std.debug.print("Error: --sort-by requires a value\n", .{});
                 printStatusHelp();
                 std.process.exit(1);
             }
-            i += 1;
             const sort_str = args[i];
             if (std.mem.eql(u8, sort_str, "priority")) {
                 config.sort_by = .priority;
@@ -645,7 +648,7 @@ fn handleStatus(allocator: Allocator, args: []const []const u8) !void {
                 printStatusHelp();
                 std.process.exit(1);
             }
-        } else if (std.mem.eql(u8, arg, "--json") or std.mem.eql(u8, arg, "-j")) {
+        } else if (LegacyParser.parseFlag(args, "--json", "-j", &i)) {
             config.json_output = true;
         } else if (std.mem.startsWith(u8, arg, "-")) {
             std.debug.print("Error: Unknown flag '{s}'\n", .{arg});
@@ -669,20 +672,20 @@ fn handleDelete(allocator: Allocator, args: []const []const u8) !void {
         .verbose = false,
     };
 
-    // Parse options
+    // Parse options using CLI parser
     var i: usize = 3;
     while (i < args.len) : (i += 1) {
         const arg = args[i];
 
-        if (std.mem.eql(u8, arg, "--verbose") or std.mem.eql(u8, arg, "-v")) {
+        if (LegacyParser.parseFlag(args, "--verbose", "-v", &i)) {
             config.verbose = true;
-        } else if (std.mem.eql(u8, arg, "--neuronas-dir") or std.mem.eql(u8, arg, "-d")) {
-            if (i + 1 >= args.len) {
-                std.debug.print("Error: --neuronas-dir requires a value\n", .{});
+        } else if (LegacyParser.parseFlag(args, "--cortex", null, &i)) {
+            i += 1; // Skip to next arg for value
+            if (i >= args.len) {
+                std.debug.print("Error: --cortex requires a value\n", .{});
                 printDeleteHelp();
                 std.process.exit(1);
             }
-            i += 1;
             config.cortex_dir = args[i];
         } else if (std.mem.startsWith(u8, arg, "-")) {
             std.debug.print("Error: Unknown flag '{s}'\n", .{arg});

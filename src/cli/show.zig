@@ -5,14 +5,14 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const NeuronaType = @import("core/neurona.zig").NeuronaType;
-const Neurona = @import("core/neurona.zig").Neurona;
-const fs = @import("storage/filesystem.zig");
+const NeuronaType = @import("../core/neurona.zig").NeuronaType;
+const Neurona = @import("../core/neurona.zig").Neurona;
+const fs = @import("../storage/filesystem.zig");
 const readNeurona = fs.readNeurona;
 const readBodyContent = fs.readBodyContent;
-const uri_parser = @import("utils/uri_parser.zig");
-const config_util = @import("utils/config.zig");
-const editor_util = @import("utils/editor.zig");
+const uri_parser = @import("../utils/uri_parser.zig");
+const config_util = @import("../utils/config.zig");
+const editor_util = @import("../utils/editor.zig");
 
 /// Display configuration
 pub const ShowConfig = struct {
