@@ -500,8 +500,12 @@ fn shouldAutoFill(field: []const u8, config: NewConfig) ?[]const u8 {
         return config.assignee.?;
     }
     if (std.mem.eql(u8, field, "priority") and config.priority != null) {
-        // Convert u8 to string (simplified)
-        return "3"; // Would convert config.priority properly
+        const p = config.priority.?;
+        if (p == 1) return "1";
+        if (p == 2) return "2";
+        if (p == 3) return "3";
+        if (p == 4) return "4";
+        if (p == 5) return "5";
     }
     return null;
 }

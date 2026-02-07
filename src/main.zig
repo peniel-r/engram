@@ -313,7 +313,6 @@ fn handleNew(allocator: Allocator, args: []const []const u8) !void {
         const arg = args[i];
 
         if (LegacyParser.parseFlag(args, "--tag", "-t", &i)) {
-            i += 1; // Skip to next arg for value
             if (i >= args.len) {
                 std.debug.print("Error: --tag requires a value\n", .{});
                 printNewHelp();
@@ -321,7 +320,6 @@ fn handleNew(allocator: Allocator, args: []const []const u8) !void {
             }
             _ = args[i]; // Would add to tags list in full implementation
         } else if (LegacyParser.parseFlag(args, "--assignee", null, &i)) {
-            i += 1; // Skip to next arg for value
             if (i >= args.len) {
                 std.debug.print("Error: --assignee requires a value\n", .{});
                 printNewHelp();
@@ -329,7 +327,6 @@ fn handleNew(allocator: Allocator, args: []const []const u8) !void {
             }
             config.assignee = args[i];
         } else if (LegacyParser.parseFlag(args, "--priority", "-p", &i)) {
-            i += 1; // Skip to next arg for value
             if (i >= args.len) {
                 std.debug.print("Error: --priority requires a value\n", .{});
                 printNewHelp();
@@ -341,7 +338,6 @@ fn handleNew(allocator: Allocator, args: []const []const u8) !void {
                 std.process.exit(1);
             };
         } else if (LegacyParser.parseFlag(args, "--parent", null, &i)) {
-            i += 1; // Skip to next arg for value
             if (i >= args.len) {
                 std.debug.print("Error: --parent requires a value\n", .{});
                 printNewHelp();
@@ -349,7 +345,6 @@ fn handleNew(allocator: Allocator, args: []const []const u8) !void {
             }
             config.parent = args[i];
         } else if (LegacyParser.parseFlag(args, "--validates", null, &i)) {
-            i += 1; // Skip to next arg for value
             if (i >= args.len) {
                 std.debug.print("Error: --validates requires a value\n", .{});
                 printNewHelp();
@@ -357,7 +352,6 @@ fn handleNew(allocator: Allocator, args: []const []const u8) !void {
             }
             config.validates = args[i];
         } else if (LegacyParser.parseFlag(args, "--blocks", null, &i)) {
-            i += 1; // Skip to next arg for value
             if (i >= args.len) {
                 std.debug.print("Error: --blocks requires a value\n", .{});
                 printNewHelp();
@@ -365,7 +359,6 @@ fn handleNew(allocator: Allocator, args: []const []const u8) !void {
             }
             config.blocks = args[i];
         } else if (LegacyParser.parseFlag(args, "--cortex", null, &i)) {
-            i += 1; // Skip to next arg for value
             if (i >= args.len) {
                 std.debug.print("Error: --cortex requires a value\n", .{});
                 printNewHelp();
