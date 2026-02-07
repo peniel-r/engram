@@ -217,141 +217,15 @@ pub const LegacyParser = struct {
         return null;
     }
 };
-
-/// Compact flag parser that significantly reduces boilerplate
-/// Usage:
-/// ```zig
-/// try compactParseFlags(allocator, args, &i, &config, printXxxHelp, &.{
-///     CompactFlag{ .name = "--verbose", .short = "-v", .field = &config.verbose },
-///     CompactFlag{ .name = "--output", .field = &config.output },
-/// });
-/// ```
-pub const CompactFlag = struct {
-    name: []const u8,
-    short: ?[]const u8 = null,
-    field: anytype,
-    parser: ?fn (*usize, []const u8) !void = null, // Optional custom parser for complex types
-};
-
-/// Helper function to parse flags in a compact way
-pub fn compactParseFlags(allocator: Allocator, args: []const []const u8, start_idx: *usize, help_fn: *const fn () void, comptime flags: anytype) !void {
-    _ = allocator; // Not used in this version
-    while (start_idx.* < args.len) : (start_idx.* += 1) {
-        const arg = args[start_idx.*];
-
-        // Check if this is a flag
-        if (!std.mem.startsWith(u8, arg, "-")) {
-            return; // Stop at first non-flag
-        }
-
-        var found = false;
-
-        inline for (flags) |flag| {
-            if (std.mem.eql(u8, arg, flag.name) or (flag.short != null and std.mem.eql(u8, arg, flag.short.?))) {
-                // Handle --flag=value syntax
-                if (std.mem.indexOf(u8, arg, "=")) |eq_pos| {
-                    const value = arg[eq_pos + 1 ..];
-                    try setFlagValue(flag.field, value, flag.name, help_fn, flag.parser, start_idx, args);
-                } else {
-                    start_idx.* += 1;
-                    if (start_idx.* >= args.len) {
-                        std.debug.print("Error: Flag '{s}' requires a value\n", .{arg});
-                        help_fn();
-                        std.process.exit(1);
-                    }
-                    const value = args[start_idx.*];
-                    try setFlagValue(flag.field, value, flag.name, help_fn, flag.parser, start_idx, args);
-                }
-                found = true;
-                break;
-            }
-        }
-
-        if (!found) {
-            std.debug.print("Error: Unknown flag '{s}'\n", .{arg});
-            help_fn();
-            std.process.exit(1);
-        }
-    }
-}
-
-/// Set a flag value based on its type
-fn setFlagValue(field: anytype, value: []const u8, flag_name: []const u8, help_fn: *const fn () void, parser: ?fn (*usize, []const u8) !void, idx: *usize, args: []const []const u8) !void {
-    const FieldType = @TypeOf(field.*);
-
-    if (FieldType == bool) {
-        field.* = true;
-    } else if (FieldType == ?[]const u8 or FieldType == []const u8) {
-        field.* = value;
-    } else if (std.math.Int(FieldType)) {
-        field.* = std.fmt.parseInt(FieldType, value, 10) catch |err| {
-            std.debug.print("Error: Invalid numeric value '{s}' for flag '{s}': {}\n", .{ value, flag_name, err });
-            help_fn();
-            std.process.exit(1);
-        };
-    } else if (parser != null) {
-        // Use custom parser for complex types
-        try parser.?(idx, value);
-    } else {
-        std.debug.print("Error: Unsupported type for flag '{s}'\n", .{flag_name});
-        help_fn();
-        std.process.exit(1);
-    }
-}
-
-        var found = false;
-
-        inline for (flags) |flag| {
-            if (std.mem.eql(u8, arg, flag.name) or (flag.short != null and std.mem.eql(u8, arg, flag.short.?))) {
-                // Handle --flag=value syntax
-                if (std.mem.indexOf(u8, arg, "=")) |eq_pos| {
-                    const value = arg[eq_pos + 1 ..];
-                    try setFlagValue(flag.field, value, flag.name, help_fn);
-                } else {
-                    start_idx.* += 1;
-                    if (start_idx.* >= args.len) {
-                        std.debug.print("Error: Flag '{s}' requires a value\n", .{arg});
-                        help_fn();
-                        std.process.exit(1);
-                    }
-                    const value = args[start_idx.*];
-                    try setFlagValue(flag.field, value, flag.name, help_fn);
-                }
-                found = true;
-                break;
-            }
-        }
-
-        if (!found) {
-            std.debug.print("Error: Unknown flag '{s}'\n", .{arg});
-            help_fn();
-            std.process.exit(1);
-        }
-    }
-}
-
-/// Set a flag value based on its type
-fn setFlagValue(field: anytype, value: []const u8, flag_name: []const u8, help_fn: *const fn () void) !void {
-    const FieldType = @TypeOf(field.*);
-
-    if (FieldType == bool) {
-        field.* = true;
-    } else if (FieldType == ?[]const u8 or FieldType == []const u8) {
-        field.* = value;
-    } else if (std.math.Int(FieldType)) {
-        field.* = std.fmt.parseInt(FieldType, value, 10) catch |err| {
-            std.debug.print("Error: Invalid numeric value '{s}' for flag '{s}': {}\n", .{ value, flag_name, err });
-            help_fn();
-            std.process.exit(1);
-        };
-    } else {
-        std.debug.print("Error: Unsupported type for flag '{s}'\n", .{flag_name});
-        help_fn();
-        std.process.exit(1);
-    }
-}
-
 // ==================== Tests ====================
+// Note: Due to Zig's type system limitations (cannot use @field with runtime strings),
+// full generic parsing is not feasible. The LegacyParser below provides helper functions
+// that reduce boilerplate while maintaining the explicit flag-checking pattern.
+//
+// Future enhancement: When Zig 1.0+ adds better reflection support, we could
+// create a more compact flag parsing approach using inline for loops to iterate
+// over config struct fields.
+//
 
 test "CliParser - hasFlag" {
     const allocator = std.testing.allocator;
