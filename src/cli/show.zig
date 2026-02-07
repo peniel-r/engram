@@ -5,14 +5,14 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const NeuronaType = @import("../core/neurona.zig").NeuronaType;
-const Neurona = @import("../core/neurona.zig").Neurona;
-const fs = @import("../storage/filesystem.zig");
+const NeuronaType = @import("core/neurona.zig").NeuronaType;
+const Neurona = @import("core/neurona.zig").Neurona;
+const fs = @import("storage/filesystem.zig");
 const readNeurona = fs.readNeurona;
 const readBodyContent = fs.readBodyContent;
-const uri_parser = @import("../utils/uri_parser.zig");
-const config_util = @import("../utils/config.zig");
-const editor_util = @import("../utils/editor.zig");
+const uri_parser = @import("utils/uri_parser.zig");
+const config_util = @import("utils/config.zig");
+const editor_util = @import("utils/editor.zig");
 
 /// Display configuration
 pub const ShowConfig = struct {
@@ -284,6 +284,7 @@ test "findNeuronaPath returns direct .md file" {
     // Test with full path
     const test_dir = "neuronas_test";
     const filepath_with_id = try std.fmt.allocPrint(allocator, "{s}/test.001.md", .{test_dir});
+    defer allocator.free(filepath_with_id); // Fix: Free allocated path
     try std.fs.cwd().writeFile(.{ .sub_path = filepath_with_id, .data = "---\nid: test.001\n---\n" });
 
     const result = try fs.findNeuronaPath(allocator, test_dir, "test.001");
