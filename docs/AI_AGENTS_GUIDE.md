@@ -6,14 +6,16 @@
 
 ## Overview
 
-Engram provides AI agents and automation systems with programmatic access to Application Lifecycle Management through structured JSON outputs and LLM-optimized data structures.
+Engram provides AI agents and automation systems with programmatic access to Application Lifecycle Management through structured JSON outputs, EQL query language, and LLM-optimized data structures.
 
 ### Key Features for AI Agents
 
 - **Complete JSON API** - All commands output parseable JSON with full data
+- **EQL Query Language** - Structured query syntax for complex filtering
 - **LLM-optimized metadata** - Token-efficient `_llm` fields for quick consumption
 - **Semantic search** - Vector embeddings understand meaning beyond keywords
-- **Programmatic updates** - Full CRUD operations via `--set` flags
+- **Programmatic updates** - Full CRUD operations via `--set`, `--add-tag`, `--remove-tag` flags
+- **Tag management** - Automated tag operations for AI workflows
 - **Dependency tracking** - Trace relationships and impact analysis
 
 ---
@@ -97,11 +99,65 @@ engram update req.auth \
   --set "context.status=implemented" \
   --set "context.assignee=alice" \
   --set "_llm_t=OAuth 2.0" \
-  --set content="Implementation completed with PKCE support"
+  --set content="Implementation completed..."
 
-# Set content body
-engram update req.api --set content="## API Description\n\nDetailed specification..."
+# Content updates
+engram update req.api --set content="## API Specification\n\nDetailed description..."
+
+# LLM metadata
+engram update req.auth --set "_llm_d=3" --set "_llm_c=500"
 ```
+
+### Pattern 3: EQL Queries
+
+```bash
+# Filter by type and status
+engram query "type:requirement AND state:approved"
+
+# Find untested requirements
+engram query "type:requirement AND NOT link(validates, type:test_case)"
+
+# High-priority open issues
+engram query "type:issue AND priority:1 AND state:open"
+
+# Link queries
+engram query "link(validates, req.auth.oauth2)"
+
+# Complex filtering
+engram query "(type:requirement OR type:issue) AND priority:lte:3"
+
+# Semantic search combined with EQL
+engram query "type:issue AND title:contains:authentication"
+```
+
+#### EQL for AI Agents
+
+EQL provides structured queries perfect for AI automation:
+
+```bash
+# Find requirements at risk
+engram query "type:requirement AND (state:draft OR state:blocked)" --json
+
+# Find tests needing attention
+engram query "type:test_case AND (status:failing OR status:not_run)" --json
+
+# Get coverage analysis
+engram query "type:requirement AND link(validates, type:test_case)" --json | \
+  jq '.results[] | .id' | while read req; do
+    HAS_TESTS=$(engram query "link(validates, $req) AND type:test_case" --json | jq '.results | length')
+    echo "$req: $HAS_TESTS tests"
+  done
+
+# Impact queries
+engram query "link(blocks, req.auth.login)" --json
+engram query "link(validates, req.auth.login)" --json
+```
+
+**EQL Operators for AI**:
+- `AND`, `OR`, `NOT` - Complex logic
+- `()`, `(())` - Grouping and nesting
+- `eq`, `contains`, `gte`, `lte`, `gt`, `lt` - Comparisons
+- `link()` - Relationship queries
 
 ### Pattern 3: Impact Analysis
 
@@ -140,6 +196,7 @@ engram status --json
 ```
 
 ### query - Search and Filter
+
 ```bash
 # Filter by type and state
 engram query --type requirement --state draft --json
@@ -147,9 +204,52 @@ engram query --type requirement --state draft --json
 # Filter by multiple criteria
 engram query --type issue --priority 1 --json
 
-# Natural language search
+# EQL queries
+engram query "type:issue AND priority:1" --json
+engram query "type:test_case AND (status:passing OR status:failing)" --json
+
+# Semantic search
+engram query --mode vector "authentication problems" --json
+
+# Natural language queries
 engram query "authentication problems" --json
 ```
+
+#### EQL Query Examples
+
+```bash
+# Simple type query
+engram query "type:issue" --json
+
+# Priority filtering
+engram query "type:issue AND priority:1" --json
+
+# State filtering with EQL
+engram query "type:requirement AND state:approved" --json
+
+# Complex logical expression
+engram query "(type:requirement OR type:issue) AND priority:lte:3" --json
+
+# Negation with EQL
+engram query "type:requirement AND NOT priority:1" --json
+
+# Link queries with EQL
+engram query "link(validates, req.auth.oauth2)" --json
+engram query "link(blocks, req.feature) AND type:issue" --json
+
+# Content search with EQL
+engram query "title:contains:oauth" --json
+engram query "title:contains:authentication OR tag:security" --json
+
+# Multiple conditions
+engram query "type:issue AND priority:1 AND state:open" --json
+```
+
+**EQL Operators Reference**:
+- Logical: `AND`, `OR`, `NOT`, `()` (grouping)
+- Comparison: `eq` (default), `contains`, `gte`, `lte`, `gt`, `lt`
+- Fields: `type`, `tag`, `priority`, `title`, `context.*`
+- Links: `link(type, target_id)`
 
 ### show - Get Item Details
 ```bash
@@ -158,21 +258,55 @@ engram show req.auth.oauth2 --json
 ```
 
 ### update - Programmatic Updates
+
 ```bash
-# Single field
+# Single field update
 engram update req.auth --set "context.status=implemented"
 
-# Multiple fields
+# Multiple field updates
 engram update req.auth \
+  --set "context.status=implemented" \
   --set "context.assignee=alice" \
-  --set "_llm_t=OAuth 2.0" \
-  --set content="Updated description..."
+  --set "_llm_t=OAuth 2.0"
 
 # Content updates
-engram update req.api --set content="## API Spec\n\nDetailed description..."
+engram update req.api --set content="## API Specification\n\nDetailed specification..."
 
 # LLM metadata
-engram update req.auth --set "_llm_d=3" --set "_llm_k=oauth,login,auth"
+engram update req.auth --set "_llm_d=3" --set "_llm_c=500"
+```
+
+#### Tag Management
+
+```bash
+# Add single tag
+engram update req.auth --add-tag "security"
+
+# Add multiple tags
+engram update req.auth --add-tag "security" --add-tag "high-priority" -t "critical"
+
+# Remove tag
+engram update req.auth --remove-tag "draft"
+
+# Tag operations with content update
+engram update req.auth --set "context.status=approved" --add-tag "completed"
+```
+
+#### Complete Update Workflow
+
+```bash
+# AI agent workflow for requirement completion
+engram update req.auth \
+  --set "context.status=implemented" \
+  --set "context.assignee=alice" \
+  --add-tag "completed" \
+  --set "_llm_t=OAuth 2.0" \
+  --set "content=Implementation completed with full test coverage"
+
+# Batch updates for multiple items
+for req in $(engram query "type:requirement AND state:approved" --json | jq -r '.results[].id'); do
+  engram update "$req" --set "context.status=implemented"
+done
 ```
 
 ### trace - Dependency Analysis
@@ -618,10 +752,39 @@ echo "✅ Build successful. Deployment ready."
 ## Search Modes
 
 ### Filter Mode - Fast Structured Queries
+
 ```bash
 engram query --type requirement --state draft --json
 engram query --type issue --priority 1 --json
 ```
+
+### EQL Mode - Structured Query Language
+
+```bash
+# Simple EQL queries
+engram query "type:issue" --json
+engram query "type:requirement AND state:approved" --json
+
+# Complex EQL queries with operators
+engram query "type:issue AND priority:1" --json
+engram query "(type:requirement OR type:issue) AND priority:lte:3" --json
+
+# Link queries
+engram query "link(validates, req.auth.oauth2)" --json
+engram query "link(blocks, req.feature) AND type:issue" --json
+
+# Content search
+engram query "title:contains:oauth" --json
+
+# Deep nesting
+engram query "((type:requirement OR type:issue) AND priority:3) OR tag:critical" --json
+```
+
+**EQL Syntax**:
+- Logical: `AND`, `OR`, `NOT`, `()` (grouping)
+- Comparison: `eq` (default), `contains`, `gte`, `lte`, `gt`, `lt`
+- Fields: `type`, `tag`, `priority`, `title`, `context.*`
+- Links: `link(type, target_id)`
 
 ### Text Mode - Keyword Search
 ```bash

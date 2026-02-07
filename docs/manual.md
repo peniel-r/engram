@@ -704,12 +704,21 @@ engram show req.auth --json
 
 ### Updating Neuronas
 
+The basic command is:
+
+```bash
+engram update <id> [options]
+```
+
+#### Update Context Fields
+
 ```bash
 # Update a specific field
 engram update <id> --set "field=value"
 
 # Change status
 engram update test.001 --set "context.status=passing"
+engram update req.001 --set "context.status=implemented"
 
 # Update priority
 engram update req.001 --set "context.priority=1"
@@ -718,11 +727,54 @@ engram update req.001 --set "context.priority=1"
 engram update req.001 --set "title=New Title"
 
 # Multiple updates at once
-engram update req.001 --set "context.status=implemented" \
-                     --set "context.assignee=alice"
+engram update req.001 --set "context.status=implemented" --set "context.assignee=alice"
 ```
 
-**Common field updates:**
+#### Tag Management
+
+```bash
+# Add a tag
+engram update req.001 --add-tag "security"
+engram update req.001 -t "high-priority"
+
+# Add multiple tags
+engram update req.001 --add-tag "security" --add-tag "critical"
+
+# Remove a tag
+engram update req.001 --remove-tag "draft"
+
+# Combine tag operations
+engram update req.001 --add-tag "security" --remove-tag "requirement"
+```
+
+#### Common Field Updates
+
+For Requirements:
+```bash
+engram update req.001 --set "context.status=approved"
+engram update req.001 --set "context.status=implemented"
+```
+
+For Tests:
+```bash
+engram update test.001 --set "context.status=passing"
+engram update test.001 --set "context.status=failing"
+```
+
+For Issues:
+```bash
+engram update issue.001 --set "context.status=in_progress"
+engram update issue.001 --set "context.status=resolved"
+```
+
+#### Verbose Mode
+
+```bash
+# See what's being updated
+engram update req.001 --add-tag "security" --verbose
+# Output:   Added tag: security
+#         ✓ Updated req.001
+```
 
 For Requirements:
 ```bash
@@ -829,7 +881,81 @@ Connections:
 
 ## Searching and Querying
 
-Engram offers **5 powerful search modes** to help you find what you need.
+Engram offers **5 powerful search modes** plus **EQL (Engram Query Language)** for advanced filtering.
+
+### Using EQL (Engram Query Language)
+
+For complex filtering and advanced queries, use EQL syntax:
+
+#### EQL Syntax
+
+```
+Expression    → Term { OR Term }
+Term          → Factor { AND Factor }
+Factor        → NOT Factor | ( Expression ) | Condition
+Condition     → field ':' [op ':'] value | link(type, target)
+```
+
+#### EQL Operators
+
+| Operator | Syntax | Description |
+|----------|---------|-------------|
+| `AND` | `A AND B` | Both conditions must match |
+| `OR` | `A OR B` | Either condition must match |
+| `NOT` | `NOT A` | Negates condition |
+| `()` | `(A AND B)` | Groups expressions |
+| `eq` (default) | `field:value` | Exact match |
+| `contains` | `field:contains:value` | Substring match |
+| `gte` | `field:gte:value` | Greater than or equal |
+| `lte` | `field:lte:value` | Less than or equal |
+| `gt` | `field:gt:value` | Greater than |
+| `lt` | `field:lt:value` | Less than |
+| `link()` | `link(type, target)` | Find connections |
+
+#### EQL Fields
+
+| Field | Description | Example |
+|--------|-------------|---------|
+| `type` | Neurona type | `type:issue` |
+| `tag` | Tag match | `tag:security` |
+| `priority` | Priority level | `priority:1` |
+| `title` | Title contains | `title:contains:oauth` |
+| `context.status` | Status field | `context.status:open` |
+| `context.priority` | Context priority | `context.priority:1` |
+| `context.assignee` | Assignee field | `context.assignee:alice` |
+
+#### EQL Examples
+
+```bash
+# Simple type query
+engram query "type:issue"
+
+# Priority filtering
+engram query "type:issue AND priority:1"
+
+# State filtering
+engram query "type:requirement AND context.status:approved"
+
+# Complex logical expression
+engram query "(type:requirement OR type:issue) AND priority:lte:3"
+
+# Negation
+engram query "type:requirement AND NOT priority:1"
+
+# Link queries
+engram query "link(validates, req.auth.login) AND type:test_case"
+engram query "link(blocks, req.feature) AND type:issue"
+
+# Content search
+engram query "title:contains:oauth"
+engram query "title:contains:authentication OR tag:security"
+
+# Multiple conditions
+engram query "type:issue AND priority:1 AND state:open"
+
+# Deep nesting
+engram query "((type:requirement OR type:issue) AND priority:3) OR tag:critical"
+```
 
 ### 1. Filter Mode (Default)
 

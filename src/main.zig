@@ -816,7 +816,6 @@ fn handleUpdate(allocator: Allocator, args: []const []const u8) !void {
         const arg = args[i];
 
         if (LegacyParser.parseFlag(args, "--set", null, &i)) {
-            i += 1; // Skip to next arg for value
             if (i >= args.len) {
                 std.debug.print("Error: --set requires a value (format: field=value)\n", .{});
                 printUpdateHelp();
@@ -837,6 +836,34 @@ fn handleUpdate(allocator: Allocator, args: []const []const u8) !void {
                 .field = try allocator.dupe(u8, field),
                 .value = try allocator.dupe(u8, value),
                 .operator = .set,
+            };
+            try config.sets.append(allocator, update);
+        } else if (LegacyParser.parseFlag(args, "--add-tag", "-t", &i)) {
+            if (i >= args.len) {
+                std.debug.print("Error: --add-tag requires a value\n", .{});
+                printUpdateHelp();
+                std.process.exit(1);
+            }
+            const tag = args[i];
+
+            const update = update_cmd.FieldUpdate{
+                .field = try allocator.dupe(u8, "tag"),
+                .value = try allocator.dupe(u8, tag),
+                .operator = .append,
+            };
+            try config.sets.append(allocator, update);
+        } else if (LegacyParser.parseFlag(args, "--remove-tag", null, &i)) {
+            if (i >= args.len) {
+                std.debug.print("Error: --remove-tag requires a value\n", .{});
+                printUpdateHelp();
+                std.process.exit(1);
+            }
+            const tag = args[i];
+
+            const update = update_cmd.FieldUpdate{
+                .field = try allocator.dupe(u8, "tag"),
+                .value = try allocator.dupe(u8, tag),
+                .operator = .remove,
             };
             try config.sets.append(allocator, update);
         } else if (LegacyParser.parseFlag(args, "--verbose", "-v", &i)) {

@@ -6,7 +6,8 @@ Built with **Zig 0.15.2**, Engram offers zero-overhead performance, manual memor
 
 ## 🚀 Features
 
-- **ALM First**: Built-in support for requirements, test cases, issues, artifacts, and features.
+- **ALM First**: Built-in support for requirements, test cases, issues, artifacts and features.
+- **EQL (Engram Query Language)**: Powerful structured query syntax for complex filtering.
 - **High Performance**: Sub-millisecond cold start and ultra-fast graph traversal.
 - **Graph-Aware Knowledge Management**: Create and link Neuronas (knowledge nodes) with 15+ semantic connection types.
 - **Offline-First**: Plain-text storage using Markdown and YAML frontmatter.
@@ -14,6 +15,7 @@ Built with **Zig 0.15.2**, Engram offers zero-overhead performance, manual memor
 - **Traceability**: Visualize dependency trees and perform impact analysis.
 - **Semantic Search**: Five query modes for intelligent search:
   - **Filter Mode**: By type, tags, and connections (default)
+  - **EQL Mode**: Structured queries with operators (AND, OR, NOT, parentheses)
   - **Text Mode**: BM25 full-text search with relevance scoring
   - **Vector Mode**: Cosine similarity search with embeddings
   - **Hybrid Mode**: Combined BM25 + vector fusion (0.6/0.4 weights)
@@ -101,8 +103,18 @@ engram link req.auth.user-authentication issue.auth.001 blocks
 ### Update Neuronas
 
 ```bash
-engram update test.001 --set "context.status=passing"
+# Update context fields
 engram update req.001 --set "context.status=implemented"
+engram update req.001 --set "context.priority=1"
+engram update req.001 --set "context.assignee=alice"
+
+# Tag management
+engram update req.001 --add-tag "security"
+engram update req.001 --add-tag "high-priority"
+engram update req.001 --remove-tag "draft"
+
+# Multiple updates at once
+engram update req.001 --set "context.status=implemented" --set "context.assignee=alice"
 ```
 
 ### Visualize Dependencies
@@ -161,9 +173,15 @@ engram man --html
 engram query --type issue
 engram query --type issue --limit 10
 
-# EQL Query Language
+# EQL (Engram Query Language) - Structured queries
 engram query "type:issue AND priority:1"
-engram query "state:open AND tag:critical"
+engram query "type:issue AND state:open"
+engram query "type:requirement OR type:test_case"
+engram query "(type:requirement OR type:issue) AND priority:lte:3"
+engram query "type:requirement AND NOT priority:1"
+engram query "link(validates, req.auth.login)"
+engram query "priority:gte:2"
+engram query "type:test_case AND (status:passing OR status:failing)"
 
 # BM25 full-text search
 engram query --mode text "authentication"
@@ -188,8 +206,33 @@ engram query "find tests that are failing"
 # JSON output (works with all modes)
 engram query --mode text "authentication" --json
 engram query --mode hybrid "login" --json --limit 3
-engram release-status --json
-engram metrics --json
+```
+
+#### EQL Syntax Reference
+
+EQL supports powerful structured queries with operators:
+
+- **Logical Operators**: `AND`, `OR`, `NOT`, `()` (grouping)
+- **Comparison Operators**: `eq` (default), `contains`, `gte`, `lte`, `gt`, `lt`
+- **Fields**: `type`, `tag`, `priority`, `title`, `context.*`
+- **Link Queries**: `link(type, target_id)`
+
+**Examples**:
+```bash
+# Simple type filter
+engram query "type:issue"
+
+# Complex logical expression
+engram query "(type:requirement OR type:issue) AND priority:1"
+
+# Link query
+engram query "link(validates, req.auth.login) AND type:test_case"
+
+# With operators
+engram query "priority:gte:2 AND priority:lte:4"
+
+# Content search
+engram query "title:contains:oauth"
 ```
 
 ## 🤖 AI Agent Integration
@@ -224,6 +267,8 @@ engram sync
 - **Semantic Search**: Vector embeddings for understanding meaning beyond keywords
 - **Natural Language Queries**: Parse plain English queries programmatically
 - **Impact Analysis**: Predict effects of changes before making them
+- **EQL Query Language**: Structured queries with logical operators (AND, OR, NOT)
+- **Tag Management**: Programmatic tag operations via --add-tag and --remove-tag flags
 
 ### Core AI Commands
 
