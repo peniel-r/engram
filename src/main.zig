@@ -391,6 +391,7 @@ fn handleShow(allocator: Allocator, args: []const []const u8) !void {
         .show_connections = true,
         .show_body = true,
         .json_output = false,
+        .cortex_dir = null,
     };
 
     // Parse options
@@ -404,6 +405,14 @@ fn handleShow(allocator: Allocator, args: []const []const u8) !void {
             config.show_body = false;
         } else if (std.mem.eql(u8, arg, "--json") or std.mem.eql(u8, arg, "-j")) {
             config.json_output = true;
+        } else if (std.mem.eql(u8, arg, "--cortex")) {
+            if (i + 1 >= args.len) {
+                std.debug.print("Error: --cortex requires a value\n", .{});
+                printShowHelp();
+                std.process.exit(1);
+            }
+            i += 1;
+            config.cortex_dir = args[i];
         } else if (std.mem.startsWith(u8, arg, "-")) {
             std.debug.print("Error: Unknown flag '{s}'\n", .{arg});
             printShowHelp();

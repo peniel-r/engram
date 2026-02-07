@@ -46,17 +46,14 @@ pub const LinkResult = struct {
 /// Main command handler
 pub fn execute(allocator: Allocator, config: LinkArtifactConfig) !void {
     // Determine neuronas directory
-    const cortex_dir = config.cortex_dir orelse blk: {
-        const cd = uri_parser.findCortexDir(allocator) catch |err| {
-            if (err == error.CortexNotFound) {
-                std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
-                std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
-                std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
-                std.process.exit(1);
-            }
-            return err;
-        };
-        break :blk cd;
+    const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
+        if (err == error.CortexNotFound) {
+            std.debug.print("Error: No cortex found in current directory or within 3 directory levels.\n", .{});
+            std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
+            std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+            std.process.exit(1);
+        }
+        return err;
     };
     defer if (config.cortex_dir == null) allocator.free(cortex_dir);
 

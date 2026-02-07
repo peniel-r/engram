@@ -118,12 +118,9 @@ pub fn execute(allocator: Allocator, config: QueryConfig) !void {
 }
 
 fn getNeuronasDir(allocator: Allocator, cortex_dir: ?[]const u8) ![]const u8 {
-    if (cortex_dir) |cd| {
-        return try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cd});
-    }
-    const cortex = uri_parser.findCortexDir(allocator) catch |err| {
+    const cortex = uri_parser.findCortexDir(allocator, cortex_dir) catch |err| {
         if (err == error.CortexNotFound) {
-            std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
+            std.debug.print("Error: No cortex found in current directory or within 3 directory levels.\n", .{});
             std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
             std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
             std.process.exit(1);
