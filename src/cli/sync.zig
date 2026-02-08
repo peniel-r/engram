@@ -24,18 +24,15 @@ pub const SyncConfig = struct {
 /// Main command handler
 pub fn execute(allocator: Allocator, config: SyncConfig) !void {
     // Step 0: Determine cortex directory and neuronas directory
-    const cortex_dir = if (config.cortex_dir) |cd|
-        cd // Use provided path directly
-    else
-        uri_parser.findCortexDir(allocator) catch |err| {
-            if (err == error.CortexNotFound) {
-                std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
-                std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
-                std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
-                std.process.exit(1);
-            }
-            return err;
-        };
+    const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
+        if (err == error.CortexNotFound) {
+            std.debug.print("Error: No cortex found in current directory or within 3 directory levels.\n", .{});
+            std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
+            std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+            std.process.exit(1);
+        }
+        return err;
+    };
     defer if (config.cortex_dir == null) allocator.free(cortex_dir);
 
     const directory = config.directory orelse try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});

@@ -1,6 +1,6 @@
 # AI Agent Workflow Guide
 
-**Version 0.1.0** | **Last Updated: January 31, 2026**
+**Version 0.2.0** | **Last Updated: February 7, 2026**
 
 ---
 
@@ -13,24 +13,53 @@ This guide provides AI agents with a structured workflow for integrating with En
 ## Core Rules for AI Agents
 
 ### Development Rules
+
 - Review and update PLAN.md for implementation planning
+- Use 'engram' command for ALM workflow.
 - Always ask for review before making commits
 - Work is NOT complete until `zig build run` succeeds
 - If `zig build run` fails, resolve and retry until success
 
 ### Zig Coding Standards
+
 - Use explicit allocator patterns
 - Never use global variables for large structs
 - Use `ArenaAllocator` for frame-scoped data
 - Use `PoolAllocator` for background tasks
 - Target Zig version 0.15.2+
 - Prefer `ArrayListUnmanaged` for array list implementation
+- Buffer must outlive the writer interface pointer
+- Forgetting `flush()` means output won't appear
+- Consider making stdout_buffer global for reuse
+- Ring buffers batch writes to reduce syscalls
+
+#### Zig 0.15+ Standard Output Rules
+
+```zig
+// 1. Always provide an explicit buffer (typically [1024-4096]u8)
+var stdout_buffer: [4096]u8 = undefined;
+
+// 2. Create writer with buffer reference
+var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+
+// 3. Get the interface pointer (must remain stable)
+const stdout = &stdout_writer.interface;
+
+// 4. Write using print() or writeAll()
+try stdout.print("Hello {s}!\n", .{"World"});
+
+// 5. ALWAYS flush() to push buffered data to terminal
+try stdout.flush();
+
+// For unbuffered output (less efficient):
+var unbuffered_writer = std.fs.File.stdout().writer(&.{});
+```
 
 ---
 
 ## AI Agent Workflow
 
-### Phase 1: Initialization & Context Loading
+### Step 1: Initialization & Context Loading
 
 ```bash
 # 1. Initialize or verify ALM project
@@ -42,7 +71,7 @@ engram status --json > project_state.json
 # 3. Review PLAN.md for implementation context
 ```
 
-### Phase 2: Query & Analysis
+### Step 2: Query & Analysis
 
 ```bash
 # Query for relevant artifacts using EQL syntax
@@ -52,14 +81,14 @@ engram query --type requirement --state draft --json
 # Semantic search for understanding
 engram query --mode vector "authentication issues" --json
 
-# Find untested requirements
-engram query "type:requirement AND NOT link(validates, type:test_case)" --json
+# Find unimplemented requirements
+engram query "type:requirement AND status:neq:implemented" --json
 
 # Get blocked items
-engram query "type:issue AND state:open" --json
+engram query "type:issue AND status:open" --json
 ```
 
-### Phase 3: Impact Analysis (Before Changes)
+### Step 3: Impact Analysis (Before Changes)
 
 ```bash
 # Always analyze impact before modifications
@@ -73,7 +102,7 @@ engram impact src/auth/login.zig --json --down | \
   jq -r '.affected_items[] | select(.type == "test_case") | .id'
 ```
 
-### Phase 4: Decision Making
+### Step 4: Decision Making
 
 ```bash
 # Check release readiness before deployment
@@ -86,7 +115,7 @@ engram metrics --json
 engram trace req.auth.oauth2 --json --depth 3
 ```
 
-### Phase 5: Execution
+### Step 5: Execution
 
 ```bash
 # Create new artifacts
@@ -101,7 +130,7 @@ engram query "type:requirement AND state:approved" --json | \
   jq -r '.[] | "engram new test_case \"\(.title)\" --validates \(.id)"' | bash
 ```
 
-### Phase 6: Validation & Sync
+### Step 6: Validation & Sync
 
 ```bash
 # Sync after any manual edits
@@ -119,7 +148,7 @@ if [ $? -ne 0 ]; then
 fi
 ```
 
-### Phase 7: Commit (After Review)
+### Step 7: Commit (After Review)
 
 ```bash
 # Ask for review before committing
@@ -133,6 +162,7 @@ git commit -m "Implement feature with full test coverage"
 ## EQL Syntax Reference
 
 ### Basic Queries
+
 ```
 type:requirement
 state:implemented
@@ -141,16 +171,19 @@ tag:security
 ```
 
 ### Logical Operators
+
 ```
 type:requirement AND state:approved
-(type:issue OR type:bug) AND priority:1
-type:requirement AND NOT link(validates, type:test_case)
+type:issue OR type:bug
+type:requirement AND status:neq:implemented
 ```
 
 ### Connection Queries
+
 ```
 link(validates, req.auth.oauth2)
 link(blocks, type:requirement)
+link(validates, req.001) AND type:test_case
 ```
 
 ---
@@ -168,7 +201,9 @@ link(blocks, type:requirement)
 ## State Transitions
 
 ### Issues: open → in_progress → resolved → closed
+
 ### Tests: not_run → running → passing/failing
+
 ### Requirements: draft → approved → implemented
 
 ---

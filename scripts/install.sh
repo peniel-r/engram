@@ -13,6 +13,13 @@ INSTALL_DIR="$HOME/.local/bin"
 DATA_DIR="$HOME/.local/share/engram"
 
 echo "Building Engram..."
+
+# Clean previous build
+if [ -d "$PROJECT_ROOT/zig-out" ]; then
+    echo "Cleaning previous build..."
+    rm -rf "$PROJECT_ROOT/zig-out"
+fi
+
 if ! zig build -Doptimize=ReleaseSafe; then
     echo "Error: Build failed. Please fix build errors and try again."
     exit 1

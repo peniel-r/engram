@@ -1,15 +1,32 @@
-set shell := ["powershell", "-c"]
+set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 
 default:
     @just --list
 
-# Install Engram to %APPDATA%\engram
+# Install Engram (delegates to platform-specific script)
+[linux]
 install:
-    @zig build -Doptimize=ReleaseSafe
-    @if (!(Test-Path "$env:APPDATA\engram")) { New-Item -ItemType Directory -Force -Path "$env:APPDATA\engram" | Out-Null }
-    @Copy-Item zig-out/bin/engram.exe "$env:APPDATA\engram\" -Force
-    @Copy-Item docs/manual.md "$env:APPDATA\engram\" -Force
-    @Copy-Item scripts/launch-manual.ps1 "$env:APPDATA\engram\" -Force
-    @(Get-Content "$env:APPDATA\engram\launch-manual.ps1") -replace '\.\\.\\docs\\manual\\.md', 'manual.md' | Set-Content "$env:APPDATA\engram\launch-manual.ps1" -Encoding UTF8
-    @powershell -Command "$t=[System.EnvironmentVariableTarget]::User; $p=[System.Environment]::GetEnvironmentVariable('Path',$t); $a='$env:APPDATA\engram'; if(-not($p.Split(';') -contains $a)){[System.Environment]::SetEnvironmentVariable('Path',$p+';'+$a,$t); Write-Host 'Added to User PATH. Please restart your terminal to use `engram`.'} else {Write-Host 'Already in User PATH.'}"
-    @Write-Host "Engram installed to $env:APPDATA\engram"
+    ./scripts/install.sh
+
+[macos]
+install:
+    ./scripts/install.sh
+
+[windows]
+install:
+    powershell -ExecutionPolicy Bypass -File ./scripts/install.ps1
+
+# Build for release (Clean & Build)
+[linux]
+release-build:
+    rm -rf zig-out
+    zig build -Doptimize=ReleaseSafe
+
+[macos]
+release-build:
+    rm -rf zig-out
+    zig build -Doptimize=ReleaseSafe
+
+[windows]
+release-build:
+    powershell -ExecutionPolicy Bypass -Command "if (Test-Path zig-out) { Remove-Item -Recurse -Force zig-out }; zig build -Doptimize=ReleaseSafe"

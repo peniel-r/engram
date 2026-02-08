@@ -201,21 +201,16 @@ fn getTemplate(type_str: []const u8) TemplateConfig {
 /// Main command handler
 pub fn execute(allocator: Allocator, config: NewConfig) !void {
     // Step 1: Determine cortex directory
-    // If config.cortex_dir is provided, use it directly (no allocation needed)
-    // Otherwise, auto-detect cortex and allocate the path
-    const cortex_dir = if (config.cortex_dir) |cd|
-        cd // Use provided path directly
-    else
-        uri_parser.findCortexDir(allocator) catch |err| {
-            if (err == error.CortexNotFound) {
-                std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
-                std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
-                std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
-                std.process.exit(1);
-            }
-            return err;
-        };
-    // Free cortex_dir only if we allocated it (config.cortex_dir was null)
+    // Determine cortex directory (searches up and down 3 levels)
+    const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
+        if (err == error.CortexNotFound) {
+            std.debug.print("Error: No cortex found in current directory or within 3 directory levels.\n", .{});
+            std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
+            std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+            std.process.exit(1);
+        }
+        return err;
+    };
     defer if (config.cortex_dir == null) allocator.free(cortex_dir);
 
     // Step 2: Generate ID with type prefix
@@ -505,8 +500,12 @@ fn shouldAutoFill(field: []const u8, config: NewConfig) ?[]const u8 {
         return config.assignee.?;
     }
     if (std.mem.eql(u8, field, "priority") and config.priority != null) {
-        // Convert u8 to string (simplified)
-        return "3"; // Would convert config.priority properly
+        const p = config.priority.?;
+        if (p == 1) return "1";
+        if (p == 2) return "2";
+        if (p == 3) return "3";
+        if (p == 4) return "4";
+        if (p == 5) return "5";
     }
     return null;
 }

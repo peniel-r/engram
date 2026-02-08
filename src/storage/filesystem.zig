@@ -865,6 +865,22 @@ pub fn findNeuronaPath(allocator: Allocator, neuronas_dir: []const u8, id: []con
     return error.NeuronaNotFound;
 }
 
+/// Read body content from a Neurona file (markdown after frontmatter)
+/// This is a helper for commands that need to read only the body content
+pub fn readBodyContent(allocator: Allocator, filepath: []const u8) ![]const u8 {
+    const content = try std.fs.cwd().readFileAlloc(allocator, filepath, 10 * 1024 * 1024);
+    defer allocator.free(content);
+
+    // Find end of frontmatter (second ---)
+    const second_delim = std.mem.indexOfPos(u8, content, 0, "\n---") orelse return error.InvalidFormat;
+
+    // Skip past second delimiter and any newlines
+    var body_start = second_delim + 4;
+    while (body_start < content.len and std.ascii.isWhitespace(content[body_start])) : (body_start += 1) {}
+
+    return try allocator.dupe(u8, content[body_start..]);
+}
+
 // ==================== Tests ====================
 
 test "isNeuronaFile identifies .md files" {

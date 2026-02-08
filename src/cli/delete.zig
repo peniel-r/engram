@@ -3,7 +3,8 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const fs = @import("../storage/filesystem.zig");
+const FileOps = @import("../utils/file_ops.zig").FileOps;
+const ErrorReporter = @import("../utils/error_reporter.zig").ErrorReporter;
 const uri_parser = @import("../utils/uri_parser.zig");
 
 /// Configuration for Delete command
@@ -15,36 +16,23 @@ pub const DeleteConfig = struct {
 
 /// Execute delete command
 pub fn execute(allocator: Allocator, config: DeleteConfig) !void {
-    // Determine neuronas directory
-    const cortex_dir = config.cortex_dir orelse blk: {
-        const cd = uri_parser.findCortexDir(allocator) catch |err| {
-            if (err == error.CortexNotFound) {
-                std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
-                std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
-                std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
-                std.process.exit(1);
-            }
-            return err;
-        };
-        break :blk cd;
+    // Determine cortex directory
+    const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
+        if (err == error.CortexNotFound) {
+            ErrorReporter.cortexNotFound();
+            std.process.exit(1);
+        }
+        return err;
     };
-    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+    defer allocator.free(cortex_dir);
 
     const neuronas_dir = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
     defer allocator.free(neuronas_dir);
 
-    // 1. Find Neurona file
-    const filepath = try fs.findNeuronaPath(allocator, neuronas_dir, config.id);
-    defer allocator.free(filepath);
+    // Delete neurona using unified API
+    try FileOps.deleteNeuronaById(allocator, neuronas_dir, config.id, config.verbose);
 
-    // 2. Delete file
-    try std.fs.cwd().deleteFile(filepath);
-
-    if (config.verbose) {
-        std.debug.print("Deleted: {s}\n", .{filepath});
-    }
-
-    std.debug.print("Successfully deleted Neurona '{s}'.\n", .{config.id});
+    ErrorReporter.success("deleted", config.id);
 }
 
 test "execute deletes Neurona file" {
@@ -55,6 +43,14 @@ test "execute deletes Neurona file" {
     const neuronas_dir = "test_cortex_delete/neuronas";
     try std.fs.cwd().makePath(neuronas_dir);
     defer std.fs.cwd().deleteTree(test_dir) catch {};
+
+    // Create cortex.json
+    const cortex_json_path = try std.fs.path.join(allocator, &.{ test_dir, "cortex.json" });
+    defer allocator.free(cortex_json_path);
+    try std.fs.cwd().writeFile(.{
+        .sub_path = cortex_json_path,
+        .data = "{\"name\":\"test\",\"type\":\"alm\"}",
+    });
 
     // Create test Neurona
     const path = try std.fs.path.join(allocator, &.{ neuronas_dir, "test.md" });

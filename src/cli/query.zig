@@ -118,12 +118,9 @@ pub fn execute(allocator: Allocator, config: QueryConfig) !void {
 }
 
 fn getNeuronasDir(allocator: Allocator, cortex_dir: ?[]const u8) ![]const u8 {
-    if (cortex_dir) |cd| {
-        return try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cd});
-    }
-    const cortex = uri_parser.findCortexDir(allocator) catch |err| {
+    const cortex = uri_parser.findCortexDir(allocator, cortex_dir) catch |err| {
         if (err == error.CortexNotFound) {
-            std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
+            std.debug.print("Error: No cortex found in current directory or within 3 directory levels.\n", .{});
             std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
             std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
             std.process.exit(1);
@@ -191,6 +188,106 @@ pub fn executeFilterQuery(allocator: Allocator, config: QueryConfig) !void {
     } else {
         try outputList(allocator, output_neuronas.items);
     }
+}
+
+/// Filter mode using AST evaluator (Phase 3)
+pub fn executeFilterQueryWithAST(allocator: Allocator, config: QueryConfig, ast: *const @import("../utils/eql_parser.zig").QueryAST) !void {
+    const eql_parser = @import("../utils/eql_parser.zig");
+
+    // Step 1: Scan all Neuronas
+    const directory = try getNeuronasDir(allocator, config.cortex_dir);
+    defer allocator.free(directory);
+
+    const neuronas = try storage.scanNeuronas(allocator, directory);
+    defer {
+        for (neuronas) |*n| n.deinit(allocator);
+        allocator.free(neuronas);
+    }
+
+    // Step 2: Apply AST evaluator with NeuronaView
+    var results = std.ArrayListUnmanaged(*const Neurona){};
+    defer results.deinit(allocator);
+
+    var count: usize = 0;
+
+    for (neuronas) |*neurona| {
+        // Create NeuronaView for evaluation
+        var view = try createNeuronaView(allocator, neurona);
+        defer view.deinit(allocator);
+
+        if (eql_parser.evaluateAST(ast.root, &view)) {
+            try results.append(allocator, neurona);
+            count += 1;
+
+            if (config.limit) |limit| {
+                if (count >= limit) break;
+            }
+        }
+    }
+
+    // Step 3: Sort results (by id for now)
+    const sorted = try results.toOwnedSlice(allocator);
+    defer allocator.free(sorted);
+
+    // Step 4: Output - Dereference pointers for output
+    var output_neuronas = std.ArrayListUnmanaged(Neurona){};
+    defer output_neuronas.deinit(allocator);
+
+    for (sorted) |n| {
+        try output_neuronas.append(allocator, n.*);
+    }
+
+    if (config.json_output) {
+        try outputJson(allocator, output_neuronas.items);
+    } else {
+        try outputList(allocator, output_neuronas.items);
+    }
+}
+
+/// Create a NeuronaView from a Neurona for evaluation
+fn createNeuronaView(allocator: Allocator, neurona: *const Neurona) !@import("../utils/eql_parser.zig").NeuronaView {
+    const eql_parser = @import("../utils/eql_parser.zig");
+
+    var view = eql_parser.NeuronaView{
+        .id = neurona.id,
+        .type = switch (neurona.type) {
+            .concept => .concept,
+            .reference => .reference,
+            .artifact => .artifact,
+            .state_machine => .state_machine,
+            .lesson => .lesson,
+            .requirement => .requirement,
+            .test_case => .test_case,
+            .issue => .issue,
+            .feature => .feature,
+        },
+        .title = neurona.title,
+        .tags = neurona.tags.items,
+        .connections = .{},
+    };
+
+    // Copy connections
+    var conn_it = neurona.connections.iterator();
+    while (conn_it.next()) |entry| {
+        // Parse connection type from key (which is @tagName(connection_type))
+        const conn_type = eql_parser.connectionTypeFromString(entry.key_ptr.*) orelse continue;
+
+        var conn_list = eql_parser.ConnectionList{
+            .connection_type = conn_type,
+            .connections = .{},
+        };
+
+        for (entry.value_ptr.connections.items) |*conn| {
+            try conn_list.connections.append(allocator, .{
+                .target_id = try allocator.dupe(u8, conn.target_id),
+                .weight = conn.weight, // u8 from Neurona.Connection
+            });
+        }
+
+        try view.connections.put(allocator, entry.key_ptr.*, conn_list);
+    }
+
+    return view;
 }
 
 /// Check if Neurona matches all filters

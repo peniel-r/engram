@@ -7,7 +7,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const NeuronaType = @import("../core/neurona.zig").NeuronaType;
 const Neurona = @import("../core/neurona.zig").Neurona;
-const readNeurona = @import("../storage/filesystem.zig").readNeurona;
+const FileOps = @import("../utils/file_ops.zig").FileOps;
 const uri_parser = @import("../utils/uri_parser.zig");
 const config_util = @import("../utils/config.zig");
 const editor_util = @import("../utils/editor.zig");
@@ -42,18 +42,15 @@ pub fn execute(allocator: Allocator, config: ShowConfig) !void {
         return;
     }
 
-    // Determine neuronas directory
-    const cortex_dir = config.cortex_dir orelse blk: {
-        const cd = uri_parser.findCortexDir(allocator) catch |err| {
-            if (err == error.CortexNotFound) {
-                std.debug.print("Error: No cortex found in current directory or parent directories.\n", .{});
-                std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
-                std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
-                std.process.exit(1);
-            }
-            return err;
-        };
-        break :blk cd;
+    // Determine cortex directory (searches up and down 3 levels)
+    const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
+        if (err == error.CortexNotFound) {
+            std.debug.print("Error: No cortex found in current directory or within 3 directory levels.\n", .{});
+            std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
+            std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+            std.process.exit(1);
+        }
+        return err;
     };
     defer if (config.cortex_dir == null) allocator.free(cortex_dir);
 
@@ -69,70 +66,16 @@ pub fn execute(allocator: Allocator, config: ShowConfig) !void {
     }
     defer if (resolved_id) |id| allocator.free(id);
 
-    // Step1: Find and read Neurona file
-    const filepath = try findNeuronaPath(allocator, neuronas_dir, resolved_id.?);
-    defer allocator.free(filepath);
+    // Read neurona with body using unified API
+    var result = try FileOps.readNeuronaWithBody(allocator, neuronas_dir, resolved_id.?);
+    defer result.deinit(allocator);
 
-    var neurona = try readNeurona(allocator, filepath);
-    defer neurona.deinit(allocator);
-
-    // Step 2: Read body content
-    const body = try readBodyContent(allocator, filepath);
-    defer allocator.free(body);
-
-    // Step 3: Output
+    // Output
     if (config.json_output) {
-        try outputJson(allocator, &neurona, filepath, body);
+        try outputJson(allocator, &result.neurona, result.filepath, result.body);
     } else {
-        try outputHuman(&neurona, body, config.show_connections, config.show_body);
+        try outputHuman(&result.neurona, result.body, config.show_connections, config.show_body);
     }
-}
-
-/// Find Neurona file by ID
-fn findNeuronaPath(allocator: Allocator, directory: []const u8, id: []const u8) ![]const u8 {
-    // Check for .md file directly
-    const direct_path = try std.fmt.allocPrint(allocator, "{s}/{s}.md", .{ directory, id });
-    defer allocator.free(direct_path);
-
-    if (std.fs.cwd().openFile(direct_path, .{})) |_| {
-        return try allocator.dupe(u8, direct_path);
-    } else |err| {
-        // File doesn't exist, search for files starting with ID prefix
-        if (err != error.FileNotFound) return err;
-    }
-
-    // Search in directory
-    var dir = try std.fs.cwd().openDir(directory, .{ .iterate = true });
-    defer dir.close();
-
-    var iter = dir.iterate();
-    while (try iter.next()) |entry| {
-        if (entry.kind != .file) continue;
-        if (!std.mem.endsWith(u8, entry.name, ".md")) continue;
-
-        // Check if ID is in filename (before .md)
-        const base_name = entry.name[0 .. entry.name.len - 3]; // Remove .md
-        if (std.mem.indexOf(u8, base_name, id) != null) {
-            return try std.fs.path.join(allocator, &.{ directory, entry.name });
-        }
-    }
-
-    return error.NeuronaNotFound;
-}
-
-/// Read file body content (markdown after frontmatter)
-fn readBodyContent(allocator: Allocator, filepath: []const u8) ![]const u8 {
-    const content = try std.fs.cwd().readFileAlloc(allocator, filepath, 10 * 1024 * 1024);
-    defer allocator.free(content); // Fix: Free the temporary content buffer
-
-    // Find end of frontmatter (second ---)
-    const second_delim = std.mem.indexOfPos(u8, content, 0, "\n---") orelse return error.InvalidFormat;
-
-    // Skip past second delimiter and any newlines
-    var body_start = second_delim + 4;
-    while (body_start < content.len and std.ascii.isWhitespace(content[body_start])) : (body_start += 1) {}
-
-    return try allocator.dupe(u8, content[body_start..]);
 }
 
 /// Human-friendly output
@@ -330,10 +273,15 @@ test "findNeuronaPath returns direct .md file" {
     });
 
     // Test with full path
-    const result = try findNeuronaPath(allocator, "neuronas_test", "test.001");
+    const test_dir = "neuronas_test";
+    const filepath_with_id = try std.fmt.allocPrint(allocator, "{s}/test.001.md", .{test_dir});
+    defer allocator.free(filepath_with_id); // Fix: Free allocated path
+    try std.fs.cwd().writeFile(.{ .sub_path = filepath_with_id, .data = "---\nid: test.001\n---\n" });
+
+    const result = try FileOps.findNeuronaFile(allocator, test_dir, "test.001");
     defer allocator.free(result);
 
-    // Should return the path as-is since we passed full path
+    // Should return path as-is since we passed full path
     try std.testing.expect(result.len > 0);
 }
 
