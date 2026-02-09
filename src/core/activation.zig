@@ -5,10 +5,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Graph = @import("graph.zig").Graph;
-const BM25Index = @import("../root.zig").storage.BM25Index;
-const VectorIndex = @import("../root.zig").storage.VectorIndex;
-const storage = @import("../root.zig").storage;
-const BM25Result = @import("../root.zig").storage.BM25Result;
+const BM25Index = @import("../storage/tfidf.zig").BM25Index;
+const VectorIndex = @import("../storage/vectors.zig").VectorIndex;
+const BM25Result = @import("../storage/tfidf.zig").SearchResult;
 
 /// Activations directory path
 const ACTIVATIONS_DIR = ".activations";
@@ -174,6 +173,9 @@ pub const NeuralActivation = struct {
                     // Apply decay
                     const edge_weight = @as(f32, @floatFromInt(edge.weight)) / 100.0;
                     const propagated = activation * edge_weight * self.decay_factor;
+
+                    // Threshold: Stop propagation when signal strength drops below 0.2
+                    if (propagated < 0.2) continue;
 
                     // Add to new activations (accumulate)
                     const existing = new_activations.getPtr(target_id);

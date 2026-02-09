@@ -1,50 +1,50 @@
 //! By convention, root.zig is the root source file when making a library.
 const std = @import("std");
 
-// Re-export core modules
-pub const Neurona = @import("core/neurona.zig").Neurona;
-pub const NeuronaType = @import("core/neurona.zig").NeuronaType;
-pub const Connection = @import("core/neurona.zig").Connection;
-pub const ConnectionType = @import("core/neurona.zig").ConnectionType;
-pub const Cortex = @import("core/cortex.zig").Cortex;
-pub const core = struct {
-    pub const graph = @import("core/graph.zig");
-    pub const NeuralActivation = @import("core/activation.zig").NeuralActivation;
-    pub const ActivationResult = @import("core/activation.zig").ActivationResult;
-    pub const state_machine = @import("core/state_machine.zig");
-    pub const validator = @import("core/validator.zig");
-};
+// Import the new Core Library
+const lib = @import("neurona.zig");
+
+// Re-export Core Library Top-Level
+pub const Neurona = lib.Neurona;
+pub const Cortex = lib.Cortex;
+
+// Re-export Core Modules
+pub const NeuronaType = lib.core.NeuronaType;
+pub const Connection = lib.core.Connection;
+pub const ConnectionType = lib.core.ConnectionType;
+
+pub const core = lib.core;
 
 // Re-export storage modules
 pub const storage = struct {
-    pub const isNeuronaFile = @import("storage/filesystem.zig").isNeuronaFile;
-    pub const readNeurona = @import("storage/filesystem.zig").readNeurona;
-    pub const writeNeurona = @import("storage/filesystem.zig").writeNeurona;
-    pub const scanNeuronas = @import("storage/filesystem.zig").scanNeuronas;
-    pub const getLatestModificationTime = @import("storage/filesystem.zig").getLatestModificationTime;
-    pub const BM25Index = @import("storage/tfidf.zig").BM25Index;
-    pub const VectorIndex = @import("storage/vectors.zig").VectorIndex;
-    pub const SearchResult = @import("storage/vectors.zig").SearchResult;
-    pub const BM25Result = @import("storage/tfidf.zig").SearchResult;
-    pub const GloVeIndex = @import("storage/glove.zig").GloVeIndex;
-    pub const NeuralActivation = @import("core/activation.zig").NeuralActivation;
-    pub const llm_cache = @import("storage/llm_cache.zig");
-    pub const index = @import("storage/index.zig");
+    pub const isNeuronaFile = lib.storage.filesystem.isNeuronaFile;
+    pub const readNeurona = lib.storage.filesystem.readNeurona;
+    pub const writeNeurona = lib.storage.filesystem.writeNeurona;
+    pub const scanNeuronas = lib.storage.filesystem.scanNeuronas;
+    pub const getLatestModificationTime = lib.storage.filesystem.getLatestModificationTime;
+    pub const BM25Index = lib.storage.BM25Index;
+    pub const VectorIndex = lib.storage.VectorIndex;
+    pub const SearchResult = lib.storage.SearchResult;
+    pub const BM25Result = lib.storage.BM25Result;
+    pub const GloVeIndex = lib.storage.GloVeIndex;
+    pub const NeuralActivation = lib.core.NeuralActivation;
+    pub const llm_cache = lib.storage.llm_cache;
+    pub const index = lib.storage.index;
 };
 
 // Re-export utils
-pub const frontmatter = @import("utils/frontmatter.zig").Frontmatter;
-pub const yaml = @import("utils/yaml.zig").Parser;
+pub const frontmatter = lib.utils.frontmatter.Frontmatter;
+pub const yaml = lib.utils.yaml.Parser;
 pub const utils = struct {
-    pub const timestamp = @import("utils/timestamp.zig");
-    pub const state_filters = @import("utils/state_filters.zig");
-    pub const token_counter = @import("utils/token_counter.zig");
-    pub const summary = @import("utils/summary.zig");
-    pub const benchmark = @import("benchmark.zig");
-    pub const HelpGenerator = @import("utils/help_generator.zig").HelpGenerator;
-    pub const FileOps = @import("utils/file_ops.zig").FileOps;
-    pub const NeuronaWithBody = @import("utils/file_ops.zig").NeuronaWithBody;
-    pub const ErrorReporter = @import("utils/error_reporter.zig").ErrorReporter;
+    pub const timestamp = lib.utils.timestamp;
+    pub const state_filters = lib.utils.state_filters;
+    pub const token_counter = lib.utils.token_counter;
+    pub const summary = lib.utils.summary;
+    pub const benchmark = @import("benchmark.zig"); // Benchmark is not in lib
+    pub const HelpGenerator = @import("utils/help_generator.zig").HelpGenerator; // CLI specific
+    pub const FileOps = lib.utils.file_ops.FileOps;
+    pub const NeuronaWithBody = lib.utils.file_ops.NeuronaWithBody;
+    pub const ErrorReporter = @import("utils/error_reporter.zig").ErrorReporter; // CLI specific
 };
 
 // Re-export CLI (for integration tests)
