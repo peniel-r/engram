@@ -408,7 +408,10 @@ test "filterNeuronas filters by type" {
             .related_to = std.ArrayListUnmanaged([]const u8){},
         } },
         .tags = std.ArrayListUnmanaged([]const u8){},
-        .links = std.ArrayListUnmanaged([]const u8){},
+        .connections = .{},
+        .updated = "2024-01-01T00:00:00Z",
+        .hash = null,
+        .llm_metadata = null,
     };
 
     const neurona2 = Neurona{
@@ -425,7 +428,10 @@ test "filterNeuronas filters by type" {
             .sprint = null,
         } },
         .tags = std.ArrayListUnmanaged([]const u8){},
-        .links = std.ArrayListUnmanaged([]const u8){},
+        .connections = .{},
+        .updated = "2024-01-01T00:00:00Z",
+        .hash = null,
+        .llm_metadata = null,
     };
 
     const neuronas = [_]Neurona{ neurona1, neurona2 };
@@ -457,7 +463,10 @@ test "evaluateCondition matches type field" {
             .related_to = std.ArrayListUnmanaged([]const u8){},
         } },
         .tags = std.ArrayListUnmanaged([]const u8){},
-        .links = std.ArrayListUnmanaged([]const u8){},
+        .connections = .{},
+        .updated = "2024-01-01T00:00:00Z",
+        .hash = null,
+        .llm_metadata = null,
     };
 
     const cond = state_filters.FilterCondition{

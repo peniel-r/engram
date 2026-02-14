@@ -14,6 +14,7 @@ pub const Connection = @import("lib/root.zig").Connection;
 pub const ConnectionType = @import("lib/root.zig").ConnectionType;
 pub const ConnectionGroup = @import("lib/root.zig").ConnectionGroup;
 pub const Context = @import("lib/root.zig").Context;
+pub const Cortex = @import("core/cortex.zig").Cortex;
 
 // Context-specific types
 pub const StateMachineContext = @import("lib/root.zig").StateMachineContext;
@@ -54,6 +55,29 @@ pub const core = struct {
     pub const Context = @import("lib/root.zig").Context;
     pub const NeuralActivation = @import("core/activation.zig").NeuralActivation;
     pub const ActivationResult = @import("core/activation.zig").ActivationResult;
+    pub const graph = @import("core/graph.zig");
+    pub const state_machine = @import("core/state_machine.zig");
+    pub const validator = @import("core/validator.zig");
+    pub const cortex = @import("core/cortex.zig");
+};
+
+// Re-export CLI modules
+pub const cli = struct {
+    pub const init = @import("cli/init.zig");
+    pub const new = @import("cli/new.zig");
+    pub const show = @import("cli/show.zig");
+    pub const link = @import("cli/link.zig");
+    pub const sync = @import("cli/sync.zig");
+    pub const delete = @import("cli/delete.zig");
+    pub const trace = @import("cli/trace.zig");
+    pub const status = @import("cli/status.zig");
+    pub const query = @import("cli/query.zig");
+    pub const update = @import("cli/update.zig");
+    pub const impact = @import("cli/impact.zig");
+    pub const link_artifact = @import("cli/link_artifact.zig");
+    pub const release_status = @import("cli/release_status.zig");
+    pub const metrics = @import("cli/metrics.zig");
+    pub const man = @import("cli/man.zig");
 };
 
 // Re-export utilities
