@@ -1,3 +1,13 @@
+// DEPRECATED: This file is kept for backward compatibility only.
+//
+// All types have been migrated to src/lib/core/
+// - Neurona, NeuronaType, LLMMetadata -> src/lib/core/types.zig
+// - Connection, ConnectionType, ConnectionGroup -> src/lib/core/connections.zig
+// - Context -> src/lib/core/context.zig
+//
+// Please use @import("lib/root.zig") or @import("root.zig") instead.
+// This file will be removed in a future version.
+//
 // Neurona data structure for the Neurona System
 // Supports Tier 1, 2, and 3 specifications
 const std = @import("std");

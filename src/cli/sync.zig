@@ -2,11 +2,13 @@
 // The `engram sync` command for rebuilding graph index
 // Scans all Neuronas and rebuilds adjacency index
 // MIGRATED: Now uses Phase 3 CLI utilities (HumanOutput)
+// MIGRATED: Now uses lib types via root.zig
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const NeuronaType = @import("../core/neurona.zig").NeuronaType;
-const Neurona = @import("../core/neurona.zig").Neurona;
+// Use lib types via root.zig (Phase 4 migration)
+const Neurona = @import("../root.zig").Neurona;
+const NeuronaType = @import("../root.zig").NeuronaType;
 const Graph = @import("../core/graph.zig").Graph;
 const storage = @import("../root.zig").storage;
 const validator = @import("../core/validator.zig");

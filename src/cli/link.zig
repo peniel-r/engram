@@ -1,13 +1,14 @@
 // File: src/cli/link.zig
 // The `engram link` command for creating connections between Neuronas
 // MIGRATED: Now uses Phase 3 CLI utilities (HumanOutput)
+// MIGRATED: Now uses lib types via root.zig
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const fs = @import("../storage/filesystem.zig");
-const neurona_core = @import("../core/neurona.zig");
-const ConnectionType = neurona_core.ConnectionType;
-const Connection = neurona_core.Connection;
+// Use lib types via root.zig (Phase 4 migration)
+const ConnectionType = @import("../root.zig").ConnectionType;
+const Connection = @import("../root.zig").Connection;
 const timestamp = @import("../utils/timestamp.zig");
 const uri_parser = @import("../utils/uri_parser.zig");
 const ErrorReporter = @import("../utils/error_reporter.zig").ErrorReporter;

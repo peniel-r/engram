@@ -2,11 +2,13 @@
 // The `engram metrics` command for displaying project metrics
 // Shows statistics about requirements, tests, issues, and completion
 // MIGRATED: Now uses Phase 3 CLI utilities (JsonOutput, HumanOutput)
+// MIGRATED: Now uses lib types via root.zig
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Neurona = @import("../core/neurona.zig").Neurona;
-const NeuronaType = @import("../core/neurona.zig").NeuronaType;
+// Use lib types via root.zig (Phase 4 migration)
+const Neurona = @import("../root.zig").Neurona;
+const NeuronaType = @import("../root.zig").NeuronaType;
 const Graph = @import("../core/graph.zig").Graph;
 const scanNeuronas = @import("../storage/filesystem.zig").scanNeuronas;
 const uri_parser = @import("../utils/uri_parser.zig");

@@ -1,11 +1,14 @@
 // File: src/cli/query.zig
 // The `engram query` command for searching Neuronas
 // Supports type, tag, and connection filters
+// MIGRATED: Now uses lib types via root.zig
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Neurona = @import("../core/neurona.zig").Neurona;
-const NeuronaType = @import("../core/neurona.zig").NeuronaType;
+// Use lib types via root.zig (Phase 4 migration)
+const Neurona = @import("../root.zig").Neurona;
+const NeuronaType = @import("../root.zig").NeuronaType;
+const Connection = @import("../root.zig").Connection;
 const storage = @import("../root.zig").storage;
 const Graph = @import("../core/graph.zig").Graph;
 const NeuralActivation = @import("../root.zig").core.NeuralActivation;
@@ -365,7 +368,7 @@ fn matchesConnectionFilter(neurona: *const Neurona, filter: ConnectionFilter) bo
 }
 
 /// Match a single connection
-fn matchesSingleConnection(conn: *const @import("../core/neurona.zig").Connection, filter: ConnectionFilter) bool {
+fn matchesSingleConnection(conn: *const Connection, filter: ConnectionFilter) bool {
     if (filter.connection_type) |ct| {
         const type_name = @tagName(conn.connection_type);
         if (std.mem.eql(u8, type_name, ct)) {

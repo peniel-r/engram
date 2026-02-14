@@ -2,11 +2,14 @@
 // Handles reading, writing, and scanning Neurona Markdown files
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Neurona = @import("../core/neurona.zig").Neurona;
-const NeuronaType = @import("../core/neurona.zig").NeuronaType;
-const Connection = @import("../core/neurona.zig").Connection;
-const ConnectionType = @import("../core/neurona.zig").ConnectionType;
-const LLMMetadata = @import("../core/neurona.zig").LLMMetadata;
+
+// Import from library via root.zig (Phase 4 migration)
+const Neurona = @import("../root.zig").Neurona;
+const NeuronaType = @import("../root.zig").NeuronaType;
+const Connection = @import("../root.zig").Connection;
+const ConnectionType = @import("../root.zig").ConnectionType;
+const Context = @import("../root.zig").Context;
+const LLMMetadata = @import("../lib/core/types.zig").LLMMetadata;
 const frontmatter = @import("../utils/frontmatter.zig").Frontmatter;
 const yaml = @import("../utils/yaml.zig");
 const validator = @import("../core/validator.zig");
@@ -78,8 +81,7 @@ fn replaceString(allocator: Allocator, old: []const u8, new_value: []const u8) !
 }
 
 /// Parse context from YAML object based on neurona type
-fn parseContext(allocator: Allocator, ctx_obj: std.StringHashMap(yaml.Value), neurona_type: NeuronaType) !@import("../core/neurona.zig").Context {
-    const Context = @import("../core/neurona.zig").Context;
+fn parseContext(allocator: Allocator, ctx_obj: std.StringHashMap(yaml.Value), neurona_type: NeuronaType) !Context {
 
     // Try to infer context type from fields present
     const has_status = ctx_obj.get("status") != null;

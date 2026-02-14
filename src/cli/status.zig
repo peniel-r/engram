@@ -3,11 +3,14 @@
 // Sorts by priority, assignee, status
 // Supports EQL filtering: --filter "state:open AND priority:1"
 // MIGRATED: Now uses Phase 3 CLI utilities (JsonOutput, HumanOutput)
+// MIGRATED: Now uses lib types via root.zig
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Neurona = @import("../core/neurona.zig").Neurona;
-const NeuronaType = @import("../core/neurona.zig").NeuronaType;
+
+// Use lib types via root.zig (Phase 4 migration)
+const Neurona = @import("../root.zig").Neurona;
+const NeuronaType = @import("../root.zig").NeuronaType;
 const storage = @import("../root.zig").storage;
 const state_filters = @import("../utils/state_filters.zig");
 const uri_parser = @import("../utils/uri_parser.zig");

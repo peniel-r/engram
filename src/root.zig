@@ -1,27 +1,33 @@
-//! Legacy root file - re-exports from new library location
-//! This file provides backward compatibility during library refactoring
+//! Engram Library Entry Point
+//!
+//! This is the main entry point for the Engram library. It re-exports
+//! all public types and utilities from the library modules.
+//!
+//! For CLI usage, see src/main.zig
 
 const std = @import("std");
 
-// Re-export from new library location
+// Re-export core types from library
 pub const Neurona = @import("lib/root.zig").Neurona;
 pub const NeuronaType = @import("lib/root.zig").NeuronaType;
 pub const Connection = @import("lib/root.zig").Connection;
 pub const ConnectionType = @import("lib/root.zig").ConnectionType;
+pub const ConnectionGroup = @import("lib/root.zig").ConnectionGroup;
 pub const Context = @import("lib/root.zig").Context;
 
-pub const core = struct {
-    pub const Neurona = @import("lib/root.zig").Neurona;
-    pub const NeuronaType = @import("lib/root.zig").NeuronaType;
-    pub const Connection = @import("lib/root.zig").Connection;
-    pub const ConnectionType = @import("lib/root.zig").ConnectionType;
-    pub const ConnectionGroup = @import("lib/core/connections.zig").ConnectionGroup;
-    pub const Context = @import("lib/root.zig").Context;
-    pub const NeuralActivation = @import("core/activation.zig").NeuralActivation;
-    pub const ActivationResult = @import("core/activation.zig").ActivationResult;
-};
+// Context-specific types
+pub const StateMachineContext = @import("lib/root.zig").StateMachineContext;
+pub const ArtifactContext = @import("lib/root.zig").ArtifactContext;
+pub const TestCaseContext = @import("lib/root.zig").TestCaseContext;
+pub const IssueContext = @import("lib/root.zig").IssueContext;
+pub const RequirementContext = @import("lib/root.zig").RequirementContext;
 
-// Re-export storage modules (from existing location for now)
+// Library utilities
+pub const Json = @import("lib/root.zig").Json;
+pub const TextProcessor = @import("lib/root.zig").TextProcessor;
+pub const CortexResolver = @import("lib/root.zig").CortexResolver;
+
+// Re-export storage modules (legacy location - still used by CLI)
 pub const storage = struct {
     pub const isNeuronaFile = @import("storage/filesystem.zig").isNeuronaFile;
     pub const readNeurona = @import("storage/filesystem.zig").readNeurona;
@@ -38,10 +44,19 @@ pub const storage = struct {
     pub const index = @import("storage/index.zig");
 };
 
-// Re-export core NeuralActivation directly for backward compatibility
-pub const NeuralActivation = @import("core/activation.zig").NeuralActivation;
+// Re-export core modules
+pub const core = struct {
+    pub const Neurona = @import("lib/root.zig").Neurona;
+    pub const NeuronaType = @import("lib/root.zig").NeuronaType;
+    pub const Connection = @import("lib/root.zig").Connection;
+    pub const ConnectionType = @import("lib/root.zig").ConnectionType;
+    pub const ConnectionGroup = @import("lib/root.zig").ConnectionGroup;
+    pub const Context = @import("lib/root.zig").Context;
+    pub const NeuralActivation = @import("core/activation.zig").NeuralActivation;
+    pub const ActivationResult = @import("core/activation.zig").ActivationResult;
+};
 
-// Re-export utils
+// Re-export utilities
 pub const frontmatter = @import("utils/frontmatter.zig").Frontmatter;
 pub const yaml = @import("utils/yaml.zig").Parser;
 pub const utils = struct {
@@ -57,45 +72,5 @@ pub const utils = struct {
     pub const Json = @import("lib/utils/strings.zig").Json;
 };
 
-// Re-export CLI (for integration tests)
-pub const cli = struct {
-    pub const init = @import("cli/init.zig");
-    pub const new = @import("cli/new.zig");
-    pub const query = @import("cli/query.zig");
-    pub const impact = @import("cli/impact.zig");
-    pub const release_status = @import("cli/release_status.zig");
-    pub const trace = @import("cli/trace.zig");
-};
-
-// Add test to verify backward compatibility
-test "legacy root re-exports correctly" {
-    const allocator = std.testing.allocator;
-
-    // Test Neurona
-    var neurona = try Neurona.init(allocator);
-    defer neurona.deinit(allocator);
-    neurona.title = try allocator.dupe(u8, "Test");
-
-    try std.testing.expectEqualStrings("Test", neurona.title);
-
-    // Test ConnectionType
-    const conn_type = ConnectionType.fromString("parent");
-    try std.testing.expectEqual(ConnectionType.parent, conn_type.?);
-}
-
-// Keep old functions for backward compatibility
-pub fn addInt(a: i32, b: i32) i32 {
-    return a + b;
-}
-
-test "basic add functionality" {
-    try std.testing.expect(addInt(3, 7) == 10);
-}
-
-pub fn add(a: i32, b: i32) i32 {
-    return a + b;
-}
-
-test "add function works" {
-    try std.testing.expect(add(3, 7) == 10);
-}
+// Direct re-export for backward compatibility
+pub const NeuralActivation = @import("core/activation.zig").NeuralActivation;

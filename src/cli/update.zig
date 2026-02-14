@@ -2,14 +2,16 @@
 // The `engram update` command for updating Neurona fields programmatically
 // Supports setting tier1, tier2, and tier3 fields
 // MIGRATED: Now uses Phase 3 CLI utilities (HumanOutput)
+// MIGRATED: Now uses lib types via root.zig
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Neurona = @import("../core/neurona.zig").Neurona;
-const NeuronaType = @import("../core/neurona.zig").NeuronaType;
-const Connection = @import("../core/neurona.zig").Connection;
-const ConnectionType = @import("../core/neurona.zig").ConnectionType;
-const LLMMetadata = @import("../core/neurona.zig").LLMMetadata;
+// Use lib types via root.zig (Phase 4 migration)
+const Neurona = @import("../root.zig").Neurona;
+const NeuronaType = @import("../root.zig").NeuronaType;
+const Connection = @import("../root.zig").Connection;
+const ConnectionType = @import("../root.zig").ConnectionType;
+const LLMMetadata = @import("../lib/core/types.zig").LLMMetadata;
 const readNeurona = @import("../storage/filesystem.zig").readNeurona;
 const writeNeurona = @import("../storage/filesystem.zig").writeNeurona;
 const findNeuronaPath = @import("../storage/filesystem.zig").findNeuronaPath;

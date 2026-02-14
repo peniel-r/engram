@@ -3,11 +3,13 @@
 // Displays Neurona content with connections
 // Also supports `engram show config` to open configuration file
 // MIGRATED: Now uses Phase 3 CLI utilities (JsonOutput, HumanOutput)
+// MIGRATED: Now uses lib types via root.zig
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const NeuronaType = @import("../core/neurona.zig").NeuronaType;
-const Neurona = @import("../core/neurona.zig").Neurona;
+// Use lib types via root.zig (Phase 4 migration)
+const Neurona = @import("../root.zig").Neurona;
+const NeuronaType = @import("../root.zig").NeuronaType;
 const FileOps = @import("../utils/file_ops.zig").FileOps;
 const uri_parser = @import("../utils/uri_parser.zig");
 const config_util = @import("../utils/config.zig");

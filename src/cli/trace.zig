@@ -2,10 +2,12 @@
 // The `engram trace` command for visualizing dependency trees
 // Traces requirements → tests → code, issues → blocked artifacts
 // MIGRATED: Now uses Phase 3 CLI utilities (JsonOutput, HumanOutput)
+// MIGRATED: Now uses lib types via root.zig
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Neurona = @import("../core/neurona.zig").Neurona;
+// Use lib types via root.zig (Phase 4 migration)
+const Neurona = @import("../root.zig").Neurona;
 const readNeurona = @import("../storage/filesystem.zig").readNeurona;
 const scanNeuronas = @import("../storage/filesystem.zig").scanNeuronas;
 const findNeuronaPath = @import("../storage/filesystem.zig").findNeuronaPath;

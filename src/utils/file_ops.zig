@@ -1,9 +1,11 @@
 // File: src/utils/file_ops.zig
 // Unified file operations for CLI commands
+// MIGRATED: Now uses lib types via root.zig
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Neurona = @import("../core/neurona.zig").Neurona;
+// Use lib types via root.zig (Phase 4 migration)
+const Neurona = @import("../root.zig").Neurona;
 const fs = @import("../storage/filesystem.zig");
 
 /// Result structure for readNeuronaWithBody

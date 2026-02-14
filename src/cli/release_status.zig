@@ -2,12 +2,14 @@
 // The `engram release-status` command for release readiness checks
 // Validates requirements coverage, test status, blocking issues
 // MIGRATED: Now uses Phase 3 CLI utilities (JsonOutput, HumanOutput)
+// MIGRATED: Now uses lib types via root.zig
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Neurona = @import("../core/neurona.zig").Neurona;
-const NeuronaType = @import("../core/neurona.zig").NeuronaType;
-const ConnectionType = @import("../core/neurona.zig").ConnectionType;
+// Use lib types via root.zig (Phase 4 migration)
+const Neurona = @import("../root.zig").Neurona;
+const NeuronaType = @import("../root.zig").NeuronaType;
+const ConnectionType = @import("../root.zig").ConnectionType;
 const Graph = @import("../core/graph.zig").Graph;
 const scanNeuronas = @import("../storage/filesystem.zig").scanNeuronas;
 const uri_parser = @import("../utils/uri_parser.zig");

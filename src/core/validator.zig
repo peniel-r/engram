@@ -1,12 +1,14 @@
 // Connection Validator for Neurona System
 // Validates connections between Neuronas based on type rules
 // Enforces cardinality constraints and detects cycles
+// MIGRATED: Now uses lib types via root.zig
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Neurona = @import("./neurona.zig").Neurona;
-const NeuronaType = @import("./neurona.zig").NeuronaType;
-const ConnectionType = @import("./neurona.zig").ConnectionType;
+// Use lib types via root.zig (Phase 4 migration)
+const Neurona = @import("../root.zig").Neurona;
+const NeuronaType = @import("../root.zig").NeuronaType;
+const ConnectionType = @import("../root.zig").ConnectionType;
 const Graph = @import("./graph.zig").Graph;
 
 // ==================== Validation Rules ====================

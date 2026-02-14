@@ -24,7 +24,8 @@ pub const Context = union(enum) {
     requirement: RequirementContext,
 
     /// Custom context (any key-value pairs)
-    custom: std.StringHashMapUnmanaged([]const u8),
+    /// Using managed StringHashMap for compatibility with existing storage/CLI code
+    custom: std.StringHashMap([]const u8),
 
     /// No context (Tier 1/2 default)
     none,
@@ -43,7 +44,7 @@ pub const Context = union(enum) {
                     allocator.free(entry.key_ptr.*);
                     allocator.free(entry.value_ptr.*);
                 }
-                ctx.deinit(allocator);
+                ctx.deinit();
             },
             .none => {},
         }
@@ -175,8 +176,8 @@ test "Context deinit handles all variants" {
     var ctx3: Context = .none;
     ctx3.deinit(allocator);
 
-    // Test custom - use allocated strings, not literals
-    var ctx4: Context = .{ .custom = std.StringHashMapUnmanaged([]const u8){} };
-    try ctx4.custom.put(allocator, try allocator.dupe(u8, "key"), try allocator.dupe(u8, "value"));
+    // Test custom - use managed StringHashMap
+    var ctx4: Context = .{ .custom = std.StringHashMap([]const u8).init(allocator) };
+    try ctx4.custom.put(try allocator.dupe(u8, "key"), try allocator.dupe(u8, "value"));
     ctx4.deinit(allocator);
 }
