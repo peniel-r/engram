@@ -827,26 +827,27 @@ pub fn scanNeuronas(allocator: Allocator, directory: []const u8) ![]Neurona {
 
 /// Find Neurona file path by ID
 pub fn findNeuronaPath(allocator: Allocator, neuronas_dir: []const u8, id: []const u8) ![]const u8 {
-    // Check for .md file directly
     const id_md = try std.fmt.allocPrint(allocator, "{s}.md", .{id});
     defer allocator.free(id_md);
-    const direct_path = try std.fs.path.join(allocator, &.{ neuronas_dir, id_md });
 
-    if (std.fs.cwd().access(direct_path, .{})) |_| {
-        return direct_path;
-    } else |err| {
-        // File doesn't exist, search for files starting with ID prefix
-        allocator.free(direct_path);
-        if (err != error.FileNotFound) return err;
-    }
-
-    // Search in neuronas directory
-    var dir = std.fs.cwd().openDir(neuronas_dir, .{ .iterate = true }) catch |err| {
-        if (err == error.FileNotFound) return error.NeuronaNotFound;
-        return err;
-    };
+    var dir = if (std.fs.path.isAbsolute(neuronas_dir))
+        std.fs.openDirAbsolute(neuronas_dir, .{ .iterate = true }) catch |err| {
+            if (err == error.FileNotFound) return error.NeuronaNotFound;
+            return err;
+        }
+    else
+        std.fs.cwd().openDir(neuronas_dir, .{ .iterate = true }) catch |err| {
+            if (err == error.FileNotFound) return error.NeuronaNotFound;
+            return err;
+        };
     defer dir.close();
 
+    // Check for .md file directly
+    if (dir.access(id_md, .{})) |_| {
+        return try std.fs.path.join(allocator, &.{ neuronas_dir, id_md });
+    } else |_| {}
+
+    // Search in neuronas directory
     var iter = dir.iterate();
     while (try iter.next()) |entry| {
         if (entry.kind != .file) continue;

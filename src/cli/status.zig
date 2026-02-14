@@ -13,7 +13,7 @@ const Neurona = @import("../root.zig").Neurona;
 const NeuronaType = @import("../root.zig").NeuronaType;
 const storage = @import("../root.zig").storage;
 const state_filters = @import("../utils/state_filters.zig");
-const uri_parser = @import("../utils/uri_parser.zig");
+const CortexResolver = @import("../root.zig").CortexResolver;
 
 // Import Phase 3 CLI utilities
 const JsonOutput = @import("output/json.zig").JsonOutput;
@@ -26,6 +26,7 @@ pub const StatusConfig = struct {
     priority_filter: ?u8 = null,
     assignee_filter: ?[]const u8 = null,
     filter_str: ?[]const u8 = null,
+    blocking_target: ?[]const u8 = null,
     sort_by: SortField = .priority,
     json_output: bool = false,
     cortex_dir: ?[]const u8 = null,
@@ -39,7 +40,7 @@ pub const SortField = enum {
 
 /// Main command handler
 pub fn execute(allocator: Allocator, config: StatusConfig) !void {
-    const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
+    var cortex = CortexResolver.find(allocator, config.cortex_dir) catch |err| {
         if (err == error.CortexNotFound) {
             try HumanOutput.printError("No cortex found in current directory or within 3 directory levels.");
             try HumanOutput.printInfo("Navigate to a cortex directory or use --cortex <path> to specify location.");
@@ -48,10 +49,9 @@ pub fn execute(allocator: Allocator, config: StatusConfig) !void {
         }
         return err;
     };
-    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+    defer cortex.deinit(allocator);
 
-    const neuronas_dir = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
-    defer allocator.free(neuronas_dir);
+    const neuronas_dir = cortex.neuronas_path;
 
     var filter_expr: ?state_filters.FilterExpression = null;
     defer {
@@ -93,8 +93,31 @@ fn filterNeuronas(allocator: Allocator, neuronas: []const Neurona, config: Statu
                 .test_case => |ctx| {
                     if (!std.mem.eql(u8, ctx.status, status)) continue;
                 },
+                .issue => |ctx| {
+                    if (!std.mem.eql(u8, ctx.status, status)) continue;
+                },
+                .requirement => |ctx| {
+                    if (!std.mem.eql(u8, ctx.status, status)) continue;
+                },
                 else => continue,
             }
+        }
+
+        if (config.blocking_target) |target| {
+            var is_blocking = false;
+            var conn_it = neurona.connections.iterator();
+            while (conn_it.next()) |entry| {
+                if (std.mem.eql(u8, entry.key_ptr.*, "blocks")) {
+                    for (entry.value_ptr.connections.items) |conn| {
+                        if (std.mem.eql(u8, conn.target_id, target)) {
+                            is_blocking = true;
+                            break;
+                        }
+                    }
+                }
+                if (is_blocking) break;
+            }
+            if (!is_blocking) continue;
         }
 
         if (filter_expr) |expr| {

@@ -11,6 +11,7 @@ const Allocator = std.mem.Allocator;
 const Neurona = @import("../root.zig").Neurona;
 const NeuronaType = @import("../root.zig").NeuronaType;
 const FileOps = @import("../utils/file_ops.zig").FileOps;
+const CortexResolver = @import("../root.zig").CortexResolver;
 const uri_parser = @import("../utils/uri_parser.zig");
 const config_util = @import("../utils/config.zig");
 const editor_util = @import("../utils/editor.zig");
@@ -55,7 +56,7 @@ pub fn execute(allocator: Allocator, config: ShowConfig) !void {
     }
 
     // Determine cortex directory (searches up and down 3 levels)
-    const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
+    var cortex = CortexResolver.find(allocator, config.cortex_dir) catch |err| {
         if (err == error.CortexNotFound) {
             try HumanOutput.printError("No cortex found in current directory or within 3 directory levels.");
             try HumanOutput.printInfo("Navigate to a cortex directory or use --cortex <path> to specify location.");
@@ -64,10 +65,9 @@ pub fn execute(allocator: Allocator, config: ShowConfig) !void {
         }
         return err;
     };
-    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+    defer cortex.deinit(allocator);
 
-    const neuronas_dir = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
-    defer allocator.free(neuronas_dir);
+    const neuronas_dir = cortex.neuronas_path;
 
     // Resolve URI or use direct ID
     var resolved_id: ?[]const u8 = null;

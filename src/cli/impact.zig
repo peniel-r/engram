@@ -13,6 +13,7 @@ const ConnectionType = @import("../root.zig").ConnectionType;
 const Graph = @import("../core/graph.zig").Graph;
 const scanNeuronas = @import("../storage/filesystem.zig").scanNeuronas;
 const readNeurona = @import("../storage/filesystem.zig").readNeurona;
+const CortexResolver = @import("../root.zig").CortexResolver;
 const uri_parser = @import("../utils/uri_parser.zig");
 
 // Import Phase 3 CLI utilities
@@ -69,7 +70,7 @@ pub const RecommendationAction = enum {
 };
 
 pub fn execute(allocator: Allocator, config: ImpactConfig) !void {
-    const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
+    var cortex = CortexResolver.find(allocator, config.cortex_dir) catch |err| {
         if (err == error.CortexNotFound) {
             try HumanOutput.printError("No cortex found in current directory or within 3 directory levels.");
             try HumanOutput.printInfo("Navigate to a cortex directory or use --cortex <path> to specify location.");
@@ -78,10 +79,9 @@ pub fn execute(allocator: Allocator, config: ImpactConfig) !void {
         }
         return err;
     };
-    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+    defer cortex.deinit(allocator);
 
-    const neuronas_dir = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
-    defer allocator.free(neuronas_dir);
+    const neuronas_dir = cortex.neuronas_path;
 
     const neuronas = try scanNeuronas(allocator, neuronas_dir);
     defer {

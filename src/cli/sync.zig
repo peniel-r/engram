@@ -13,6 +13,7 @@ const Graph = @import("../core/graph.zig").Graph;
 const storage = @import("../root.zig").storage;
 const validator = @import("../core/validator.zig");
 const benchmark = @import("../root.zig").utils.benchmark;
+const CortexResolver = @import("../root.zig").CortexResolver;
 const uri_parser = @import("../utils/uri_parser.zig");
 
 // Import Phase 3 CLI utilities
@@ -30,7 +31,7 @@ pub const SyncConfig = struct {
 /// Main command handler
 pub fn execute(allocator: Allocator, config: SyncConfig) !void {
     // Step 0: Determine cortex directory and neuronas directory
-    const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
+    var cortex = CortexResolver.find(allocator, config.cortex_dir) catch |err| {
         if (err == error.CortexNotFound) {
             try HumanOutput.printError("No cortex found in current directory or within 3 directory levels.");
             try HumanOutput.printInfo("Navigate to a cortex directory or use --cortex <path> to specify location.");
@@ -39,10 +40,9 @@ pub fn execute(allocator: Allocator, config: SyncConfig) !void {
         }
         return err;
     };
-    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+    defer cortex.deinit(allocator);
 
-    const directory = config.directory orelse try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
-    defer if (config.directory == null) allocator.free(directory);
+    const directory = config.directory orelse cortex.neuronas_path;
 
     var reports = std.ArrayListUnmanaged(benchmark.BenchmarkReport){};
     defer reports.deinit(allocator);

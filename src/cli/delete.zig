@@ -6,6 +6,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const FileOps = @import("../utils/file_ops.zig").FileOps;
 const ErrorReporter = @import("../utils/error_reporter.zig").ErrorReporter;
+const CortexResolver = @import("../root.zig").CortexResolver;
 const uri_parser = @import("../utils/uri_parser.zig");
 
 // Import Phase 3 CLI utilities
@@ -21,17 +22,16 @@ pub const DeleteConfig = struct {
 /// Execute delete command
 pub fn execute(allocator: Allocator, config: DeleteConfig) !void {
     // Determine cortex directory
-    const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
+    var cortex = CortexResolver.find(allocator, config.cortex_dir) catch |err| {
         if (err == error.CortexNotFound) {
             ErrorReporter.cortexNotFound();
             std.process.exit(1);
         }
         return err;
     };
-    defer allocator.free(cortex_dir);
+    defer cortex.deinit(allocator);
 
-    const neuronas_dir = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
-    defer allocator.free(neuronas_dir);
+    const neuronas_dir = cortex.neuronas_path;
 
     // Delete neurona using unified API
     try FileOps.deleteNeuronaById(allocator, neuronas_dir, config.id, config.verbose);

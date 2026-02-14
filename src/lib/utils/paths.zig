@@ -4,8 +4,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-// TODO: Import uri_parser when build.zig is configured for library module
-// const uri_parser = @import("../../../utils/uri_parser.zig");
+const uri_parser = @import("../../utils/uri_parser.zig");
 
 /// Error thrown when cortex cannot be found
 pub const Error = error{
@@ -34,26 +33,33 @@ pub const CortexResolver = struct {
     /// Find cortex directory, searching up/down 3 levels if not specified
     /// Returns Cortex with all required paths
     /// Caller must free returned Cortex with deinit()
-    /// NOTE: Will be implemented with uri_parser integration
     pub fn find(allocator: Allocator, cortex_path: ?[]const u8) !Cortex {
-        _ = allocator;
-        _ = cortex_path;
+        const dir = try uri_parser.findCortexDir(allocator, cortex_path);
+        errdefer allocator.free(dir);
 
-        // TODO: Implement with uri_parser when build system is ready
-        // For now, return error to indicate not yet implemented
-        return Error.CortexNotFound;
+        const neuronas_path = try getNeuronasPath(allocator, dir);
+        errdefer allocator.free(neuronas_path);
+
+        const activations_path = try getActivationsPath(allocator, dir);
+        errdefer allocator.free(activations_path);
+
+        return Cortex{
+            .dir = dir,
+            .neuronas_path = neuronas_path,
+            .activations_path = activations_path,
+        };
     }
 
     /// Get neuronas directory path from cortex directory
     /// Caller must free returned string with allocator.free()
     pub fn getNeuronasPath(allocator: Allocator, cortex: []const u8) ![]const u8 {
-        return std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex});
+        return std.fs.path.join(allocator, &.{ cortex, "neuronas" });
     }
 
     /// Get activations directory path from cortex directory
     /// Caller must free returned string with allocator.free()
     pub fn getActivationsPath(allocator: Allocator, cortex: []const u8) ![]const u8 {
-        return std.fmt.allocPrint(allocator, "{s}/.activations", .{cortex});
+        return std.fs.path.join(allocator, &.{ cortex, ".activations" });
     }
 };
 

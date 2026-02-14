@@ -12,6 +12,7 @@ const readNeurona = @import("../storage/filesystem.zig").readNeurona;
 const scanNeuronas = @import("../storage/filesystem.zig").scanNeuronas;
 const findNeuronaPath = @import("../storage/filesystem.zig").findNeuronaPath;
 const Graph = @import("../core/graph.zig").Graph;
+const CortexResolver = @import("../root.zig").CortexResolver;
 const uri_parser = @import("../utils/uri_parser.zig");
 
 // Import Phase 3 CLI utilities
@@ -22,6 +23,7 @@ pub const TraceConfig = struct {
     id: []const u8,
     direction: Direction = .down,
     max_depth: usize = 10,
+    full_chain: bool = false,
     format: OutputFormat = .tree,
     json_output: bool = false,
     cortex_dir: ?[]const u8 = null,
@@ -52,7 +54,7 @@ pub const TraceNode = struct {
 };
 
 pub fn execute(allocator: Allocator, config: TraceConfig) !void {
-    const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
+    var cortex = CortexResolver.find(allocator, config.cortex_dir) catch |err| {
         if (err == error.CortexNotFound) {
             try HumanOutput.printError("No cortex found in current directory or within 3 directory levels.");
             try HumanOutput.printInfo("Navigate to a cortex directory or use --cortex <path> to specify location.");
@@ -61,10 +63,9 @@ pub fn execute(allocator: Allocator, config: TraceConfig) !void {
         }
         return err;
     };
-    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+    defer cortex.deinit(allocator);
 
-    const neuronas_dir = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
-    defer allocator.free(neuronas_dir);
+    const neuronas_dir = cortex.neuronas_path;
 
     const neuronas = scanNeuronas(allocator, neuronas_dir) catch |err| {
         switch (err) {
@@ -92,7 +93,12 @@ pub fn execute(allocator: Allocator, config: TraceConfig) !void {
         }
     }
 
-    const trace_result = try trace(allocator, &graph, neuronas_dir, config);
+    var effective_config = config;
+    if (config.full_chain) {
+        effective_config.max_depth = std.math.maxInt(usize);
+    }
+
+    const trace_result = try trace(allocator, &graph, neuronas_dir, effective_config);
     defer {
         for (trace_result) |*n| n.deinit(allocator);
         allocator.free(trace_result);
@@ -127,6 +133,7 @@ fn trace(allocator: Allocator, graph: *Graph, neuronas_dir: []const u8, config: 
         };
         defer node_neurona.deinit(allocator);
 
+        allocator.free(node.node_type);
         node.node_type = try allocator.dupe(u8, @tagName(node_neurona.type));
     }
 
@@ -157,7 +164,7 @@ fn traceRecursive(
         .id = try allocator.dupe(u8, node_id),
         .level = level,
         .connections = std.ArrayListUnmanaged([]const u8){},
-        .node_type = "unknown",
+        .node_type = try allocator.dupe(u8, "unknown"),
     };
     errdefer {
         node.deinit(allocator);

@@ -8,6 +8,7 @@ const Allocator = std.mem.Allocator;
 const editor = @import("../utils/editor.zig");
 const id_gen = @import("../utils/id_generator.zig");
 const timestamp = @import("../utils/timestamp.zig");
+const CortexResolver = @import("../root.zig").CortexResolver;
 const uri_parser = @import("../utils/uri_parser.zig");
 
 // Import Phase 3 CLI utilities
@@ -207,7 +208,7 @@ fn getTemplate(type_str: []const u8) TemplateConfig {
 pub fn execute(allocator: Allocator, config: NewConfig) !void {
     // Step 1: Determine cortex directory
     // Determine cortex directory (searches up and down 3 levels)
-    const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
+    var cortex = CortexResolver.find(allocator, config.cortex_dir) catch |err| {
         if (err == error.CortexNotFound) {
             try HumanOutput.printError("No cortex found in current directory or within 3 directory levels.");
             try HumanOutput.printInfo("Navigate to a cortex directory or use --cortex <path> to specify location.");
@@ -216,7 +217,9 @@ pub fn execute(allocator: Allocator, config: NewConfig) !void {
         }
         return err;
     };
-    defer if (config.cortex_dir == null) allocator.free(cortex_dir);
+    defer cortex.deinit(allocator);
+
+    const cortex_dir = cortex.dir;
 
     // Step 2: Generate ID with type prefix
     const prefix = getTypePrefix(config.neurona_type);
@@ -255,7 +258,9 @@ pub fn execute(allocator: Allocator, config: NewConfig) !void {
     defer allocator.free(content);
 
     // Step 7: Write to disk
-    const filename = try std.fmt.allocPrint(allocator, "{s}/neuronas/{s}.md", .{ cortex_dir, neurona_id });
+    const id_md = try std.fmt.allocPrint(allocator, "{s}.md", .{neurona_id});
+    defer allocator.free(id_md);
+    const filename = try std.fs.path.join(allocator, &.{ cortex_dir, "neuronas", id_md });
     defer allocator.free(filename);
 
     try writeNeuronaFile(filename, content);
@@ -325,8 +330,9 @@ fn buildConnections(allocator: Allocator, list: *std.ArrayList(Connection), conf
 
 /// Interactive context gathering for humans
 fn gatherContextInteractive(allocator: Allocator, context: *std.StringHashMap([]const u8), config: NewConfig, template: TemplateConfig) !void {
-    // For now, skip interactive stdin reading due to API compatibility issues
-    // In production, would read from stdin here
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
 
     // Set required context fields
     for (template.required_context) |field| {
@@ -337,11 +343,47 @@ fn gatherContextInteractive(allocator: Allocator, context: *std.StringHashMap([]
             continue;
         }
 
-        // Use default for now instead of interactive input
-        const default = getDefaultForField(field, config.neurona_type);
-        const owned = try allocator.dupe(u8, default);
+        // Prompt for input
+        const prompt = getPromptForField(field, config.neurona_type);
+        try stdout.print("{s}", .{prompt});
+        try stdout.flush();
+
+        const input = try readStringInput(allocator);
+        const final_value = if (input.len == 0)
+            getDefaultForField(field, config.neurona_type)
+        else
+            input;
+
+        const owned = if (std.mem.eql(u8, final_value, input))
+            input
+        else
+            try allocator.dupe(u8, final_value);
+
         try context.put(field, owned);
     }
+}
+
+/// Read a string from stdin
+fn readStringInput(allocator: Allocator) ![]u8 {
+    const stdin = std.fs.File.stdin();
+
+    var list = std.ArrayListUnmanaged(u8){};
+    errdefer list.deinit(allocator);
+
+    var b: [1]u8 = undefined;
+    while (true) {
+        const amt = try stdin.read(&b);
+
+        if (amt == 0) break;
+        const byte = b[0];
+
+        if (byte == '\n') break;
+        if (byte == '\r') continue; // Handle Windows line endings
+
+        try list.append(allocator, byte);
+    }
+
+    return list.toOwnedSlice(allocator);
 }
 
 /// Automatic context gathering for AI/automation
@@ -386,17 +428,12 @@ fn generateFileContent(allocator: Allocator, id: []const u8, config: NewConfig, 
 
     // Write connections
     if (connections.len > 0) {
-        try writer.writeAll("connections:\n");
-        var prev_type: ?[]const u8 = null;
-        for (connections) |conn| {
-            if (prev_type == null or !std.mem.eql(u8, prev_type.?, conn.type)) {
-                try writer.print("  {s}:\n", .{conn.type});
-                prev_type = conn.type;
-            }
-            try writer.print("    - id: {s}\n", .{conn.target});
-            try writer.print("      weight: {d}\n", .{conn.weight});
+        try writer.writeAll("connections: [");
+        for (connections, 0..) |conn, i| {
+            if (i > 0) try writer.writeAll(", ");
+            try writer.print("\"{s}:{s}:{d}\"", .{ conn.type, conn.target, conn.weight });
         }
-        try writer.writeAll("\n");
+        try writer.writeAll("]\n\n");
     }
 
     // Write context
