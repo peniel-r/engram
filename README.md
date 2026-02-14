@@ -79,6 +79,59 @@ zig build -Doptimize=ReleaseSafe
 
 The binary will be available in `zig-out/bin/engram`.
 
+## 📦 Using Engram as a Library
+
+Engram can be used as a Zig library in your own applications. The library provides core types and utilities for working with the Neurona Knowledge Protocol.
+
+### Quick Start
+
+```zig
+const Engram = @import("Engram");
+
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    // Create a neurona
+    var neurona = try Engram.Neurona.init(allocator);
+    defer neurona.deinit(allocator);
+    
+    neurona.id = "concept.001";
+    neurona.title = "My Concept";
+    neurona.type = .concept;
+
+    // Add connections
+    const conn = Engram.Connection{
+        .target_id = "concept.002",
+        .connection_type = .parent,
+        .weight = 90,
+    };
+    try neurona.addConnection(allocator, conn);
+}
+```
+
+### Running Examples
+
+```bash
+# Basic usage example
+zig build example-basic
+
+# ALM integration example  
+zig build example-alm
+
+# Custom query example
+zig build example-query
+```
+
+### Library API
+
+The library provides:
+- **Core Types**: `Neurona`, `NeuronaType`, `Connection`, `ConnectionType`, `Context`
+- **Utilities**: `Json`, `TextProcessor`, `CortexResolver`
+
+See [docs/LIBRARY_API.md](docs/LIBRARY_API.md) for complete API documentation.
+
 ## 📖 Usage
 
 ### Initialize a Cortex

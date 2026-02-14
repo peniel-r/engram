@@ -1,12 +1,18 @@
 # AI Agent Workflow Guide
 
-**Version 0.2.0** | **Last Updated: February 7, 2026**
+**Version 0.3.0** | **Last Updated: February 13, 2026**
 
 ---
 
 ## Overview
 
 This guide provides AI agents with a structured workflow for integrating with Engram, an ALM tool designed for AI automation.
+
+---
+
+## Library Usage
+
+For using Engram as a Zig library in your own applications, see [docs/LIBRARY_API.md](docs/LIBRARY_API.md).
 
 ---
 

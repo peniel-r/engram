@@ -250,6 +250,63 @@ pub fn build(b: *std.Build) void {
     const run_bench_tests = b.addRunArtifact(bench_test_exe);
     test_step.dependOn(&run_bench_tests.step);
 
+    // Example: basic_usage
+    const basic_example_mod = b.createModule(.{
+        .root_source_file = b.path("examples/basic_usage.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "Engram", .module = mod },
+        },
+    });
+
+    const basic_example_exe = b.addExecutable(.{
+        .name = "example-basic-usage",
+        .root_module = basic_example_mod,
+    });
+
+    const run_basic_example = b.addRunArtifact(basic_example_exe);
+    const basic_example_step = b.step("example-basic", "Run basic usage example");
+    basic_example_step.dependOn(&run_basic_example.step);
+
+    // Example: alm_integration
+    const alm_example_mod = b.createModule(.{
+        .root_source_file = b.path("examples/alm_integration.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "Engram", .module = mod },
+        },
+    });
+
+    const alm_example_exe = b.addExecutable(.{
+        .name = "example-alm-integration",
+        .root_module = alm_example_mod,
+    });
+
+    const run_alm_example = b.addRunArtifact(alm_example_exe);
+    const alm_example_step = b.step("example-alm", "Run ALM integration example");
+    alm_example_step.dependOn(&run_alm_example.step);
+
+    // Example: custom_query
+    const query_example_mod = b.createModule(.{
+        .root_source_file = b.path("examples/custom_query.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "Engram", .module = mod },
+        },
+    });
+
+    const query_example_exe = b.addExecutable(.{
+        .name = "example-custom-query",
+        .root_module = query_example_mod,
+    });
+
+    const run_query_example = b.addRunArtifact(query_example_exe);
+    const query_example_step = b.step("example-query", "Run custom query example");
+    query_example_step.dependOn(&run_query_example.step);
+
     // Just like flags, top level steps are also listed in the `--help` menu.
     //
     // The Zig build system is entirely implemented in userland, which means
