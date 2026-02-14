@@ -99,14 +99,14 @@ pub fn loadConfig(allocator: Allocator) !Config {
     }
 
     const editor = if (parsed.get("editor")) |e|
-        try allocator.dupe(u8, yaml_parser.getString(e, "hx"))
+        try yaml_parser.getString(allocator, e, "hx")
     else
         try allocator.dupe(u8, "hx");
 
     const config = Config{
         .editor = editor,
         .default_artifact_type = if (parsed.get("default-artifact-type")) |type_val|
-            try allocator.dupe(u8, yaml_parser.getString(type_val, "feature"))
+            try yaml_parser.getString(allocator, type_val, "feature")
         else
             try allocator.dupe(u8, "feature"),
     };
@@ -137,12 +137,14 @@ test "loadConfig parses hyphenated keys" {
     try std.testing.expectEqual(@as(usize, 2), parsed.count());
 
     const editor = parsed.get("editor") orelse return error.NotFound;
-    const editor_str = yaml_parser.getString(editor, "default");
+    const editor_str = try yaml_parser.getString(allocator, editor, "default");
     try std.testing.expectEqualStrings("hx", editor_str);
+    allocator.free(editor_str);
 
     const artifact_type = parsed.get("default-artifact-type") orelse return error.NotFound;
-    const artifact_str = yaml_parser.getString(artifact_type, "default");
+    const artifact_str = try yaml_parser.getString(allocator, artifact_type, "default");
     try std.testing.expectEqualStrings("feature", artifact_str);
+    allocator.free(artifact_str);
 }
 
 test "getDefaultConfig returns default values" {

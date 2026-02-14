@@ -401,12 +401,26 @@ fn applyContextUpdate(allocator: Allocator, neurona: *Neurona, context_field: []
             }
         },
         .custom => |*ctx| {
-            // For custom context, get or create the key
-            const existing = ctx.get(context_field);
-            if (existing) |v| {
-                allocator.free(v);
+            // For custom context, check if key exists
+            var key_exists = false;
+            var it = ctx.iterator();
+            while (it.next()) |entry| {
+                if (std.mem.eql(u8, entry.key_ptr.*, context_field)) {
+                    key_exists = true;
+                    // Free old value and replace
+                    allocator.free(entry.value_ptr.*);
+                    entry.value_ptr.* = try allocator.dupe(u8, value);
+                    break;
+                }
             }
-            try ctx.put(context_field, try allocator.dupe(u8, value));
+            if (!key_exists) {
+                // Key doesn't exist - insert new
+                const key_copy = try allocator.dupe(u8, context_field);
+                errdefer allocator.free(key_copy);
+                const value_copy = try allocator.dupe(u8, value);
+                errdefer allocator.free(value_copy);
+                try ctx.put(key_copy, value_copy);
+            }
             return true;
         },
         .none => {

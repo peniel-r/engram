@@ -309,13 +309,15 @@ pub const Parser = struct {
 };
 
 /// Helper to get string from Value (with default)
-pub fn getString(value: Value, default: []const u8) []const u8 {
+/// Allocates memory for the returned string using the provided allocator.
+/// Caller must free the returned string.
+pub fn getString(allocator: Allocator, value: Value, default: []const u8) ![]const u8 {
     return switch (value) {
-        .string => |s| s,
-        .integer => |i| std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{i}) catch default,
-        .float => |f| std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{f}) catch default,
-        .boolean => |b| if (b) "true" else "false",
-        else => default,
+        .string => |s| try allocator.dupe(u8, s),
+        .integer => |i| try std.fmt.allocPrint(allocator, "{d}", .{i}),
+        .float => |f| try std.fmt.allocPrint(allocator, "{d}", .{f}),
+        .boolean => |b| try allocator.dupe(u8, if (b) "true" else "false"),
+        else => try allocator.dupe(u8, default),
     };
 }
 
@@ -365,8 +367,8 @@ pub fn getArray(value: Value, allocator: Allocator, default: []const []const u8)
                         result[idx] = try allocator.dupe(u8, str);
                     },
                     else => {
-                        const str = getString(item, "");
-                        result[idx] = try allocator.dupe(u8, str);
+                        const str = try getString(allocator, item, "");
+                        result[idx] = str;
                     },
                 }
             }
@@ -390,7 +392,9 @@ test "parse simple key-value" {
     }
 
     const id = result.get("id") orelse return error.NotFound;
-    try std.testing.expectEqualStrings("test.neurona", getString(id, ""));
+    const str = try getString(allocator, id, "");
+    try std.testing.expectEqualStrings("test.neurona", str);
+    allocator.free(str);
 }
 
 test "parse boolean values" {

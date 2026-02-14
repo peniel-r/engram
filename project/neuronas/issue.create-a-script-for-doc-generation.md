@@ -1,16 +1,12 @@
 ---
 id: issue.create-a-script-for-doc-generation
 title: Create a script for doc generation
+tags: [feature]
 type: issue
-tags: ["feature"]
-
+updated: "2026-02-14T14:28:35Z"
 context:
-  status: resolved
+  status: in_progress
   priority: 3
-  created: [timestamp]
-
-updated: "2026-01-31T11:34:00Z"
-language: en
 ---
 
 # Create a script for doc generation

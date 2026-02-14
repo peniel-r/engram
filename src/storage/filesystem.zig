@@ -105,7 +105,7 @@ fn parseContext(allocator: Allocator, ctx_obj: std.StringHashMap(yaml.Value), ne
         var it = ctx_obj.iterator();
         while (it.next()) |entry| {
             const key = try allocator.dupe(u8, entry.key_ptr.*);
-            const val = try allocator.dupe(u8, getString(entry.value_ptr.*, ""));
+            const val = try getString(allocator, entry.value_ptr.*, "");
             try custom.put(key, val);
         }
 
@@ -115,23 +115,23 @@ fn parseContext(allocator: Allocator, ctx_obj: std.StringHashMap(yaml.Value), ne
     if (has_verification_method) {
         var ctx = Context{ .requirement = undefined };
         ctx.requirement = .{
-            .status = try allocator.dupe(u8, if (ctx_obj.get("status")) |v| getString(v, "draft") else "draft"),
-            .verification_method = try allocator.dupe(u8, if (ctx_obj.get("verification_method")) |v| getString(v, "test") else "test"),
+            .status = if (ctx_obj.get("status")) |v| try getString(allocator, v, "draft") else try allocator.dupe(u8, "draft"),
+            .verification_method = if (ctx_obj.get("verification_method")) |v| try getString(allocator, v, "test") else try allocator.dupe(u8, "test"),
             .priority = @intCast(if (ctx_obj.get("priority")) |v| getInt(v, 3) else 3),
             .assignee = null,
             .effort_points = null,
             .sprint = null,
         };
         if (ctx_obj.get("assignee")) |a| {
-            const s = getString(a, "");
-            if (s.len > 0) ctx.requirement.assignee = try allocator.dupe(u8, s);
+            const s = try getString(allocator, a, "");
+            if (s.len > 0) ctx.requirement.assignee = s else allocator.free(s);
         }
         if (ctx_obj.get("effort_points")) |e| {
             ctx.requirement.effort_points = @intCast(getInt(e, 0));
         }
-        if (ctx_obj.get("sprint")) |s| {
-            const str = getString(s, "");
-            if (str.len > 0) ctx.requirement.sprint = try allocator.dupe(u8, str);
+        if (ctx_obj.get("sprint")) |sp| {
+            const str = try getString(allocator, sp, "");
+            if (str.len > 0) ctx.requirement.sprint = str else allocator.free(str);
         }
         return ctx;
     }
@@ -139,29 +139,29 @@ fn parseContext(allocator: Allocator, ctx_obj: std.StringHashMap(yaml.Value), ne
     if (has_framework) {
         var ctx = Context{ .test_case = undefined };
         ctx.test_case = .{
-            .framework = try allocator.dupe(u8, if (ctx_obj.get("framework")) |v| getString(v, "unknown") else "unknown"),
+            .framework = if (ctx_obj.get("framework")) |v| try getString(allocator, v, "unknown") else try allocator.dupe(u8, "unknown"),
             .test_file = null,
-            .status = try allocator.dupe(u8, if (ctx_obj.get("status")) |v| getString(v, "pending") else "pending"),
+            .status = if (ctx_obj.get("status")) |v| try getString(allocator, v, "pending") else try allocator.dupe(u8, "pending"),
             .priority = @intCast(if (ctx_obj.get("priority")) |v| getInt(v, 3) else 3),
             .assignee = null,
             .duration = null,
             .last_run = null,
         };
         if (ctx_obj.get("test_file")) |f| {
-            const s = getString(f, "");
-            if (s.len > 0) ctx.test_case.test_file = try allocator.dupe(u8, s);
+            const s = try getString(allocator, f, "");
+            if (s.len > 0) ctx.test_case.test_file = s else allocator.free(s);
         }
         if (ctx_obj.get("assignee")) |a| {
-            const s = getString(a, "");
-            if (s.len > 0) ctx.test_case.assignee = try allocator.dupe(u8, s);
+            const s = try getString(allocator, a, "");
+            if (s.len > 0) ctx.test_case.assignee = s else allocator.free(s);
         }
         if (ctx_obj.get("duration")) |d| {
-            const s = getString(d, "");
-            if (s.len > 0) ctx.test_case.duration = try allocator.dupe(u8, s);
+            const s = try getString(allocator, d, "");
+            if (s.len > 0) ctx.test_case.duration = s else allocator.free(s);
         }
         if (ctx_obj.get("last_run")) |l| {
-            const s = getString(l, "");
-            if (s.len > 0) ctx.test_case.last_run = try allocator.dupe(u8, s);
+            const s = try getString(allocator, l, "");
+            if (s.len > 0) ctx.test_case.last_run = s else allocator.free(s);
         }
         return ctx;
     }
@@ -169,19 +169,19 @@ fn parseContext(allocator: Allocator, ctx_obj: std.StringHashMap(yaml.Value), ne
     if (has_runtime) {
         var ctx = Context{ .artifact = undefined };
         ctx.artifact = .{
-            .runtime = try allocator.dupe(u8, if (ctx_obj.get("runtime")) |v| getString(v, "unknown") else "unknown"),
-            .file_path = try allocator.dupe(u8, if (ctx_obj.get("file_path")) |v| getString(v, "") else ""),
+            .runtime = if (ctx_obj.get("runtime")) |v| try getString(allocator, v, "unknown") else try allocator.dupe(u8, "unknown"),
+            .file_path = if (ctx_obj.get("file_path")) |v| try getString(allocator, v, "") else try allocator.dupe(u8, ""),
             .safe_to_exec = if (ctx_obj.get("safe_to_exec")) |v| getBool(v, false) else false,
             .language_version = null,
             .last_modified = null,
         };
         if (ctx_obj.get("language_version")) |v| {
-            const s = getString(v, "");
-            if (s.len > 0) ctx.artifact.language_version = try allocator.dupe(u8, s);
+            const s = try getString(allocator, v, "");
+            if (s.len > 0) ctx.artifact.language_version = s else allocator.free(s);
         }
         if (ctx_obj.get("last_modified")) |m| {
-            const s = getString(m, "");
-            if (s.len > 0) ctx.artifact.last_modified = try allocator.dupe(u8, s);
+            const s = try getString(allocator, m, "");
+            if (s.len > 0) ctx.artifact.last_modified = s else allocator.free(s);
         }
         return ctx;
     }
@@ -210,8 +210,8 @@ fn parseContext(allocator: Allocator, ctx_obj: std.StringHashMap(yaml.Value), ne
         var ctx = Context{ .state_machine = undefined };
         ctx.state_machine = .{
             .triggers = triggers,
-            .entry_action = try allocator.dupe(u8, if (ctx_obj.get("entry_action")) |v| getString(v, "") else ""),
-            .exit_action = try allocator.dupe(u8, if (ctx_obj.get("exit_action")) |v| getString(v, "") else ""),
+            .entry_action = if (ctx_obj.get("entry_action")) |v| try getString(allocator, v, "") else try allocator.dupe(u8, ""),
+            .exit_action = if (ctx_obj.get("exit_action")) |v| try getString(allocator, v, "") else try allocator.dupe(u8, ""),
             .allowed_roles = allowed_roles,
         };
         return ctx;
@@ -240,26 +240,26 @@ fn parseContext(allocator: Allocator, ctx_obj: std.StringHashMap(yaml.Value), ne
         }
 
         ctx.issue = .{
-            .status = try allocator.dupe(u8, if (ctx_obj.get("status")) |v| getString(v, "open") else "open"),
+            .status = if (ctx_obj.get("status")) |v| try getString(allocator, v, "open") else try allocator.dupe(u8, "open"),
             .priority = @intCast(if (ctx_obj.get("priority")) |v| getInt(v, 3) else 3),
             .assignee = null,
-            .created = try allocator.dupe(u8, if (ctx_obj.get("created")) |v| getString(v, "") else ""),
+            .created = if (ctx_obj.get("created")) |v| try getString(allocator, v, "") else try allocator.dupe(u8, ""),
             .resolved = null,
             .closed = null,
             .blocked_by = blocked_by,
             .related_to = related_to,
         };
         if (ctx_obj.get("assignee")) |a| {
-            const s = getString(a, "");
-            if (s.len > 0) ctx.issue.assignee = try allocator.dupe(u8, s);
+            const s = try getString(allocator, a, "");
+            if (s.len > 0) ctx.issue.assignee = s else allocator.free(s);
         }
         if (ctx_obj.get("resolved")) |r| {
-            const s = getString(r, "");
-            if (s.len > 0) ctx.issue.resolved = try allocator.dupe(u8, s);
+            const s = try getString(allocator, r, "");
+            if (s.len > 0) ctx.issue.resolved = s else allocator.free(s);
         }
         if (ctx_obj.get("closed")) |c| {
-            const s = getString(c, "");
-            if (s.len > 0) ctx.issue.closed = try allocator.dupe(u8, s);
+            const s = try getString(allocator, c, "");
+            if (s.len > 0) ctx.issue.closed = s else allocator.free(s);
         }
         return ctx;
     }
@@ -278,7 +278,7 @@ fn parseContext(allocator: Allocator, ctx_obj: std.StringHashMap(yaml.Value), ne
     var it = ctx_obj.iterator();
     while (it.next()) |entry| {
         const key = try allocator.dupe(u8, entry.key_ptr.*);
-        const val = try allocator.dupe(u8, getString(entry.value_ptr.*, ""));
+        const val = try getString(allocator, entry.value_ptr.*, "");
         try custom.put(key, val);
     }
 
@@ -294,25 +294,38 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
 
     // Required fields: id, title (free old defaults from init first)
     const id_val = yaml_data.get("id") orelse return StorageError.MissingRequiredField;
-    neurona.id = try replaceString(allocator, neurona.id, getString(id_val, ""));
+    {
+        const id_str = try getString(allocator, id_val, "");
+        defer allocator.free(id_str);
+        neurona.id = try replaceString(allocator, neurona.id, id_str);
+    }
 
     const title_val = yaml_data.get("title") orelse return StorageError.MissingRequiredField;
-    neurona.title = try replaceString(allocator, neurona.title, getString(title_val, ""));
+    {
+        const title_str = try getString(allocator, title_val, "");
+        defer allocator.free(title_str);
+        neurona.title = try replaceString(allocator, neurona.title, title_str);
+    }
 
     // Tier 2 field: type
     if (yaml_data.get("type")) |type_val| {
-        const type_str = getString(type_val, "concept");
+        const type_str = try getString(allocator, type_val, "concept");
         neurona.type = parseNeuronaType(type_str) catch .concept;
+        allocator.free(type_str);
     }
 
     // Tier 2 field: updated
     if (yaml_data.get("updated")) |updated_val| {
-        neurona.updated = try replaceString(allocator, neurona.updated, getString(updated_val, ""));
+        const updated_str = try getString(allocator, updated_val, "");
+        defer allocator.free(updated_str);
+        neurona.updated = try replaceString(allocator, neurona.updated, updated_str);
     }
 
     // Tier 2 field: language
     if (yaml_data.get("language")) |lang_val| {
-        neurona.language = try replaceString(allocator, neurona.language, getString(lang_val, "en"));
+        const lang_str = try getString(allocator, lang_val, "en");
+        defer allocator.free(lang_str);
+        neurona.language = try replaceString(allocator, neurona.language, lang_str);
     }
 
     // Tier 1 field: tags
@@ -330,7 +343,7 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
             // Legacy format: ["type:target:weight"]
             .array => |arr| {
                 for (arr.items) |item| {
-                    const conn_str = getString(item, "");
+                    const conn_str = try getString(allocator, item, "");
                     var parts = std.mem.splitScalar(u8, conn_str, ':');
                     const type_str = parts.next() orelse continue;
                     const target_id = parts.next() orelse continue;
@@ -345,6 +358,7 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
                         };
                         try neurona.addConnection(allocator, conn);
                     }
+                    allocator.free(conn_str);
                 }
             },
             // Structured format: { type: [{id: ..., weight: ...}] }
@@ -365,7 +379,7 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
                                                 // Check for "target_id" (new format) or "id" (legacy format)
                                                 const target_id_val = t_obj.get("target_id") orelse t_obj.get("id");
                                                 if (target_id_val) |tid_val| {
-                                                    const target_id = getString(tid_val, "");
+                                                    const target_id = try getString(allocator, tid_val, "");
                                                     if (target_id.len == 0) continue;
 
                                                     var weight: u8 = 50;
@@ -379,6 +393,7 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
                                                         .weight = weight,
                                                     };
                                                     try neurona.addConnection(allocator, conn);
+                                                    allocator.free(target_id);
                                                 }
                                             }
                                         },
@@ -397,10 +412,11 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
 
     // Tier 3 field: hash (optional)
     if (yaml_data.get("hash")) |hash_val| {
-        const hash_str = getString(hash_val, "");
+        const hash_str = try getString(allocator, hash_val, "");
         if (hash_str.len > 0) {
             neurona.hash = try allocator.dupe(u8, hash_str);
         }
+        allocator.free(hash_str);
     }
 
     // Tier 3 field: _llm (optional) - check for nested _llm object or flattened _llm_ fields
@@ -419,11 +435,12 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
                     };
 
                     if (llm_obj.get("t")) |t_val| {
-                        const short_title = getString(t_val, "");
+                        const short_title = try getString(allocator, t_val, "");
                         if (short_title.len > 0) {
                             allocator.free(metadata.short_title);
                             metadata.short_title = try allocator.dupe(u8, short_title);
                         }
+                        allocator.free(short_title);
                     }
 
                     if (llm_obj.get("d")) |d_val| {
@@ -443,11 +460,12 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
                     }
 
                     if (llm_obj.get("strategy")) |s_val| {
-                        const strategy = getString(s_val, "summary");
+                        const strategy = try getString(allocator, s_val, "summary");
                         if (strategy.len > 0) {
                             allocator.free(metadata.strategy);
                             metadata.strategy = try allocator.dupe(u8, strategy);
                         }
+                        allocator.free(strategy);
                     }
                     metadata_opt = metadata;
                 }
@@ -472,11 +490,12 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
             };
 
             if (llm_t) |t_val| {
-                const short_title = getString(t_val, "");
+                const short_title = try getString(allocator, t_val, "");
                 if (short_title.len > 0) {
                     allocator.free(metadata.short_title);
                     metadata.short_title = try allocator.dupe(u8, short_title);
                 }
+                allocator.free(short_title);
             }
 
             if (llm_d) |d_val| {
@@ -496,11 +515,12 @@ fn yamlToNeurona(allocator: Allocator, yaml_data: std.StringHashMap(yaml.Value),
             }
 
             if (llm_strategy) |s_val| {
-                const strategy = getString(s_val, "summary");
+                const strategy = try getString(allocator, s_val, "summary");
                 if (strategy.len > 0) {
                     allocator.free(metadata.strategy);
                     metadata.strategy = try allocator.dupe(u8, strategy);
                 }
+                allocator.free(strategy);
             }
             metadata_opt = metadata;
         }
@@ -828,7 +848,7 @@ pub fn scanNeuronas(allocator: Allocator, directory: []const u8) ![]Neurona {
 /// Find Neurona file path by ID
 pub fn findNeuronaPath(allocator: Allocator, neuronas_dir: []const u8, id: []const u8) ![]const u8 {
     const id_md = try std.fmt.allocPrint(allocator, "{s}.md", .{id});
-    defer allocator.free(id_md);
+    errdefer allocator.free(id_md);
 
     var dir = if (std.fs.path.isAbsolute(neuronas_dir))
         std.fs.openDirAbsolute(neuronas_dir, .{ .iterate = true }) catch |err| {
@@ -844,7 +864,9 @@ pub fn findNeuronaPath(allocator: Allocator, neuronas_dir: []const u8, id: []con
 
     // Check for .md file directly
     if (dir.access(id_md, .{})) |_| {
-        return try std.fs.path.join(allocator, &.{ neuronas_dir, id_md });
+        const result = try std.fs.path.join(allocator, &.{ neuronas_dir, id_md });
+        allocator.free(id_md);
+        return result;
     } else |_| {}
 
     // Search in neuronas directory
@@ -861,10 +883,13 @@ pub fn findNeuronaPath(allocator: Allocator, neuronas_dir: []const u8, id: []con
         // That's a substring match. Might be dangerous (id "test" matches "test.001").
         // But let's stick to what show.zig had to be consistent.
         if (std.mem.eql(u8, base_name, id)) {
-            return try std.fs.path.join(allocator, &.{ neuronas_dir, entry.name });
+            const result = try std.fs.path.join(allocator, &.{ neuronas_dir, entry.name });
+            allocator.free(id_md);
+            return result;
         }
     }
 
+    allocator.free(id_md);
     return error.NeuronaNotFound;
 }
 
