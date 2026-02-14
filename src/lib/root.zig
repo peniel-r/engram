@@ -49,6 +49,15 @@ pub const Json = @import("utils/strings.zig").Json;
 pub const TextProcessor = @import("utils/text.zig").TextProcessor;
 pub const CortexResolver = @import("utils/paths.zig").CortexResolver;
 
+// Storage
+pub const Storage = @import("storage/filesystem.zig").Storage;
+pub const StorageError = @import("storage/filesystem.zig").StorageError;
+
+// Query
+pub const QueryEngine = @import("query/engine.zig").QueryEngine;
+pub const QueryMode = @import("query/modes.zig").QueryMode;
+pub const QueryResult = @import("query/engine.zig").QueryResult;
+
 // Re-export Allocator for convenience
 pub const Allocator = std.mem.Allocator;
 

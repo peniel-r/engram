@@ -21,8 +21,18 @@ pub fn main() !void {
     var requirement = try Engram.Neurona.init(allocator);
     defer requirement.deinit(allocator);
 
-    requirement.id = try allocator.dupe(u8, "req.auth.oauth2");
-    requirement.title = try allocator.dupe(u8, "OAuth 2.0 Authentication");
+    const req_id = try allocator.dupe(u8, "req.auth.oauth2");
+    allocator.free(requirement.id);
+    requirement.id = req_id;
+
+    const req_title = try allocator.dupe(u8, "OAuth 2.0 Authentication");
+    allocator.free(requirement.title);
+    requirement.title = req_title;
+
+    const req_language = try allocator.dupe(u8, "en");
+    allocator.free(requirement.language);
+    requirement.language = req_language;
+
     requirement.type = .requirement;
     requirement.language = try allocator.dupe(u8, "en");
 
@@ -56,8 +66,18 @@ pub fn main() !void {
     var test_case = try Engram.Neurona.init(allocator);
     defer test_case.deinit(allocator);
 
-    test_case.id = try allocator.dupe(u8, "test.auth.oauth2");
-    test_case.title = try allocator.dupe(u8, "OAuth 2.0 Authentication Test");
+    const test_id = try allocator.dupe(u8, "test.auth.oauth2");
+    allocator.free(test_case.id);
+    test_case.id = test_id;
+
+    const test_title = try allocator.dupe(u8, "OAuth 2.0 Authentication Test");
+    allocator.free(test_case.title);
+    test_case.title = test_title;
+
+    const test_language = try allocator.dupe(u8, "en");
+    allocator.free(test_case.language);
+    test_case.language = test_language;
+
     test_case.type = .test_case;
     test_case.language = try allocator.dupe(u8, "en");
 
@@ -99,8 +119,18 @@ pub fn main() !void {
     var issue = try Engram.Neurona.init(allocator);
     defer issue.deinit(allocator);
 
-    issue.id = try allocator.dupe(u8, "issue.auth.token-expiry");
-    issue.title = try allocator.dupe(u8, "Token expiry handling not implemented");
+    const issue_id = try allocator.dupe(u8, "issue.auth.token-expiry");
+    allocator.free(issue.id);
+    issue.id = issue_id;
+
+    const issue_title = try allocator.dupe(u8, "Token expiry handling not implemented");
+    allocator.free(issue.title);
+    issue.title = issue_title;
+
+    const issue_language = try allocator.dupe(u8, "en");
+    allocator.free(issue.language);
+    issue.language = issue_language;
+
     issue.type = .issue;
     issue.language = try allocator.dupe(u8, "en");
 

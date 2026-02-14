@@ -21,8 +21,14 @@ pub fn main() !void {
     var neurona = try Engram.Neurona.init(allocator);
     defer neurona.deinit(allocator);
 
-    neurona.id = try allocator.dupe(u8, "concept.001");
-    neurona.title = try allocator.dupe(u8, "My First Concept");
+    const id = try allocator.dupe(u8, "concept.001");
+    allocator.free(neurona.id);
+    neurona.id = id;
+
+    const title = try allocator.dupe(u8, "My First Concept");
+    allocator.free(neurona.title);
+    neurona.title = title;
+
     neurona.type = .concept;
     neurona.language = try allocator.dupe(u8, "en");
 
