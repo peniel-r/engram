@@ -2,7 +2,7 @@
 
 **Version**: 1.0.0
 **Date**: 2026-02-14
-**Status**: PRE-EXISTING ISSUE
+**Status**: FIXED
 **Priority**: Critical
 
 ---
@@ -330,5 +330,19 @@ After fix implementation, verify:
 
 ---
 
-**Status**: Ready for implementation
-**Next Step**: Apply fix to src/storage/filesystem.zig and test
+## Fix Applied (2026-02-14)
+
+**Fix Applied**: Changed `errdefer allocator.free(id_md)` to `defer allocator.free(id_md)` and removed all manual frees.
+
+**Files Changed**:
+- `src/storage/filesystem.zig:900` - Changed errdefer to defer
+- `src/storage/filesystem.zig:917, 936, 941` - Removed manual frees
+
+**Testing Results**:
+- ✅ `engram show man` - Displays error message (no segfault)
+- ✅ `engram show invalid-test-123` - Displays error message
+- ✅ `engram show feat.yaml-configuration-file-support` - Works correctly
+- ✅ Build passes: `zig build`
+- ✅ Production install works: `just install`
+
+**Status**: FIXED - Double-free issue resolved by using defer instead of errdefer

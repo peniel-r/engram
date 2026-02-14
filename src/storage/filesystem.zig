@@ -897,7 +897,7 @@ pub fn scanNeuronas(allocator: Allocator, directory: []const u8) ![]Neurona {
 /// Find Neurona file path by ID
 pub fn findNeuronaPath(allocator: Allocator, neuronas_dir: []const u8, id: []const u8) ![]const u8 {
     const id_md = try std.fmt.allocPrint(allocator, "{s}.md", .{id});
-    errdefer allocator.free(id_md);
+    defer allocator.free(id_md);
 
     var dir = if (std.fs.path.isAbsolute(neuronas_dir))
         std.fs.openDirAbsolute(neuronas_dir, .{ .iterate = true }) catch |err| {
@@ -913,9 +913,7 @@ pub fn findNeuronaPath(allocator: Allocator, neuronas_dir: []const u8, id: []con
 
     // Check for .md file directly
     if (dir.access(id_md, .{})) |_| {
-        const result = try std.fs.path.join(allocator, &.{ neuronas_dir, id_md });
-        allocator.free(id_md);
-        return result;
+        return try std.fs.path.join(allocator, &.{ neuronas_dir, id_md });
     } else |_| {}
 
     // Search in neuronas directory
@@ -932,13 +930,10 @@ pub fn findNeuronaPath(allocator: Allocator, neuronas_dir: []const u8, id: []con
         // That's a substring match. Might be dangerous (id "test" matches "test.001").
         // But let's stick to what show.zig had to be consistent.
         if (std.mem.eql(u8, base_name, id)) {
-            const result = try std.fs.path.join(allocator, &.{ neuronas_dir, entry.name });
-            allocator.free(id_md);
-            return result;
+            return try std.fs.path.join(allocator, &.{ neuronas_dir, entry.name });
         }
     }
 
-    allocator.free(id_md);
     return error.NeuronaNotFound;
 }
 
