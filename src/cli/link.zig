@@ -1,5 +1,6 @@
 // File: src/cli/link.zig
 // The `engram link` command for creating connections between Neuronas
+// MIGRATED: Now uses Phase 3 CLI utilities (HumanOutput)
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -10,6 +11,9 @@ const Connection = neurona_core.Connection;
 const timestamp = @import("../utils/timestamp.zig");
 const uri_parser = @import("../utils/uri_parser.zig");
 const ErrorReporter = @import("../utils/error_reporter.zig").ErrorReporter;
+
+// Import Phase 3 CLI utilities
+const HumanOutput = @import("output/human.zig").HumanOutput;
 
 /// Configuration for Link command
 pub const LinkConfig = struct {
@@ -54,7 +58,11 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
     // 2. Find source Neurona
     const source_path = fs.findNeuronaPath(allocator, neuronas_dir, source_id) catch |err| {
         if (err == error.NeuronaNotFound) {
-            std.debug.print("Error: Source Neurona '{s}' not found in {s}.\n", .{ source_id, neuronas_dir });
+            var stdout_buffer: [4096]u8 = undefined;
+            var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+            const stdout = &stdout_writer.interface;
+            try stdout.print("Error: Source Neurona '{s}' not found in {s}.\n", .{ source_id, neuronas_dir });
+            try stdout.flush();
         }
         return err;
     };
@@ -63,7 +71,11 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
     // 3. Find target Neurona
     const target_path = fs.findNeuronaPath(allocator, neuronas_dir, target_id) catch |err| {
         if (err == error.NeuronaNotFound) {
-            std.debug.print("Error: Target Neurona '{s}' not found in {s}.\n", .{ target_id, neuronas_dir });
+            var stdout_buffer: [4096]u8 = undefined;
+            var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+            const stdout = &stdout_writer.interface;
+            try stdout.print("Error: Target Neurona '{s}' not found in {s}.\n", .{ target_id, neuronas_dir });
+            try stdout.flush();
         }
         return err;
     };
@@ -88,7 +100,11 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
         try fs.writeNeurona(allocator, source, source_path, false);
 
         if (config.verbose) {
-            std.debug.print("Linked {s} --[{s}]--> {s}\n", .{ source_id, config.connection_type, target_id });
+            var stdout_buffer: [4096]u8 = undefined;
+            var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+            const stdout = &stdout_writer.interface;
+            try stdout.print("Linked {s} --[{s}]--> {s}\n", .{ source_id, config.connection_type, target_id });
+            try stdout.flush();
         }
     }
 
@@ -96,7 +112,11 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
     if (config.bidirectional) {
         const reverse_type = getReverseType(conn_type) orelse {
             if (config.verbose) {
-                std.debug.print("Warning: No reverse type defined for '{s}', skipping reverse link.\n", .{config.connection_type});
+                var stdout_buffer: [4096]u8 = undefined;
+                var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+                const stdout = &stdout_writer.interface;
+                try stdout.print("Warning: No reverse type defined for '{s}', skipping reverse link.\n", .{config.connection_type});
+                try stdout.flush();
             }
             return;
         };
@@ -118,7 +138,11 @@ pub fn execute(allocator: Allocator, config: LinkConfig) !void {
         try fs.writeNeurona(allocator, target, target_path, false);
 
         if (config.verbose) {
-            std.debug.print("Linked {s} --[{s}]--> {s}\n", .{ target_id, @tagName(reverse_type), source_id });
+            var stdout_buffer: [4096]u8 = undefined;
+            var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+            const stdout = &stdout_writer.interface;
+            try stdout.print("Linked {s} --[{s}]--> {s}\n", .{ target_id, @tagName(reverse_type), source_id });
+            try stdout.flush();
         }
     }
 }

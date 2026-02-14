@@ -1,6 +1,7 @@
 // File: src/cli/update.zig
 // The `engram update` command for updating Neurona fields programmatically
 // Supports setting tier1, tier2, and tier3 fields
+// MIGRATED: Now uses Phase 3 CLI utilities (HumanOutput)
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -16,6 +17,9 @@ const updateBody = @import("../storage/filesystem.zig").updateBody;
 const timestamp_mod = @import("../utils/timestamp.zig");
 const state_machine = @import("../core/state_machine.zig");
 const uri_parser = @import("../utils/uri_parser.zig");
+
+// Import Phase 3 CLI utilities
+const HumanOutput = @import("output/human.zig").HumanOutput;
 
 /// Update configuration
 pub const UpdateConfig = struct {
@@ -49,9 +53,9 @@ pub fn execute(allocator: Allocator, config: UpdateConfig) !void {
     // Determine neuronas directory
     const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
         if (err == error.CortexNotFound) {
-            std.debug.print("Error: No cortex found in current directory or within 3 directory levels.\n", .{});
-            std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
-            std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+            try HumanOutput.printError("No cortex found in current directory or within 3 directory levels.");
+            try HumanOutput.printInfo("Navigate to a cortex directory or use --cortex <path> to specify location.");
+            try HumanOutput.printInfo("Run 'engram init <name>' to create a new cortex.");
             std.process.exit(1);
         }
         return err;
@@ -82,7 +86,11 @@ pub fn execute(allocator: Allocator, config: UpdateConfig) !void {
 
     if (!updated) {
         if (config.verbose) {
-            std.debug.print("No changes applied to {s}\n", .{config.id});
+            var stdout_buffer: [4096]u8 = undefined;
+            var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+            const stdout = &stdout_writer.interface;
+            try stdout.print("No changes applied to {s}\n", .{config.id});
+            try stdout.flush();
         }
         return;
     }
@@ -99,9 +107,13 @@ pub fn execute(allocator: Allocator, config: UpdateConfig) !void {
     }
 
     if (config.verbose) {
-        std.debug.print("Updated {s}\n", .{config.id});
+        var stdout_buffer: [4096]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
+        try stdout.print("Updated {s}\n", .{config.id});
+        try stdout.flush();
     } else {
-        std.debug.print("✓ Updated {s}\n", .{config.id});
+        try HumanOutput.printSuccess(config.id);
     }
 }
 
@@ -112,7 +124,13 @@ fn applyUpdate(allocator: Allocator, neurona: *Neurona, update: FieldUpdate, ver
         const body_filepath = try findNeuronaPath(allocator, neuronas_dir, neurona.id);
         defer allocator.free(body_filepath);
         try updateBody(allocator, body_filepath, update.value);
-        if (verbose) std.debug.print("  Set body content to: {s}...\n", .{update.value[0..@min(50, update.value.len)]});
+        if (verbose) {
+            var stdout_buffer: [4096]u8 = undefined;
+            var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+            const stdout = &stdout_writer.interface;
+            try stdout.print("  Set body content to: {s}...\n", .{update.value[0..@min(50, update.value.len)]});
+            try stdout.flush();
+        }
         return true;
     }
 
@@ -135,30 +153,54 @@ fn applyUpdate(allocator: Allocator, neurona: *Neurona, update: FieldUpdate, ver
     if (std.mem.eql(u8, update.field, "title")) {
         allocator.free(neurona.title);
         neurona.title = try allocator.dupe(u8, update.value);
-        if (verbose) std.debug.print("  Set title to: {s}\n", .{update.value});
+        if (verbose) {
+            var stdout_buffer: [4096]u8 = undefined;
+            var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+            const stdout = &stdout_writer.interface;
+            try stdout.print("  Set title to: {s}\n", .{update.value});
+            try stdout.flush();
+        }
         return true;
     }
 
     if (std.mem.eql(u8, update.field, "type")) {
         neurona.type = parseNeuronaType(update.value) catch {
-            std.debug.print("Error: Invalid type '{s}'\n", .{update.value});
+            try HumanOutput.printError("Invalid type '{s}'");
             return false;
         };
-        if (verbose) std.debug.print("  Set type to: {s}\n", .{update.value});
+        if (verbose) {
+            var stdout_buffer: [4096]u8 = undefined;
+            var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+            const stdout = &stdout_writer.interface;
+            try stdout.print("  Set type to: {s}\n", .{update.value});
+            try stdout.flush();
+        }
         return true;
     }
 
     if (std.mem.eql(u8, update.field, "language")) {
         allocator.free(neurona.language);
         neurona.language = try allocator.dupe(u8, update.value);
-        if (verbose) std.debug.print("  Set language to: {s}\n", .{update.value});
+        if (verbose) {
+            var stdout_buffer: [4096]u8 = undefined;
+            var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+            const stdout = &stdout_writer.interface;
+            try stdout.print("  Set language to: {s}\n", .{update.value});
+            try stdout.flush();
+        }
         return true;
     }
 
     if (std.mem.eql(u8, update.field, "tag")) {
         if (update.operator == .append) {
             try neurona.tags.append(allocator, try allocator.dupe(u8, update.value));
-            if (verbose) std.debug.print("  Added tag: {s}\n", .{update.value});
+            if (verbose) {
+                var stdout_buffer: [4096]u8 = undefined;
+                var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+                const stdout = &stdout_writer.interface;
+                try stdout.print("  Added tag: {s}\n", .{update.value});
+                try stdout.flush();
+            }
         } else if (update.operator == .remove) {
             // Remove tag if exists
             var found: usize = 0;
@@ -170,7 +212,13 @@ fn applyUpdate(allocator: Allocator, neurona: *Neurona, update: FieldUpdate, ver
             }
             if (found > 0 or (neurona.tags.items.len > 0 and std.mem.eql(u8, neurona.tags.items[0], update.value))) {
                 allocator.free(neurona.tags.orderedRemove(found));
-                if (verbose) std.debug.print("  Removed tag: {s}\n", .{update.value});
+                if (verbose) {
+                    var stdout_buffer: [4096]u8 = undefined;
+                    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+                    const stdout = &stdout_writer.interface;
+                    try stdout.print("  Removed tag: {s}\n", .{update.value});
+                    try stdout.flush();
+                }
                 return true;
             }
         }
@@ -180,7 +228,13 @@ fn applyUpdate(allocator: Allocator, neurona: *Neurona, update: FieldUpdate, ver
     if (std.mem.eql(u8, update.field, "hash")) {
         if (neurona.hash) |h| allocator.free(h);
         neurona.hash = try allocator.dupe(u8, update.value);
-        if (verbose) std.debug.print("  Set hash to: {s}\n", .{update.value});
+        if (verbose) {
+            var stdout_buffer: [4096]u8 = undefined;
+            var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+            const stdout = &stdout_writer.interface;
+            try stdout.print("  Set hash to: {s}\n", .{update.value});
+            try stdout.flush();
+        }
         return true;
     }
 
@@ -189,7 +243,7 @@ fn applyUpdate(allocator: Allocator, neurona: *Neurona, update: FieldUpdate, ver
         return try applyContextUpdate(allocator, neurona, update.field["context.".len..], update.value, verbose);
     }
 
-    std.debug.print("Error: Unknown field '{s}'\n", .{update.field});
+    try HumanOutput.printError("Unknown field '{s}'");
     return false;
 }
 
@@ -204,7 +258,7 @@ fn applyContextUpdate(allocator: Allocator, neurona: *Neurona, context_field: []
                 const current = ctx.status;
                 if (!state_machine.isValidTransitionByType("test_case", current, value)) {
                     const err_msg = state_machine.getTransitionError("test_case", current, value);
-                    std.debug.print("Error: {s}\n", .{err_msg});
+                    try HumanOutput.printError(err_msg);
                     return false;
                 }
 
@@ -219,7 +273,7 @@ fn applyContextUpdate(allocator: Allocator, neurona: *Neurona, context_field: []
             }
             if (std.mem.eql(u8, context_field, "priority")) {
                 ctx.priority = std.fmt.parseInt(u8, value, 10) catch {
-                    std.debug.print("Error: Invalid priority '{s}'\n", .{value});
+                    try HumanOutput.printError("Invalid priority '{s}'");
                     return false;
                 };
                 return true;
@@ -264,7 +318,7 @@ fn applyContextUpdate(allocator: Allocator, neurona: *Neurona, context_field: []
                 const current = ctx.status;
                 if (!state_machine.isValidTransitionByType("issue", current, value)) {
                     const err_msg = state_machine.getTransitionError("issue", current, value);
-                    std.debug.print("Error: {s}\n", .{err_msg});
+                    try HumanOutput.printError(err_msg);
                     return false;
                 }
 
@@ -274,7 +328,7 @@ fn applyContextUpdate(allocator: Allocator, neurona: *Neurona, context_field: []
             }
             if (std.mem.eql(u8, context_field, "priority")) {
                 ctx.priority = std.fmt.parseInt(u8, value, 10) catch {
-                    std.debug.print("Error: Invalid priority '{s}'\n", .{value});
+                    try HumanOutput.printError("Invalid priority '{s}'");
                     return false;
                 };
                 return true;
@@ -306,7 +360,7 @@ fn applyContextUpdate(allocator: Allocator, neurona: *Neurona, context_field: []
                 const current = ctx.status;
                 if (!state_machine.isValidTransitionByType("requirement", current, value)) {
                     const err_msg = state_machine.getTransitionError("requirement", current, value);
-                    std.debug.print("Error: {s}\n", .{err_msg});
+                    try HumanOutput.printError(err_msg);
                     return false;
                 }
 
@@ -321,7 +375,7 @@ fn applyContextUpdate(allocator: Allocator, neurona: *Neurona, context_field: []
             }
             if (std.mem.eql(u8, context_field, "priority")) {
                 ctx.priority = std.fmt.parseInt(u8, value, 10) catch {
-                    std.debug.print("Error: Invalid priority '{s}'\n", .{value});
+                    try HumanOutput.printError("Invalid priority '{s}'");
                     return false;
                 };
                 return true;
@@ -333,7 +387,7 @@ fn applyContextUpdate(allocator: Allocator, neurona: *Neurona, context_field: []
             }
             if (std.mem.eql(u8, context_field, "effort_points")) {
                 ctx.effort_points = std.fmt.parseInt(u16, value, 10) catch {
-                    std.debug.print("Error: Invalid effort_points '{s}'\n", .{value});
+                    try HumanOutput.printError("Invalid effort_points '{s}'");
                     return false;
                 };
                 return true;
@@ -354,12 +408,12 @@ fn applyContextUpdate(allocator: Allocator, neurona: *Neurona, context_field: []
             return true;
         },
         .none => {
-            std.debug.print("Error: Context not initialized for this Neurona\n", .{});
+            try HumanOutput.printError("Context not initialized for this Neurona");
             return false;
         },
     }
 
-    std.debug.print("Error: Unknown context field '{s}'\n", .{context_field});
+    try HumanOutput.printError("Unknown context field '{s}'");
     return false;
 }
 
@@ -381,14 +435,26 @@ fn updateLLMMetadata(allocator: Allocator, neurona: *Neurona, field: []const u8,
     if (std.mem.eql(u8, field, "short_title")) {
         allocator.free(meta.short_title);
         meta.short_title = try allocator.dupe(u8, value);
-        if (verbose) std.debug.print("  Set _llm.short_title to: {s}\n", .{value});
+        if (verbose) {
+            var stdout_buffer: [4096]u8 = undefined;
+            var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+            const stdout = &stdout_writer.interface;
+            try stdout.print("  Set _llm.short_title to: {s}\n", .{value});
+            try stdout.flush();
+        }
         return true;
     } else if (std.mem.eql(u8, field, "density")) {
         meta.density = std.fmt.parseInt(u8, value, 10) catch {
-            std.debug.print("Error: Invalid density '{s}'\n", .{value});
+            try HumanOutput.printError("Invalid density '{s}'");
             return false;
         };
-        if (verbose) std.debug.print("  Set _llm.density to: {d}\n", .{meta.density});
+        if (verbose) {
+            var stdout_buffer: [4096]u8 = undefined;
+            var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+            const stdout = &stdout_writer.interface;
+            try stdout.print("  Set _llm.density to: {d}\n", .{meta.density});
+            try stdout.flush();
+        }
         return true;
     } else if (std.mem.eql(u8, field, "keywords")) {
         // Split comma-separated keywords
@@ -401,16 +467,34 @@ fn updateLLMMetadata(allocator: Allocator, neurona: *Neurona, field: []const u8,
                 try meta.keywords.append(allocator, try allocator.dupe(u8, trimmed));
             }
         }
-        if (verbose) std.debug.print("  Set _llm.keywords to: {d} items\n", .{meta.keywords.items.len});
+        if (verbose) {
+            var stdout_buffer: [4096]u8 = undefined;
+            var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+            const stdout = &stdout_writer.interface;
+            try stdout.print("  Set _llm.keywords to: {d} items\n", .{meta.keywords.items.len});
+            try stdout.flush();
+        }
         return true;
     } else if (std.mem.eql(u8, field, "token_count")) {
         meta.token_count = std.fmt.parseInt(u32, value, 10) catch 0;
-        if (verbose) std.debug.print("  Set _llm.token_count to: {d}\n", .{meta.token_count});
+        if (verbose) {
+            var stdout_buffer: [4096]u8 = undefined;
+            var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+            const stdout = &stdout_writer.interface;
+            try stdout.print("  Set _llm.token_count to: {d}\n", .{meta.token_count});
+            try stdout.flush();
+        }
         return true;
     } else if (std.mem.eql(u8, field, "strategy")) {
         allocator.free(meta.strategy);
         meta.strategy = try allocator.dupe(u8, value);
-        if (verbose) std.debug.print("  Set _llm.strategy to: {s}\n", .{value});
+        if (verbose) {
+            var stdout_buffer: [4096]u8 = undefined;
+            var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+            const stdout = &stdout_writer.interface;
+            try stdout.print("  Set _llm.strategy to: {s}\n", .{value});
+            try stdout.flush();
+        }
         return true;
     } else {
         // Unknown field

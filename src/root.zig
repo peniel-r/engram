@@ -1,50 +1,60 @@
-//! By convention, root.zig is the root source file when making a library.
+//! Legacy root file - re-exports from new library location
+//! This file provides backward compatibility during library refactoring
+
 const std = @import("std");
 
-// Import the new Core Library
-const lib = @import("neurona.zig");
+// Re-export from new library location
+pub const Neurona = @import("lib/root.zig").Neurona;
+pub const NeuronaType = @import("lib/root.zig").NeuronaType;
+pub const Connection = @import("lib/root.zig").Connection;
+pub const ConnectionType = @import("lib/root.zig").ConnectionType;
+pub const Context = @import("lib/root.zig").Context;
 
-// Re-export Core Library Top-Level
-pub const Neurona = lib.Neurona;
-pub const Cortex = lib.Cortex;
-
-// Re-export Core Modules
-pub const NeuronaType = lib.core.NeuronaType;
-pub const Connection = lib.core.Connection;
-pub const ConnectionType = lib.core.ConnectionType;
-
-pub const core = lib.core;
-
-// Re-export storage modules
-pub const storage = struct {
-    pub const isNeuronaFile = lib.storage.filesystem.isNeuronaFile;
-    pub const readNeurona = lib.storage.filesystem.readNeurona;
-    pub const writeNeurona = lib.storage.filesystem.writeNeurona;
-    pub const scanNeuronas = lib.storage.filesystem.scanNeuronas;
-    pub const getLatestModificationTime = lib.storage.filesystem.getLatestModificationTime;
-    pub const BM25Index = lib.storage.BM25Index;
-    pub const VectorIndex = lib.storage.VectorIndex;
-    pub const SearchResult = lib.storage.SearchResult;
-    pub const BM25Result = lib.storage.BM25Result;
-    pub const GloVeIndex = lib.storage.GloVeIndex;
-    pub const NeuralActivation = lib.core.NeuralActivation;
-    pub const llm_cache = lib.storage.llm_cache;
-    pub const index = lib.storage.index;
+pub const core = struct {
+    pub const Neurona = @import("lib/root.zig").Neurona;
+    pub const NeuronaType = @import("lib/root.zig").NeuronaType;
+    pub const Connection = @import("lib/root.zig").Connection;
+    pub const ConnectionType = @import("lib/root.zig").ConnectionType;
+    pub const ConnectionGroup = @import("lib/core/connections.zig").ConnectionGroup;
+    pub const Context = @import("lib/root.zig").Context;
+    pub const NeuralActivation = @import("core/activation.zig").NeuralActivation;
+    pub const ActivationResult = @import("core/activation.zig").ActivationResult;
 };
 
+// Re-export storage modules (from existing location for now)
+pub const storage = struct {
+    pub const isNeuronaFile = @import("storage/filesystem.zig").isNeuronaFile;
+    pub const readNeurona = @import("storage/filesystem.zig").readNeurona;
+    pub const writeNeurona = @import("storage/filesystem.zig").writeNeurona;
+    pub const scanNeuronas = @import("storage/filesystem.zig").scanNeuronas;
+    pub const getLatestModificationTime = @import("storage/filesystem.zig").getLatestModificationTime;
+    pub const BM25Index = @import("storage/tfidf.zig").BM25Index;
+    pub const VectorIndex = @import("storage/vectors.zig").VectorIndex;
+    pub const SearchResult = @import("storage/vectors.zig").SearchResult;
+    pub const BM25Result = @import("storage/tfidf.zig").BM25Result;
+    pub const GloVeIndex = @import("storage/glove.zig").GloVeIndex;
+    pub const NeuralActivation = @import("core/activation.zig").NeuralActivation;
+    pub const llm_cache = @import("storage/llm_cache.zig");
+    pub const index = @import("storage/index.zig");
+};
+
+// Re-export core NeuralActivation directly for backward compatibility
+pub const NeuralActivation = @import("core/activation.zig").NeuralActivation;
+
 // Re-export utils
-pub const frontmatter = lib.utils.frontmatter.Frontmatter;
-pub const yaml = lib.utils.yaml.Parser;
+pub const frontmatter = @import("utils/frontmatter.zig").Frontmatter;
+pub const yaml = @import("utils/yaml.zig").Parser;
 pub const utils = struct {
-    pub const timestamp = lib.utils.timestamp;
-    pub const state_filters = lib.utils.state_filters;
-    pub const token_counter = lib.utils.token_counter;
-    pub const summary = lib.utils.summary;
-    pub const benchmark = @import("benchmark.zig"); // Benchmark is not in lib
-    pub const HelpGenerator = @import("utils/help_generator.zig").HelpGenerator; // CLI specific
-    pub const FileOps = lib.utils.file_ops.FileOps;
-    pub const NeuronaWithBody = lib.utils.file_ops.NeuronaWithBody;
-    pub const ErrorReporter = @import("utils/error_reporter.zig").ErrorReporter; // CLI specific
+    pub const timestamp = @import("utils/timestamp.zig");
+    pub const state_filters = @import("utils/state_filters.zig");
+    pub const token_counter = @import("utils/token_counter.zig");
+    pub const summary = @import("utils/summary.zig");
+    pub const benchmark = @import("benchmark.zig");
+    pub const HelpGenerator = @import("utils/help_generator.zig").HelpGenerator;
+    pub const FileOps = @import("utils/file_ops.zig").FileOps;
+    pub const NeuronaWithBody = @import("utils/file_ops.zig").NeuronaWithBody;
+    pub const ErrorReporter = @import("utils/error_reporter.zig").ErrorReporter;
+    pub const Json = @import("lib/utils/strings.zig").Json;
 };
 
 // Re-export CLI (for integration tests)
@@ -57,24 +67,28 @@ pub const cli = struct {
     pub const trace = @import("cli/trace.zig");
 };
 
-pub fn bufferedPrint() !void {
-    // Stdout is for actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-    const stdout = &stdout_writer.interface;
+// Add test to verify backward compatibility
+test "legacy root re-exports correctly" {
+    const allocator = std.testing.allocator;
 
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
+    // Test Neurona
+    var neurona = try Neurona.init(allocator);
+    defer neurona.deinit(allocator);
+    neurona.title = try allocator.dupe(u8, "Test");
 
-    try stdout.flush(); // Don't forget to flush!
+    try std.testing.expectEqualStrings("Test", neurona.title);
+
+    // Test ConnectionType
+    const conn_type = ConnectionType.fromString("parent");
+    try std.testing.expectEqual(ConnectionType.parent, conn_type.?);
 }
 
+// Keep old functions for backward compatibility
 pub fn addInt(a: i32, b: i32) i32 {
     return a + b;
 }
 
-test "root module basic functionality" {
+test "basic add functionality" {
     try std.testing.expect(addInt(3, 7) == 10);
 }
 
@@ -82,6 +96,6 @@ pub fn add(a: i32, b: i32) i32 {
     return a + b;
 }
 
-test "basic add functionality" {
+test "add function works" {
     try std.testing.expect(add(3, 7) == 10);
 }

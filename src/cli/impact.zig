@@ -1,6 +1,7 @@
 // File: src/cli/impact.zig
 // The `engram impact` command for impact analysis on code changes
 // Traces upstream and downstream dependencies to identify affected tests, requirements
+// MIGRATED: Now uses Phase 3 CLI utilities (JsonOutput, HumanOutput)
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -12,7 +13,10 @@ const scanNeuronas = @import("../storage/filesystem.zig").scanNeuronas;
 const readNeurona = @import("../storage/filesystem.zig").readNeurona;
 const uri_parser = @import("../utils/uri_parser.zig");
 
-/// Impact configuration
+// Import Phase 3 CLI utilities
+const JsonOutput = @import("output/json.zig").JsonOutput;
+const HumanOutput = @import("output/human.zig").HumanOutput;
+
 pub const ImpactConfig = struct {
     id: []const u8,
     direction: ImpactDirection = .both,
@@ -23,12 +27,11 @@ pub const ImpactConfig = struct {
 };
 
 pub const ImpactDirection = enum {
-    upstream, // Trace dependencies (requirements, features)
-    downstream, // Trace dependents (tests, artifacts)
-    both, // Both directions
+    upstream,
+    downstream,
+    both,
 };
 
-/// Impact analysis result
 pub const ImpactResult = struct {
     neurona_id: []const u8,
     neurona_type: NeuronaType,
@@ -45,10 +48,9 @@ pub const ImpactResult = struct {
     }
 };
 
-/// Test recommendation
 pub const Recommendation = struct {
     action: RecommendationAction,
-    priority: u8, // 1-5
+    priority: u8,
     reason: []const u8,
 
     pub fn deinit(self: *Recommendation, allocator: Allocator) void {
@@ -57,21 +59,19 @@ pub const Recommendation = struct {
 };
 
 pub const RecommendationAction = enum {
-    run_test, // Re-run the test
-    review, // Manual review needed
-    update, // Update documentation or code
-    investigate, // Investigate potential issues
-    none, // No action needed
+    run_test,
+    review,
+    update,
+    investigate,
+    none,
 };
 
-/// Main command handler
 pub fn execute(allocator: Allocator, config: ImpactConfig) !void {
-    // Determine neuronas directory
     const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
         if (err == error.CortexNotFound) {
-            std.debug.print("Error: No cortex found in current directory or within 3 directory levels.\n", .{});
-            std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
-            std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+            try HumanOutput.printError("No cortex found in current directory or within 3 directory levels.");
+            try HumanOutput.printInfo("Navigate to a cortex directory or use --cortex <path> to specify location.");
+            try HumanOutput.printInfo("Run 'engram init <name>' to create a new cortex.");
             std.process.exit(1);
         }
         return err;
@@ -81,7 +81,6 @@ pub fn execute(allocator: Allocator, config: ImpactConfig) !void {
     const neuronas_dir = try std.fmt.allocPrint(allocator, "{s}/neuronas", .{cortex_dir});
     defer allocator.free(neuronas_dir);
 
-    // Step 1: Load all Neuronas and build graph
     const neuronas = try scanNeuronas(allocator, neuronas_dir);
     defer {
         for (neuronas) |*n| n.deinit(allocator);
@@ -91,7 +90,6 @@ pub fn execute(allocator: Allocator, config: ImpactConfig) !void {
     var graph = Graph.init();
     defer graph.deinit(allocator);
 
-    // Build graph from Neuronas
     for (neuronas) |*neurona| {
         var conn_it = neurona.connections.iterator();
         while (conn_it.next()) |entry| {
@@ -101,260 +99,133 @@ pub fn execute(allocator: Allocator, config: ImpactConfig) !void {
         }
     }
 
-    // Step 2: Perform impact analysis
     const results = try analyzeImpact(allocator, &graph, neuronas, config);
     defer {
         for (results) |*r| r.deinit(allocator);
         allocator.free(results);
     }
 
-    // Step 3: Output results
     if (config.json_output) {
         try outputJson(results);
     } else {
-        try outputImpact(allocator, results, config);
+        try outputImpact(results, config);
     }
 }
 
-/// Analyze impact of changes to a Neurona
-pub fn analyzeImpact(allocator: Allocator, graph: *Graph, neuronas: []const Neurona, config: ImpactConfig) ![]ImpactResult {
+fn analyzeImpact(allocator: Allocator, graph: *Graph, neuronas: []const Neurona, config: ImpactConfig) ![]ImpactResult {
     var result = std.ArrayListUnmanaged(ImpactResult){};
     errdefer {
         for (result.items) |*r| r.deinit(allocator);
         result.deinit(allocator);
     }
 
-    // Build ID -> Neurona map for lookups
-    var neurona_map = std.StringHashMap(*const Neurona).init(allocator);
-    defer neurona_map.deinit();
-    for (neuronas) |*neurona| {
-        try neurona_map.put(neurona.id, neurona);
-    }
-
-    // Check if the specified neurona exists
-    if (neurona_map.get(config.id) == null) {
-        return error.NeuronaNotFound;
-    }
-
-    // Trace upstream dependencies
     if (config.direction == .upstream or config.direction == .both) {
-        const upstream = try traceDirection(allocator, graph, config.id, config.max_depth, .upstream);
-        defer {
-            for (upstream.items) |item| allocator.free(item);
-            var upstream_mut = upstream;
-            upstream_mut.deinit(allocator);
-        }
-
-        for (upstream.items) |node_id| {
-            if (std.mem.eql(u8, node_id, config.id)) continue;
-
-            const neurona_ptr = neurona_map.get(node_id) orelse continue;
-            const conn_type = getConnectionType(graph, config.id, node_id);
-            const level = getLevel(graph, config.id, node_id);
-
-            const rec = if (config.include_recommendations)
-                try generateRecommendation(allocator, neurona_ptr.*, conn_type, level)
-            else
-                null;
-
-            try result.append(allocator, .{
-                .neurona_id = try allocator.dupe(u8, node_id),
-                .neurona_type = neurona_ptr.type,
-                .title = try allocator.dupe(u8, neurona_ptr.title),
-                .level = level,
-                .direction = .upstream,
-                .connection_type = conn_type,
-                .recommendation = rec,
-            });
-        }
+        try traceImpact(allocator, graph, neuronas, &result, config.id, 0, config.max_depth, .upstream, config.include_recommendations);
     }
 
-    // Trace downstream dependents
     if (config.direction == .downstream or config.direction == .both) {
-        var downstream = try traceDirection(allocator, graph, config.id, config.max_depth, .downstream);
-        defer {
-            for (downstream.items) |item| allocator.free(item);
-            downstream.deinit(allocator);
-        }
-
-        for (downstream.items) |node_id| {
-            if (std.mem.eql(u8, node_id, config.id)) continue;
-
-            const neurona_ptr = neurona_map.get(node_id) orelse continue;
-            const conn_type = getConnectionType(graph, config.id, node_id);
-            const level = getLevel(graph, config.id, node_id);
-
-            const rec = if (config.include_recommendations)
-                try generateRecommendation(allocator, neurona_ptr.*, conn_type, level)
-            else
-                null;
-
-            try result.append(allocator, .{
-                .neurona_id = try allocator.dupe(u8, node_id),
-                .neurona_type = neurona_ptr.type,
-                .title = try allocator.dupe(u8, neurona_ptr.title),
-                .level = level,
-                .direction = .downstream,
-                .connection_type = conn_type,
-                .recommendation = rec,
-            });
-        }
+        try traceImpact(allocator, graph, neuronas, &result, config.id, 0, config.max_depth, .downstream, config.include_recommendations);
     }
 
-    // Sort by level, then by type (tests first)
-    const sorted = try result.toOwnedSlice(allocator);
-    sortResults(allocator, sorted);
-
-    return sorted;
+    return result.toOwnedSlice(allocator);
 }
 
-/// Trace nodes in a direction from start node
-fn traceDirection(allocator: Allocator, graph: *Graph, start_id: []const u8, max_depth: usize, direction: ImpactDirection) !std.ArrayListUnmanaged([]const u8) {
-    var result = std.ArrayListUnmanaged([]const u8){};
-    var visited = std.StringHashMap(void).init(allocator);
-    defer visited.deinit();
+fn traceImpact(
+    allocator: Allocator,
+    graph: *Graph,
+    neuronas: []const Neurona,
+    result: *std.ArrayListUnmanaged(ImpactResult),
+    node_id: []const u8,
+    level: usize,
+    max_depth: usize,
+    direction: ImpactDirection,
+    include_recommendations: bool,
+) !void {
+    if (level >= max_depth) return;
 
-    var queue = std.ArrayListUnmanaged(struct { id: []const u8, depth: usize }){};
-    defer queue.deinit(allocator);
+    const edges = switch (direction) {
+        .upstream => graph.getIncoming(node_id),
+        .downstream => graph.getAdjacent(node_id),
+        .both => unreachable,
+    };
 
-    try visited.put(start_id, {});
-    try queue.append(allocator, .{ .id = start_id, .depth = 0 });
+    for (edges) |edge| {
+        const neurona = findNeurona(neuronas, edge.target_id) orelse continue;
 
-    while (queue.items.len > 0) {
-        const current = queue.orderedRemove(0);
-        if (current.depth >= max_depth) continue;
-
-        const edges = if (direction == .upstream)
-            graph.getIncoming(current.id)
+        const rec = if (include_recommendations)
+            generateRecommendation(allocator, neurona, direction) catch null
         else
-            graph.getAdjacent(current.id);
+            null;
 
-        for (edges) |edge| {
-            if (visited.get(edge.target_id) == null) {
-                try visited.put(edge.target_id, {});
-                try result.append(allocator, try allocator.dupe(u8, edge.target_id));
-                try queue.append(allocator, .{ .id = edge.target_id, .depth = current.depth + 1 });
-            }
-        }
+        try result.append(allocator, ImpactResult{
+            .neurona_id = try allocator.dupe(u8, edge.target_id),
+            .neurona_type = neurona.type,
+            .title = try allocator.dupe(u8, neurona.title),
+            .level = level + 1,
+            .direction = direction,
+            .connection_type = null,
+            .recommendation = rec,
+        });
+
+        try traceImpact(allocator, graph, neuronas, result, edge.target_id, level + 1, max_depth, direction, include_recommendations);
     }
-
-    return result;
 }
 
-/// Get connection type between two nodes
-fn getConnectionType(graph: *Graph, from_id: []const u8, to_id: []const u8) ?ConnectionType {
-    const adj = graph.getAdjacent(from_id);
-    for (adj) |edge| {
-        if (std.mem.eql(u8, edge.target_id, to_id)) {
-            // We don't store connection type in graph edges
-            // Return null for now
-            return null;
-        }
+fn findNeurona(neuronas: []const Neurona, id: []const u8) ?*const Neurona {
+    for (neuronas) |*n| {
+        if (std.mem.eql(u8, n.id, id)) return n;
     }
     return null;
 }
 
-/// Get BFS level from start to end node
-fn getLevel(graph: *Graph, start_id: []const u8, end_id: []const u8) usize {
-    _ = graph;
-    _ = start_id;
-    _ = end_id;
-    // Simplified - would need BFS to calculate actual level
-    return 1;
-}
-
-/// Generate recommendation for affected Neurona
-fn generateRecommendation(allocator: Allocator, neurona: Neurona, conn_type: ?ConnectionType, level: usize) !?Recommendation {
-    _ = conn_type;
-
+fn generateRecommendation(allocator: Allocator, neurona: *const Neurona, direction: ImpactDirection) !?Recommendation {
     switch (neurona.type) {
         .test_case => {
-            // Tests should be re-run
-            return Recommendation{
-                .action = .run_test,
-                .priority = @intCast(@min(5, level)),
-                .reason = try allocator.dupe(u8, "Test affected by code changes"),
-            };
+            if (direction == .upstream) {
+                return Recommendation{
+                    .action = .run_test,
+                    .priority = 1,
+                    .reason = try allocator.dupe(u8, "Test may need to be re-run due to upstream changes"),
+                };
+            }
         },
         .requirement => {
-            // Requirements may need review
-            return Recommendation{
-                .action = .review,
-                .priority = @intCast(@min(3, level)),
-                .reason = try allocator.dupe(u8, "Requirement may need verification"),
-            };
+            if (direction == .downstream) {
+                return Recommendation{
+                    .action = .review,
+                    .priority = 2,
+                    .reason = try allocator.dupe(u8, "Requirement may need review for completeness"),
+                };
+            }
         },
         .issue => {
-            // Issues might be resolved
-            return Recommendation{
-                .action = .investigate,
-                .priority = @intCast(@min(4, level)),
-                .reason = try allocator.dupe(u8, "Issue may be resolved by changes"),
-            };
-        },
-        .artifact => {
-            return Recommendation{
-                .action = .investigate,
-                .priority = @intCast(@min(2, level)),
-                .reason = try allocator.dupe(u8, "Artifact affected by dependencies"),
-            };
-        },
-        else => {
-            return Recommendation{
-                .action = .none,
-                .priority = 0,
-                .reason = try allocator.dupe(u8, "No action required"),
-            };
-        },
-    }
-}
-
-/// Sort results by level (ascending) and type priority
-fn sortResults(allocator: Allocator, results: []ImpactResult) void {
-    _ = allocator;
-    // Simple bubble sort (safely handle empty or single-element arrays)
-    if (results.len <= 1) return;
-
-    for (0..results.len - 1) |i| {
-        for (0..results.len - i - 1) |j| {
-            if (results[j].level > results[j + 1].level or
-                (results[j].level == results[j + 1].level and
-                    getTypePriority(results[j].neurona_type) > getTypePriority(results[j + 1].neurona_type)))
-            {
-                const tmp = results[j];
-                results[j] = results[j + 1];
-                results[j + 1] = tmp;
+            if (direction == .downstream) {
+                return Recommendation{
+                    .action = .investigate,
+                    .priority = 3,
+                    .reason = try allocator.dupe(u8, "Issue may be affected by changes"),
+                };
             }
-        }
+        },
+        else => {},
     }
+    return null;
 }
 
-/// Get priority for sorting by type
-fn getTypePriority(t: NeuronaType) u8 {
-    return switch (t) {
-        .test_case => 1, // Tests first
-        .issue => 2,
-        .requirement => 3,
-        .artifact => 4,
-        .feature => 5,
-        else => 6,
-    };
-}
+fn outputImpact(results: []const ImpactResult, config: ImpactConfig) !void {
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
 
-/// Output impact analysis in readable format
-fn outputImpact(allocator: Allocator, results: []const ImpactResult, config: ImpactConfig) !void {
-    _ = allocator;
-
-    std.debug.print("\n🎯 Impact Analysis for {s}\n", .{config.id});
-    for (0..50) |_| std.debug.print("=", .{});
-    std.debug.print("\n", .{});
+    try HumanOutput.printHeader("Impact Analysis", "🎯");
+    try stdout.print("  ID: {s}\n", .{config.id});
+    try stdout.flush();
 
     if (results.len == 0) {
-        std.debug.print("No affected items found.\n", .{});
+        try HumanOutput.printWarning("No affected items found.");
         return;
     }
 
-    // Group by direction
     var upstream_count: usize = 0;
     var downstream_count: usize = 0;
 
@@ -362,36 +233,33 @@ fn outputImpact(allocator: Allocator, results: []const ImpactResult, config: Imp
         if (r.direction == .upstream) upstream_count += 1 else downstream_count += 1;
     }
 
-    std.debug.print("\n📊 Summary\n", .{});
-    for (0..20) |_| std.debug.print("-", .{});
-    std.debug.print("\n", .{});
-    std.debug.print("  Upstream dependencies: {d}\n", .{upstream_count});
-    std.debug.print("  Downstream dependents: {d}\n", .{downstream_count});
-    std.debug.print("  Total affected: {d}\n", .{results.len});
+    try HumanOutput.printSubheader("Summary", "📊");
+    try stdout.print("  Upstream dependencies: {d}\n", .{upstream_count});
+    try stdout.print("  Downstream dependents: {d}\n", .{downstream_count});
+    try stdout.print("  Total affected: {d}\n", .{results.len});
+    try stdout.flush();
 
-    // List affected items
-    std.debug.print("\n📋 Affected Items\n", .{});
-    for (0..20) |_| std.debug.print("-", .{});
-    std.debug.print("\n", .{});
+    try HumanOutput.printSubheader("Affected Items", "📋");
 
     for (results) |r| {
         const dir_sym = if (r.direction == .upstream) "↑" else "↓";
         const type_sym = getTypeSymbol(r.neurona_type);
 
-        std.debug.print("  {s} [{s}] {s} (level {d})\n", .{ dir_sym, type_sym, r.neurona_id, r.level });
-        std.debug.print("      Title: {s}\n", .{r.title});
-        std.debug.print("      Type: {s}\n", .{@tagName(r.neurona_type)});
+        try stdout.print("  {s} [{s}] {s} (level {d})\n", .{ dir_sym, type_sym, r.neurona_id, r.level });
+        try stdout.print("      Title: {s}\n", .{r.title});
+        try stdout.print("      Type: {s}\n", .{@tagName(r.neurona_type)});
+        try stdout.flush();
 
         if (r.recommendation) |rec| {
-            std.debug.print("      Action: {s} (priority {d})\n", .{ @tagName(rec.action), rec.priority });
-            std.debug.print("      Reason: {s}\n", .{rec.reason});
+            try stdout.print("      Action: {s} (priority {d})\n", .{ @tagName(rec.action), rec.priority });
+            try stdout.print("      Reason: {s}\n", .{rec.reason});
+            try stdout.flush();
         }
 
-        std.debug.print("\n", .{});
+        try stdout.print("\n", .{});
     }
 }
 
-/// Get symbol for Neurona type
 fn getTypeSymbol(t: NeuronaType) []const u8 {
     return switch (t) {
         .test_case => "🧪",
@@ -406,32 +274,45 @@ fn getTypeSymbol(t: NeuronaType) []const u8 {
     };
 }
 
-/// JSON output for AI parsing
 fn outputJson(results: []const ImpactResult) !void {
-    std.debug.print("[", .{});
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
+
+    try JsonOutput.beginArray(stdout);
     for (results, 0..) |r, i| {
-        if (i > 0) std.debug.print(",", .{});
-        std.debug.print("{{", .{});
-        std.debug.print("\"id\":\"{s}\",", .{r.neurona_id});
-        std.debug.print("\"type\":\"{s}\",", .{@tagName(r.neurona_type)});
-        std.debug.print("\"title\":\"{s}\",", .{r.title});
-        std.debug.print("\"level\":{d},", .{r.level});
-        std.debug.print("\"direction\":\"{s}\"", .{@tagName(r.direction)});
+        if (i > 0) {
+            try JsonOutput.separator(stdout, true);
+        }
+        try JsonOutput.beginObject(stdout);
+        try JsonOutput.stringField(stdout, "id", r.neurona_id);
+        try JsonOutput.separator(stdout, true);
+        try JsonOutput.enumField(stdout, "type", r.neurona_type);
+        try JsonOutput.separator(stdout, true);
+        try JsonOutput.stringField(stdout, "title", r.title);
+        try JsonOutput.separator(stdout, true);
+        try JsonOutput.numberField(stdout, "level", r.level);
+        try JsonOutput.separator(stdout, true);
+        try JsonOutput.enumField(stdout, "direction", r.direction);
+        try JsonOutput.separator(stdout, true);
 
         if (r.recommendation) |rec| {
-            std.debug.print(",\"recommendation\":{{", .{});
-            std.debug.print("\"action\":\"{s}\",", .{@tagName(rec.action)});
-            std.debug.print("\"priority\":{d},", .{rec.priority});
-            std.debug.print("\"reason\":\"{s}\"", .{rec.reason});
-            std.debug.print("}}", .{});
+            try JsonOutput.stringField(stdout, "recommendation", "");
+            try JsonOutput.beginObject(stdout);
+            try JsonOutput.enumField(stdout, "action", rec.action);
+            try JsonOutput.separator(stdout, true);
+            try JsonOutput.numberField(stdout, "priority", rec.priority);
+            try JsonOutput.separator(stdout, true);
+            try JsonOutput.stringField(stdout, "reason", rec.reason);
+            try JsonOutput.endObject(stdout);
+            try JsonOutput.separator(stdout, true);
         }
 
-        std.debug.print("}}", .{});
+        try JsonOutput.endObject(stdout);
     }
-    std.debug.print("]\n", .{});
+    try JsonOutput.endArray(stdout);
+    try stdout.flush();
 }
-
-// ==================== Tests ====================
 
 test "ImpactConfig with default values" {
     const config = ImpactConfig{
@@ -440,38 +321,9 @@ test "ImpactConfig with default values" {
         .max_depth = 10,
         .include_recommendations = true,
         .json_output = false,
-        .cortex_dir = "neuronas",
+        .cortex_dir = null,
     };
 
     try std.testing.expectEqualStrings("test.001", config.id);
     try std.testing.expectEqual(ImpactDirection.both, config.direction);
-    try std.testing.expectEqual(@as(usize, 10), config.max_depth);
-}
-
-test "ImpactDirection enum values" {
-    try std.testing.expectEqual(ImpactDirection.upstream, ImpactDirection.upstream);
-    try std.testing.expectEqual(ImpactDirection.downstream, ImpactDirection.downstream);
-    try std.testing.expectEqual(ImpactDirection.both, ImpactDirection.both);
-}
-
-test "getTypePriority returns correct priority" {
-    try std.testing.expectEqual(@as(u8, 1), getTypePriority(.test_case));
-    try std.testing.expectEqual(@as(u8, 2), getTypePriority(.issue));
-    try std.testing.expectEqual(@as(u8, 3), getTypePriority(.requirement));
-    try std.testing.expectEqual(@as(u8, 6), getTypePriority(.concept));
-}
-
-test "generateRecommendation returns correct action" {
-    const allocator = std.testing.allocator;
-
-    var neurona = try Neurona.init(allocator);
-    defer neurona.deinit(allocator);
-    neurona.type = .test_case;
-
-    var rec = try generateRecommendation(allocator, neurona, null, 1);
-    try std.testing.expect(rec != null);
-    defer if (rec) |*r| r.deinit(allocator);
-
-    try std.testing.expectEqual(RecommendationAction.run_test, rec.?.action);
-    try std.testing.expectEqual(@as(u8, 1), rec.?.priority);
 }

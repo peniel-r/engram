@@ -1,6 +1,7 @@
 // File: src/cli/new.zig
 // The `engram new` command for creating ALM Neuronas
 // Supports: requirements, test_case, issue, artifact, feature
+// MIGRATED: Now uses Phase 3 CLI utilities (JsonOutput, HumanOutput)
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -8,6 +9,10 @@ const editor = @import("../utils/editor.zig");
 const id_gen = @import("../utils/id_generator.zig");
 const timestamp = @import("../utils/timestamp.zig");
 const uri_parser = @import("../utils/uri_parser.zig");
+
+// Import Phase 3 CLI utilities
+const JsonOutput = @import("output/json.zig").JsonOutput;
+const HumanOutput = @import("output/human.zig").HumanOutput;
 
 /// ALM-specific Neurona types for Engram
 pub const NeuronaType = enum {
@@ -204,9 +209,9 @@ pub fn execute(allocator: Allocator, config: NewConfig) !void {
     // Determine cortex directory (searches up and down 3 levels)
     const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
         if (err == error.CortexNotFound) {
-            std.debug.print("Error: No cortex found in current directory or within 3 directory levels.\n", .{});
-            std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
-            std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+            try HumanOutput.printError("No cortex found in current directory or within 3 directory levels.");
+            try HumanOutput.printInfo("Navigate to a cortex directory or use --cortex <path> to specify location.");
+            try HumanOutput.printInfo("Run 'engram init <name>' to create a new cortex.");
             std.process.exit(1);
         }
         return err;
@@ -422,7 +427,7 @@ fn generateFileContent(allocator: Allocator, id: []const u8, config: NewConfig, 
 
 /// Write neurona to file
 fn writeNeuronaFile(path: []const u8, content: []const u8) !void {
-    // Ensure the directory exists
+    // Ensure directory exists
     const dir_path = std.fs.path.dirname(path) orelse ".";
     try std.fs.cwd().makePath(dir_path);
 
@@ -433,7 +438,7 @@ fn writeNeuronaFile(path: []const u8, content: []const u8) !void {
 
 /// Human-friendly output
 fn outputHuman(id: []const u8, filepath: []const u8, config: NewConfig, connections: []const Connection) !void {
-    var stdout_buffer: [512]u8 = undefined;
+    var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     const stdout = &stdout_writer.interface;
 
@@ -451,21 +456,28 @@ fn outputHuman(id: []const u8, filepath: []const u8, config: NewConfig, connecti
     if (config.interactive) {
         try stdout.writeAll("  Opening in $EDITOR...\n");
     }
+    try stdout.flush();
 }
 
 /// JSON output for AI
 fn outputJson(id: []const u8, filepath: []const u8, neurona_type: NeuronaType) !void {
-    var stdout_buffer: [512]u8 = undefined;
+    var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    try stdout.writeAll("{");
-    try stdout.print("\"success\":true,", .{});
-    try stdout.print("\"id\":\"{s}\",", .{id});
-    try stdout.print("\"filepath\":\"{s}\",", .{filepath});
-    try stdout.print("\"type\":\"{s}\",", .{neurona_type.toString()});
-    try stdout.print("\"tier\":2", .{});
-    try stdout.writeAll("}\n");
+    try JsonOutput.beginObject(stdout);
+    try JsonOutput.boolField(stdout, "success", true);
+    try JsonOutput.separator(stdout, true);
+    try JsonOutput.stringField(stdout, "id", id);
+    try JsonOutput.separator(stdout, true);
+    try JsonOutput.stringField(stdout, "filepath", filepath);
+    try JsonOutput.separator(stdout, true);
+    try JsonOutput.enumField(stdout, "type", neurona_type);
+    try JsonOutput.separator(stdout, true);
+    try JsonOutput.numberField(stdout, "tier", 2);
+    try JsonOutput.endObject(stdout);
+    try stdout.print("\n", .{});
+    try stdout.flush();
 }
 
 // Helper functions
@@ -542,6 +554,7 @@ fn getDefaultForField(field: []const u8, neurona_type: NeuronaType) []const u8 {
 // Human creates issue:
 //   engram new issue "OAuth library broken" --priority 1 --assignee alice
 //   → Creates issue.auth.001.md with metadata pre-filled
+//
 
 // ==================== Tests ====================
 

@@ -1,11 +1,15 @@
 // File: src/cli/delete.zig
 // The `engram delete` command for deleting Neuronas
+// MIGRATED: Now uses Phase 3 CLI utilities (HumanOutput)
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const FileOps = @import("../utils/file_ops.zig").FileOps;
 const ErrorReporter = @import("../utils/error_reporter.zig").ErrorReporter;
 const uri_parser = @import("../utils/uri_parser.zig");
+
+// Import Phase 3 CLI utilities
+const HumanOutput = @import("output/human.zig").HumanOutput;
 
 /// Configuration for Delete command
 pub const DeleteConfig = struct {

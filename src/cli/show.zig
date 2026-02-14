@@ -2,6 +2,7 @@
 // The `engram show` command for displaying Neuronas
 // Displays Neurona content with connections
 // Also supports `engram show config` to open configuration file
+// MIGRATED: Now uses Phase 3 CLI utilities (JsonOutput, HumanOutput)
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -11,6 +12,10 @@ const FileOps = @import("../utils/file_ops.zig").FileOps;
 const uri_parser = @import("../utils/uri_parser.zig");
 const config_util = @import("../utils/config.zig");
 const editor_util = @import("../utils/editor.zig");
+
+// Import Phase 3 CLI utilities
+const JsonOutput = @import("output/json.zig").JsonOutput;
+const HumanOutput = @import("output/human.zig").HumanOutput;
 
 /// Display configuration
 pub const ShowConfig = struct {
@@ -37,7 +42,12 @@ pub fn execute(allocator: Allocator, config: ShowConfig) !void {
         var app_config = try config_util.loadConfig(allocator);
         defer app_config.deinit(allocator);
 
-        std.debug.print("Opening config file: {s}\n", .{config_path});
+        var stdout_buffer: [4096]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
+
+        try stdout.print("Opening config file: {s}\n", .{config_path});
+        try stdout.flush();
         try editor_util.open(allocator, config_path, app_config.editor);
         return;
     }
@@ -45,9 +55,9 @@ pub fn execute(allocator: Allocator, config: ShowConfig) !void {
     // Determine cortex directory (searches up and down 3 levels)
     const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
         if (err == error.CortexNotFound) {
-            std.debug.print("Error: No cortex found in current directory or within 3 directory levels.\n", .{});
-            std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
-            std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+            try HumanOutput.printError("No cortex found in current directory or within 3 directory levels.");
+            try HumanOutput.printInfo("Navigate to a cortex directory or use --cortex <path> to specify location.");
+            try HumanOutput.printInfo("Run 'engram init <name>' to create a new cortex.");
             std.process.exit(1);
         }
         return err;
@@ -80,134 +90,147 @@ pub fn execute(allocator: Allocator, config: ShowConfig) !void {
 
 /// Human-friendly output
 fn outputHuman(neurona: *const Neurona, body: []const u8, show_connections: bool, show_body: bool) !void {
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
+
     // Header
-    std.debug.print("\n", .{});
-    std.debug.print("  ID: {s}\n", .{neurona.id});
-    std.debug.print("  Title: {s}\n", .{neurona.title});
-    std.debug.print("  Type: {s}\n", .{@tagName(neurona.type)});
+    try stdout.print("\n", .{});
+    try stdout.print("  ID: {s}\n", .{neurona.id});
+    try stdout.print("  Title: {s}\n", .{neurona.title});
+    try stdout.print("  Type: {s}\n", .{@tagName(neurona.type)});
 
     // Tags
     if (neurona.tags.items.len > 0) {
-        std.debug.print("  Tags: ", .{});
+        try stdout.print("  Tags: ", .{});
         for (neurona.tags.items, 0..) |tag, i| {
-            if (i > 0) std.debug.print(", ", .{});
-            std.debug.print("{s}", .{tag});
+            if (i > 0) try stdout.print(", ", .{});
+            try stdout.print("{s}", .{tag});
         }
-        std.debug.print("\n", .{});
+        try stdout.print("\n", .{});
     }
 
     // Connections
     if (show_connections) {
         var conn_it = neurona.connections.iterator();
         if (conn_it.next()) |_| {
-            std.debug.print("  Connections:\n", .{});
+            try stdout.print("  Connections:\n", .{});
             conn_it = neurona.connections.iterator(); // Reset iterator
             while (conn_it.next()) |entry| {
-                std.debug.print("    {s}: {d} connection(s)\n", .{ entry.key_ptr.*, entry.value_ptr.connections.items.len });
+                try stdout.print("    {s}: {d} connection(s)\n", .{ entry.key_ptr.*, entry.value_ptr.connections.items.len });
             }
         }
     }
 
     // Metadata
-    std.debug.print("  Updated: {s}\n", .{neurona.updated});
-    std.debug.print("  Language: {s}\n", .{neurona.language});
+    try stdout.print("  Updated: {s}\n", .{neurona.updated});
+    try stdout.print("  Language: {s}\n", .{neurona.language});
+    try stdout.flush();
 
     // Body
     if (show_body and body.len > 0) {
-        std.debug.print("\n", .{});
-        for (0..50) |_| std.debug.print("=", .{});
-        std.debug.print("\n", .{});
-        std.debug.print("{s}", .{body});
-        std.debug.print("\n", .{});
-        for (0..50) |_| std.debug.print("=", .{});
-        std.debug.print("\n", .{});
+        try stdout.print("\n", .{});
+        for (0..50) |_| try stdout.print("=", .{});
+        try stdout.print("\n", .{});
+        try stdout.print("{s}", .{body});
+        try stdout.print("\n", .{});
+        for (0..50) |_| try stdout.print("=", .{});
+        try stdout.print("\n", .{});
     } else if (show_body) {
-        std.debug.print("\n  (No body content)\n", .{});
+        try stdout.print("\n  (No body content)\n", .{});
     }
-}
-
-/// Print string as JSON-escaped value
-fn printJsonString(s: []const u8) void {
-    std.debug.print("\"", .{});
-    for (s) |c| {
-        switch (c) {
-            '"' => std.debug.print("\\\"", .{}),
-            '\\' => std.debug.print("\\\\", .{}),
-            '\n' => std.debug.print("\\n", .{}),
-            '\r' => std.debug.print("\\r", .{}),
-            '\t' => std.debug.print("\\t", .{}),
-            else => std.debug.print("{c}", .{c}),
-        }
-    }
-    std.debug.print("\"", .{});
+    try stdout.flush();
 }
 
 /// JSON output for AI
 fn outputJson(allocator: Allocator, neurona: *const Neurona, filepath: []const u8, body: []const u8) !void {
     _ = allocator;
-    std.debug.print("{{", .{});
-    std.debug.print("\"id\":\"{s}\",", .{neurona.id});
-    std.debug.print("\"title\":\"{s}\",", .{neurona.title});
-    std.debug.print("\"type\":\"{s}\",", .{@tagName(neurona.type)});
-    std.debug.print("\"filepath\":\"{s}\",", .{filepath});
-    std.debug.print("\"language\":\"{s}\",", .{neurona.language});
-    std.debug.print("\"updated\":\"{s}\",", .{neurona.updated});
+
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
+
+    try JsonOutput.beginObject(stdout);
+
+    try JsonOutput.stringField(stdout, "id", neurona.id);
+    try JsonOutput.separator(stdout, true);
+    try JsonOutput.stringField(stdout, "title", neurona.title);
+    try JsonOutput.separator(stdout, true);
+    try JsonOutput.enumField(stdout, "type", neurona.type);
+    try JsonOutput.separator(stdout, true);
+    try JsonOutput.stringField(stdout, "filepath", filepath);
+    try JsonOutput.separator(stdout, true);
+    try JsonOutput.stringField(stdout, "language", neurona.language);
+    try JsonOutput.separator(stdout, true);
+    try JsonOutput.stringField(stdout, "updated", neurona.updated);
 
     // Tags
-    std.debug.print("\"tags\":[", .{});
+    try JsonOutput.separator(stdout, true);
+    try stdout.print("\"tags\":[", .{});
     for (neurona.tags.items, 0..) |tag, i| {
-        if (i > 0) std.debug.print(",", .{});
-        printJsonString(tag);
+        if (i > 0) try stdout.writeAll(",");
+        try JsonOutput.stringField(stdout, "", tag);
     }
-    std.debug.print("],", .{});
+    try stdout.writeAll("]");
 
     // Connections count
-    std.debug.print("\"connections\":{d},", .{neurona.connections.count()});
+    try JsonOutput.separator(stdout, true);
+    try JsonOutput.numberField(stdout, "connections", neurona.connections.count());
 
     // Body content (escaped for JSON)
-    std.debug.print("\"body\":", .{});
-    printJsonString(body);
-    std.debug.print(",", .{});
+    try JsonOutput.separator(stdout, true);
+    try stdout.print("\"body\":", .{});
+    try JsonOutput.stringField(stdout, "", body);
+    try JsonOutput.separator(stdout, true);
 
     // Context
-    std.debug.print("\"context\":{{", .{});
+    try stdout.print("\"context\":{{", .{});
     switch (neurona.context) {
         .requirement => |ctx| {
-            std.debug.print("\"status\":\"{s}\",", .{ctx.status});
-            std.debug.print("\"verification_method\":\"{s}\"", .{ctx.verification_method});
+            try JsonOutput.stringField(stdout, "status", ctx.status);
+            try JsonOutput.separator(stdout, true);
+            try JsonOutput.stringField(stdout, "verification_method", ctx.verification_method);
         },
         .test_case => |ctx| {
-            std.debug.print("\"status\":\"{s}\",", .{ctx.status});
-            std.debug.print("\"framework\":\"{s}\"", .{ctx.framework});
+            try JsonOutput.stringField(stdout, "status", ctx.status);
+            try JsonOutput.separator(stdout, true);
+            try JsonOutput.stringField(stdout, "framework", ctx.framework);
         },
         .issue => |ctx| {
-            std.debug.print("\"status\":\"{s}\"", .{ctx.status});
+            try JsonOutput.stringField(stdout, "status", ctx.status);
         },
         .artifact => |ctx| {
-            std.debug.print("\"runtime\":\"{s}\"", .{ctx.runtime});
+            try JsonOutput.stringField(stdout, "runtime", ctx.runtime);
         },
         else => {},
     }
-    std.debug.print("}},", .{});
+    try stdout.writeAll("}}");
+    try JsonOutput.separator(stdout, true);
 
     // LLM metadata
     if (neurona.llm_metadata) |*meta| {
-        std.debug.print("\"_llm\":{{", .{});
-        std.debug.print("\"t\":\"{s}\",", .{meta.short_title});
-        std.debug.print("\"d\":{d},", .{meta.density});
-        std.debug.print("\"c\":{d},", .{meta.token_count});
-        std.debug.print("\"strategy\":\"{s}\",", .{meta.strategy});
+        try stdout.print("\"_llm\":{{", .{});
+        try JsonOutput.stringField(stdout, "t", meta.short_title);
+        try JsonOutput.separator(stdout, true);
+        try JsonOutput.numberField(stdout, "d", meta.density);
+        try JsonOutput.separator(stdout, true);
+        try JsonOutput.numberField(stdout, "c", meta.token_count);
+        try JsonOutput.separator(stdout, true);
+        try JsonOutput.stringField(stdout, "strategy", meta.strategy);
 
-        std.debug.print("\"k\":[", .{});
+        try JsonOutput.separator(stdout, true);
+        try stdout.print("\"k\":[", .{});
         for (meta.keywords.items, 0..) |kw, i| {
-            if (i > 0) std.debug.print(",", .{});
-            printJsonString(kw);
+            if (i > 0) try stdout.writeAll(",");
+            try JsonOutput.stringField(stdout, "", kw);
         }
-        std.debug.print("]", .{});
-        std.debug.print("}}", .{});
+        try stdout.writeAll("]");
+        try stdout.writeAll("}}");
     }
 
-    std.debug.print("}}\n", .{});
+    try JsonOutput.endObject(stdout);
+    try stdout.print("\n", .{});
+    try stdout.flush();
 }
 
 // Example CLI usage:

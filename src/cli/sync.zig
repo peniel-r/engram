@@ -1,6 +1,7 @@
 // File: src/cli/sync.zig
-// The `engram sync` command for rebuilding the graph index
-// Scans all Neuronas and rebuilds the adjacency index
+// The `engram sync` command for rebuilding graph index
+// Scans all Neuronas and rebuilds adjacency index
+// MIGRATED: Now uses Phase 3 CLI utilities (HumanOutput)
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -11,6 +12,9 @@ const storage = @import("../root.zig").storage;
 const validator = @import("../core/validator.zig");
 const benchmark = @import("../root.zig").utils.benchmark;
 const uri_parser = @import("../utils/uri_parser.zig");
+
+// Import Phase 3 CLI utilities
+const HumanOutput = @import("output/human.zig").HumanOutput;
 
 /// Sync configuration
 pub const SyncConfig = struct {
@@ -26,9 +30,9 @@ pub fn execute(allocator: Allocator, config: SyncConfig) !void {
     // Step 0: Determine cortex directory and neuronas directory
     const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
         if (err == error.CortexNotFound) {
-            std.debug.print("Error: No cortex found in current directory or within 3 directory levels.\n", .{});
-            std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
-            std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+            try HumanOutput.printError("No cortex found in current directory or within 3 directory levels.");
+            try HumanOutput.printInfo("Navigate to a cortex directory or use --cortex <path> to specify location.");
+            try HumanOutput.printInfo("Run 'engram init <name>' to create a new cortex.");
             std.process.exit(1);
         }
         return err;
@@ -52,8 +56,12 @@ pub fn execute(allocator: Allocator, config: SyncConfig) !void {
             defer g.deinit(allocator);
 
             if (config.verbose) {
-                std.debug.print("Loaded graph index from cache: {s}\n", .{index_path});
-                std.debug.print("Graph nodes: {d}, edges: {d}\n", .{ g.nodeCount(), g.edgeCount() / 2 });
+                var stdout_buffer: [4096]u8 = undefined;
+                var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+                const stdout = &stdout_writer.interface;
+                try stdout.print("Loaded graph index from cache: {s}\n", .{index_path});
+                try stdout.print("Graph nodes: {d}, edges: {d}\n", .{ g.nodeCount(), g.edgeCount() / 2 });
+                try stdout.flush();
             }
 
             try reports.append(allocator, .{
@@ -66,20 +74,28 @@ pub fn execute(allocator: Allocator, config: SyncConfig) !void {
                 .passes_10ms_rule = cold_start_timer.readMs() < 50.0, // Cold start target is 50ms
             });
 
-            // If we only wanted to load the index, we are done
+            // If we only wanted to load index, we are done
             if (!config.rebuild_index) {
-                printPerformanceSummary(reports.items);
+                try printPerformanceSummary(reports.items);
                 return;
             }
         } else |_| {
             if (config.verbose) {
-                std.debug.print("No graph index cache found (or corrupt), rebuilding...\n", .{});
+                var stdout_buffer: [4096]u8 = undefined;
+                var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+                const stdout = &stdout_writer.interface;
+                try stdout.print("No graph index cache found (or corrupt), rebuilding...\n", .{});
+                try stdout.flush();
             }
         }
     }
 
     if (config.verbose) {
-        std.debug.print("Scanning directory: {s}\n", .{directory});
+        var stdout_buffer: [4096]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
+        try stdout.print("Scanning directory: {s}\n", .{directory});
+        try stdout.flush();
     }
 
     // Step 1: Scan all Neuronas
@@ -101,7 +117,11 @@ pub fn execute(allocator: Allocator, config: SyncConfig) !void {
     });
 
     if (config.verbose) {
-        std.debug.print("Found {d} Neuronas\n", .{neuronas.len});
+        var stdout_buffer: [4096]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
+        try stdout.print("Found {d} Neuronas\n", .{neuronas.len});
+        try stdout.flush();
     }
 
     // Step 2: Build graph index
@@ -146,23 +166,28 @@ pub fn execute(allocator: Allocator, config: SyncConfig) !void {
         .passes_10ms_rule = vector_ms < 1000.0, // Vector target depends on embeddings
     });
 
-    printPerformanceSummary(reports.items);
+    try printPerformanceSummary(reports.items);
 }
 
 /// Print performance summary table
-fn printPerformanceSummary(reports: []const benchmark.BenchmarkReport) void {
-    std.debug.print("\nPerformance Summary (10ms Rule Validation)\n", .{});
-    std.debug.print("------------------------------------------------------------\n", .{});
-    std.debug.print("{s: <30} | {s: >14} | {s}\n", .{ "Operation", "Duration", "Status" });
-    std.debug.print("------------------------------------------------------------\n", .{});
+fn printPerformanceSummary(reports: []const benchmark.BenchmarkReport) !void {
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
+
+    try stdout.print("\nPerformance Summary (10ms Rule Validation)\n", .{});
+    try stdout.print("------------------------------------------------------------\n", .{});
+    try stdout.print("{s: <30} | {s: >14} | {s}\n", .{ "Operation", "Duration", "Status" });
+    try stdout.print("------------------------------------------------------------\n", .{});
     for (reports) |r| {
         const threshold: f64 = if (std.mem.indexOf(u8, r.operation, "Cold Start") != null) 50.0 else 1000.0;
         const status = if (r.avg_ms < threshold) "✅ PASS" else "❌ FAIL";
         // Special 10ms rule mention for traversals would go here if we were doing them
-        // For sync, we use the targets from Issue 1.4
-        std.debug.print("{s: <30} | {d: >11.3} ms | {s}\n", .{ r.operation, r.avg_ms, status });
+        // For sync, we use targets from Issue 1.4
+        try stdout.print("{s: <30} | {d: >11.3} ms | {s}\n", .{ r.operation, r.avg_ms, status });
     }
-    std.debug.print("------------------------------------------------------------\n\n", .{});
+    try stdout.print("------------------------------------------------------------\n\n", .{});
+    try stdout.flush();
 }
 
 /// Sync LLM Cache (Issue 1.3)
@@ -182,14 +207,24 @@ fn syncLLMCache(allocator: Allocator, neuronas: []const Neurona, verbose: bool) 
 
     // Load existing
     cache.loadFromDisk(summaries_path, tokens_path) catch |err| {
-        if (verbose) std.debug.print("Note: Could not load LLM cache: {}\n", .{err});
+        if (verbose) {
+            var stdout_buffer: [4096]u8 = undefined;
+            var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+            const stdout = &stdout_writer.interface;
+            try stdout.print("Note: Could not load LLM cache: {}\n", .{err});
+            try stdout.flush();
+        }
     };
 
     if (verbose) {
-        std.debug.print("LLM Cache loaded: {d} summaries, {d} token counts\n", .{
+        var stdout_buffer: [4096]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
+        try stdout.print("LLM Cache loaded: {d} summaries, {d} token counts\n", .{
             cache.summaries.count(),
             cache.tokens.count(),
         });
+        try stdout.flush();
     }
 
     // TODO: Perform enrichment/cleanup if needed
@@ -198,7 +233,11 @@ fn syncLLMCache(allocator: Allocator, neuronas: []const Neurona, verbose: bool) 
     // Save back to disk
     try cache.saveToDisk(summaries_path, tokens_path);
     if (verbose) {
-        std.debug.print("✓ LLM Cache saved to {s}\n", .{cache_dir});
+        var stdout_buffer: [4096]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
+        try stdout.print("✓ LLM Cache saved to {s}\n", .{cache_dir});
+        try stdout.flush();
     }
 }
 
@@ -213,7 +252,11 @@ fn syncVectors(allocator: Allocator, neuronas: []const Neurona, verbose: bool, f
         if (storage.VectorIndex.load(allocator, vector_path)) |loaded| {
             if (loaded.timestamp >= latest_mtime) {
                 if (verbose) {
-                    std.debug.print("✓ Vector index is up to date (Timestamp: {d})\n", .{loaded.timestamp});
+                    var stdout_buffer: [4096]u8 = undefined;
+                    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+                    const stdout = &stdout_writer.interface;
+                    try stdout.print("✓ Vector index is up to date (Timestamp: {d})\n", .{loaded.timestamp});
+                    try stdout.flush();
                 }
                 var idx = loaded.index;
                 idx.deinit(allocator);
@@ -222,11 +265,19 @@ fn syncVectors(allocator: Allocator, neuronas: []const Neurona, verbose: bool, f
             var idx = loaded.index;
             idx.deinit(allocator);
             if (verbose) {
-                std.debug.print("Vector index is stale, rebuilding...\n", .{});
+                var stdout_buffer: [4096]u8 = undefined;
+                var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+                const stdout = &stdout_writer.interface;
+                try stdout.print("Vector index is stale, rebuilding...\n", .{});
+                try stdout.flush();
             }
         } else |_| {
             if (verbose) {
-                std.debug.print("No vector index found, building...\n", .{});
+                var stdout_buffer: [4096]u8 = undefined;
+                var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+                const stdout = &stdout_writer.interface;
+                try stdout.print("No vector index found, building...\n", .{});
+                try stdout.flush();
             }
         }
     }
@@ -242,7 +293,7 @@ fn syncVectors(allocator: Allocator, neuronas: []const Neurona, verbose: bool, f
         try glove_index.loadCacheZeroCopy(allocator, glove_cache_path);
     } else {
         if (verbose) {
-            std.debug.print("⚠️  Warning: GloVe cache not found at {s}. Skipping vector building.\n", .{glove_cache_path});
+            try HumanOutput.printWarning("GloVe cache not found at glove_cache.bin. Skipping vector building.");
         }
         return;
     }
@@ -251,12 +302,16 @@ fn syncVectors(allocator: Allocator, neuronas: []const Neurona, verbose: bool, f
     defer vector_index.deinit(allocator);
 
     if (verbose) {
-        std.debug.print("Computing embeddings for {d} Neuronas...\n", .{neuronas.len});
+        var stdout_buffer: [4096]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
+        try stdout.print("Computing embeddings for {d} Neuronas...\n", .{neuronas.len});
+        try stdout.flush();
     }
 
-    const query = @import("query.zig");
+    const query_mod = @import("query.zig");
     for (neuronas) |*neurona| {
-        const embedding = try query.createGloVeEmbedding(allocator, neurona, &glove_index);
+        const embedding = try query_mod.createGloVeEmbedding(allocator, neurona, &glove_index);
         defer allocator.free(embedding);
         try vector_index.addVector(allocator, neurona.id, embedding);
     }
@@ -264,7 +319,11 @@ fn syncVectors(allocator: Allocator, neuronas: []const Neurona, verbose: bool, f
     // Save
     try vector_index.save(allocator, vector_path, latest_mtime);
     if (verbose) {
-        std.debug.print("✓ Vector index saved to {s}\n", .{vector_path});
+        var stdout_buffer: [4096]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
+        try stdout.print("✓ Vector index saved to {s}\n", .{vector_path});
+        try stdout.flush();
     }
 }
 
@@ -274,7 +333,11 @@ fn buildGraphIndex(allocator: Allocator, neuronas: []const Neurona, verbose: boo
     defer graph.deinit(allocator);
 
     if (verbose) {
-        std.debug.print("Building graph index...\n", .{});
+        var stdout_buffer: [4096]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
+        try stdout.print("Building graph index...\n", .{});
+        try stdout.flush();
     }
 
     // Add all Neuronas to graph
@@ -289,8 +352,12 @@ fn buildGraphIndex(allocator: Allocator, neuronas: []const Neurona, verbose: boo
     }
 
     if (verbose) {
-        std.debug.print("Graph built: {d} nodes\n", .{graph.nodeCount()});
-        std.debug.print("Index saved to .activations/graph.idx\n", .{});
+        var stdout_buffer: [4096]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
+        try stdout.print("Graph built: {d} nodes\n", .{graph.nodeCount()});
+        try stdout.print("Index saved to .activations/graph.idx\n", .{});
+        try stdout.flush();
     }
 
     // Step 2.5: Detect and report orphans
@@ -298,14 +365,22 @@ fn buildGraphIndex(allocator: Allocator, neuronas: []const Neurona, verbose: boo
     defer allocator.free(orphans);
 
     if (orphans.len > 0) {
-        std.debug.print("\n⚠️  Warning: Found {d} orphaned Neurona(s):\n", .{orphans.len});
+        var stdout_buffer: [4096]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
+        try stdout.print("\n⚠️  Warning: Found {d} orphaned Neurona(s):\n", .{orphans.len});
         for (orphans) |orphan_id| {
-            std.debug.print("  - {s}\n", .{orphan_id});
+            try stdout.print("  - {s}\n", .{orphan_id});
         }
-        std.debug.print("  Orphaned Neuronas have no connections in or out.\n", .{});
-        std.debug.print("  Consider linking them to the graph.\n\n", .{});
+        try stdout.print("  Orphaned Neuronas have no connections in or out.\n", .{});
+        try stdout.print("  Consider linking them to graph.\n\n", .{});
+        try stdout.flush();
     } else if (verbose) {
-        std.debug.print("✓ No orphaned Neuronas found\n\n", .{});
+        var stdout_buffer: [4096]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
+        try stdout.print("✓ No orphaned Neuronas found\n\n", .{});
+        try stdout.flush();
     }
 
     // Step 3: Save graph index to disk
@@ -316,7 +391,11 @@ fn buildGraphIndex(allocator: Allocator, neuronas: []const Neurona, verbose: boo
     try storage.index.saveGraph(allocator, &graph, index_path);
 
     if (verbose) {
-        std.debug.print("✓ Graph index saved to {s}\n", .{index_path});
+        var stdout_buffer: [4096]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
+        try stdout.print("✓ Graph index saved to {s}\n", .{index_path});
+        try stdout.flush();
     }
 }
 
@@ -325,13 +404,18 @@ pub fn showStats(allocator: Allocator, graph: *Graph) !void {
     _ = allocator; // Used in function signature but not in this simple version
     _ = graph; // TODO: Implement full statistics
 
-    std.debug.print("\n📊 Graph Statistics\n", .{});
-    for (0..20) |_| std.debug.print("=", .{});
-    std.debug.print("\n", .{});
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
+
+    try stdout.print("\n📊 Graph Statistics\n", .{});
+    for (0..20) |_| try stdout.print("=", .{});
+    try stdout.print("\n", .{});
     // TODO: Implement count() and totalEdges() on Graph
-    std.debug.print("  Total Nodes: [requires graph.count()]\n", .{});
-    std.debug.print("  Total Edges: [requires graph.totalEdges()]\n", .{});
-    std.debug.print("\n", .{});
+    try stdout.print("  Total Nodes: [requires graph.count()]\n", .{});
+    try stdout.print("  Total Edges: [requires graph.totalEdges()]\n", .{});
+    try stdout.print("\n", .{});
+    try stdout.flush();
 }
 
 // Example CLI usage:

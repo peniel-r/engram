@@ -1,10 +1,14 @@
 // File: src/cli/init.zig
 // The `engram init` command for initializing a new Cortex
+// MIGRATED: Now uses Phase 3 CLI utilities (HumanOutput)
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Cortex = @import("../core/cortex.zig").Cortex;
 const timestamp = @import("../utils/timestamp.zig");
+
+// Import Phase 3 CLI utilities
+const HumanOutput = @import("output/human.zig").HumanOutput;
 
 /// Cortex types supported
 pub const CortexType = enum {
@@ -137,10 +141,10 @@ fn validateExistingCortex(dirs: *const DirectoryStructure, force: bool) !void {
     }
 }
 
-/// Create the directory structure
+/// Create directory structure
 fn createDirectoryStructure(dirs: *const DirectoryStructure, verbose: bool) !void {
     if (verbose) {
-        std.debug.print("Creating directory structure...\n", .{});
+        try HumanOutput.printInfo("Creating directory structure...");
     }
 
     // Create root directory
@@ -168,18 +172,22 @@ fn createDirectoryStructure(dirs: *const DirectoryStructure, verbose: bool) !voi
     try std.fs.cwd().makePath(pdfs_path);
 
     if (verbose) {
-        std.debug.print("  ✓ {s}/\n", .{dirs.root});
-        std.debug.print("  ✓ {s}/\n", .{dirs.neuronas});
-        std.debug.print("  ✓ {s}/\n", .{dirs.activations});
-        std.debug.print("  ✓ {s}/\n", .{dirs.cache});
-        std.debug.print("  ✓ {s}/\n", .{dirs.assets});
+        var stdout_buffer: [4096]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
+        try stdout.print("  ✓ {s}/\n", .{dirs.root});
+        try stdout.print("  ✓ {s}/\n", .{dirs.neuronas});
+        try stdout.print("  ✓ {s}/\n", .{dirs.activations});
+        try stdout.print("  ✓ {s}/\n", .{dirs.cache});
+        try stdout.print("  ✓ {s}/\n", .{dirs.assets});
+        try stdout.flush();
     }
 }
 
 /// Generate and write cortex.json configuration
 fn writeCortexConfig(allocator: Allocator, dirs: *const DirectoryStructure, config: InitConfig, verbose: bool) !void {
     if (verbose) {
-        std.debug.print("Generating cortex.json...\n", .{});
+        try HumanOutput.printInfo("Generating cortex.json...");
     }
 
     // Create default Cortex configuration
@@ -238,21 +246,25 @@ fn writeCortexConfig(allocator: Allocator, dirs: *const DirectoryStructure, conf
     try file.writeAll(json_content);
 
     if (verbose) {
-        std.debug.print("  ✓ {s}\n", .{cortex_json_path});
+        var stdout_buffer: [4096]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
+        try stdout.print("  ✓ {s}\n", .{cortex_json_path});
+        try stdout.flush();
     }
 }
 
-/// Generate a cortex ID from the name
+/// Generate a cortex ID from name
 fn generateCortexId(name: []const u8) []const u8 {
-    // For now, just use the name as-is
-    // In a real implementation, this would sanitize the name
+    // For now, just use name as-is
+    // In a real implementation, this would sanitize name
     return name;
 }
 
 /// Create README.md with Cortex overview
 fn writeReadme(allocator: Allocator, dirs: *const DirectoryStructure, config: InitConfig, verbose: bool) !void {
     if (verbose) {
-        std.debug.print("Creating README.md...\n", .{});
+        try HumanOutput.printInfo("Creating README.md...");
     }
 
     const readme_path = try std.fs.path.join(allocator, &.{ dirs.root, "README.md" });
@@ -350,14 +362,18 @@ fn writeReadme(allocator: Allocator, dirs: *const DirectoryStructure, config: In
     try file.writeAll(readme_content);
 
     if (verbose) {
-        std.debug.print("  ✓ {s}\n", .{readme_path});
+        var stdout_buffer: [4096]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
+        try stdout.print("  ✓ {s}\n", .{readme_path});
+        try stdout.flush();
     }
 }
 
 /// Create .gitignore for .activations directory
 fn writeGitignore(dirs: *const DirectoryStructure, verbose: bool) !void {
     if (verbose) {
-        std.debug.print("Creating .gitignore...\n", .{});
+        try HumanOutput.printInfo("Creating .gitignore...");
     }
 
     const gitignore_path = try std.fs.path.join(std.heap.page_allocator, &.{ dirs.activations, ".gitignore" });
@@ -370,21 +386,31 @@ fn writeGitignore(dirs: *const DirectoryStructure, verbose: bool) !void {
     try file.writeAll(gitignore_content);
 
     if (verbose) {
-        std.debug.print("  ✓ {s}\n", .{gitignore_path});
+        var stdout_buffer: [4096]u8 = undefined;
+        var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        const stdout = &stdout_writer.interface;
+        try stdout.print("  ✓ {s}\n", .{gitignore_path});
+        try stdout.flush();
     }
 }
 
 /// Output success message
 fn outputSuccess(dirs: *const DirectoryStructure, config: InitConfig) !void {
-    std.debug.print("\n✓ Cortex initialized successfully!\n\n", .{});
-    std.debug.print("  Name: {s}\n", .{config.name});
-    std.debug.print("  Type: {s}\n", .{config.cortex_type.toString()});
-    std.debug.print("  Location: {s}/\n\n", .{dirs.root});
+    try HumanOutput.printSuccess("Cortex initialized successfully!");
 
-    std.debug.print("Next steps:\n", .{});
-    std.debug.print("  cd {s}\n", .{dirs.root});
-    std.debug.print("  engram new concept \"Hello World\"\n", .{});
-    std.debug.print("  engram show hello.world\n\n", .{});
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
+
+    try stdout.print("\n  Name: {s}\n", .{config.name});
+    try stdout.print("  Type: {s}\n", .{config.cortex_type.toString()});
+    try stdout.print("  Location: {s}/\n\n", .{dirs.root});
+
+    try stdout.print("Next steps:\n", .{});
+    try stdout.print("  cd {s}\n", .{dirs.root});
+    try stdout.print("  engram new concept \"Hello World\"\n", .{});
+    try stdout.print("  engram show hello.world\n\n", .{});
+    try stdout.flush();
 }
 
 // Unit tests

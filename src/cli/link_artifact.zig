@@ -1,6 +1,7 @@
 // File: src/cli/link_artifact.zig
 // The `engram link-artifact` command for linking source files to requirements
 // Automatically creates artifact Neuronas and links them to implementing requirements
+// MIGRATED: Now uses Phase 3 CLI utilities (JsonOutput, HumanOutput)
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -15,6 +16,10 @@ const findNeuronaPath = @import("../storage/filesystem.zig").findNeuronaPath;
 const generateId = @import("../utils/id_generator.zig").generateId;
 const getCurrentTimestamp = @import("../utils/timestamp.zig").getCurrentTimestamp;
 const uri_parser = @import("../utils/uri_parser.zig");
+
+// Import Phase 3 CLI utilities
+const JsonOutput = @import("output/json.zig").JsonOutput;
+const HumanOutput = @import("output/human.zig").HumanOutput;
 
 /// Link artifact configuration
 pub const LinkArtifactConfig = struct {
@@ -48,9 +53,9 @@ pub fn execute(allocator: Allocator, config: LinkArtifactConfig) !void {
     // Determine neuronas directory
     const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
         if (err == error.CortexNotFound) {
-            std.debug.print("Error: No cortex found in current directory or within 3 directory levels.\n", .{});
-            std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
-            std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+            try HumanOutput.printError("No cortex found in current directory or within 3 directory levels.");
+            try HumanOutput.printInfo("Navigate to a cortex directory or use --cortex <path> to specify location.");
+            try HumanOutput.printInfo("Run 'engram init <name>' to create a new cortex.");
             std.process.exit(1);
         }
         return err;
@@ -68,7 +73,7 @@ pub fn execute(allocator: Allocator, config: LinkArtifactConfig) !void {
     defer requirement.deinit(allocator);
 
     if (requirement.type != .requirement) {
-        std.debug.print("Error: '{s}' is not a requirement\n", .{config.requirement_id});
+        try HumanOutput.printError("'req' is not a requirement");
         return error.InvalidNeuronaType;
     }
 
@@ -105,7 +110,11 @@ pub fn execute(allocator: Allocator, config: LinkArtifactConfig) !void {
         try writeNeurona(allocator, requirement, req_filepath, false);
 
         if (config.verbose) {
-            std.debug.print("Updated requirement {s}\n", .{config.requirement_id});
+            var stdout_buffer: [4096]u8 = undefined;
+            var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+            const stdout = &stdout_writer.interface;
+            try stdout.print("Updated requirement {s}\n", .{config.requirement_id});
+            try stdout.flush();
         }
     }
 
@@ -240,9 +249,13 @@ fn generateArtifactId(allocator: Allocator, filename: []const u8) ![]const u8 {
 fn outputResults(results: []const LinkResult, verbose: bool) !void {
     _ = verbose;
 
-    std.debug.print("\n🔗 Artifact Linking Results\n", .{});
-    for (0..40) |_| std.debug.print("=", .{});
-    std.debug.print("\n", .{});
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
+
+    try stdout.print("\n🔗 Artifact Linking Results\n", .{});
+    for (0..40) |_| try stdout.print("=", .{});
+    try stdout.print("\n", .{});
 
     var created_count: usize = 0;
     var existing_count: usize = 0;
@@ -251,26 +264,37 @@ fn outputResults(results: []const LinkResult, verbose: bool) !void {
         const status = if (r.created) "✓ Created" else "⊘ Existing";
         if (r.created) created_count += 1 else existing_count += 1;
 
-        std.debug.print("  {s}: {s} → {s}\n", .{ status, r.source_file, r.artifact_id });
-        std.debug.print("         Implements: {s}\n", .{r.requirement_id});
-        std.debug.print("\n", .{});
+        try stdout.print("  {s}: {s} → {s}\n", .{ status, r.source_file, r.artifact_id });
+        try stdout.print("         Implements: {s}\n", .{r.requirement_id});
+        try stdout.print("\n", .{});
     }
 
-    std.debug.print("Summary: {d} created, {d} existing\n", .{ created_count, existing_count });
+    try stdout.print("Summary: {d} created, {d} existing\n", .{ created_count, existing_count });
+    try stdout.flush();
 }
 
 /// JSON output for AI parsing
 fn outputJson(results: []const LinkResult) !void {
-    std.debug.print("[", .{});
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
+
+    try JsonOutput.beginArray(stdout);
     for (results, 0..) |r, i| {
-        if (i > 0) std.debug.print(",", .{});
-        std.debug.print("{{\"artifact_id\":\"{s}\",", .{r.artifact_id});
-        std.debug.print("\"source_file\":\"{s}\",", .{r.source_file});
-        std.debug.print("\"requirement_id\":\"{s}\",", .{r.requirement_id});
-        const created_val: u32 = if (r.created) 1 else 0;
-        std.debug.print("\"created\":{d}}}", .{created_val});
+        if (i > 0) try JsonOutput.separator(stdout, true);
+        try JsonOutput.beginObject(stdout);
+        try JsonOutput.stringField(stdout, "artifact_id", r.artifact_id);
+        try JsonOutput.separator(stdout, true);
+        try JsonOutput.stringField(stdout, "source_file", r.source_file);
+        try JsonOutput.separator(stdout, true);
+        try JsonOutput.stringField(stdout, "requirement_id", r.requirement_id);
+        try JsonOutput.separator(stdout, true);
+        try JsonOutput.boolField(stdout, "created", r.created);
+        try JsonOutput.endObject(stdout);
     }
-    std.debug.print("]\n", .{});
+    try JsonOutput.endArray(stdout);
+    try stdout.print("\n", .{});
+    try stdout.flush();
 }
 
 // ==================== Tests ====================

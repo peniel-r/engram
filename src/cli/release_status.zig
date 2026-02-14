@@ -1,6 +1,7 @@
 // File: src/cli/release_status.zig
 // The `engram release-status` command for release readiness checks
 // Validates requirements coverage, test status, blocking issues
+// MIGRATED: Now uses Phase 3 CLI utilities (JsonOutput, HumanOutput)
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -10,6 +11,10 @@ const ConnectionType = @import("../core/neurona.zig").ConnectionType;
 const Graph = @import("../core/graph.zig").Graph;
 const scanNeuronas = @import("../storage/filesystem.zig").scanNeuronas;
 const uri_parser = @import("../utils/uri_parser.zig");
+
+// Import Phase 3 CLI utilities
+const JsonOutput = @import("output/json.zig").JsonOutput;
+const HumanOutput = @import("output/human.zig").HumanOutput;
 
 /// Release status configuration
 pub const ReleaseStatusConfig = struct {
@@ -147,9 +152,9 @@ pub fn execute(allocator: Allocator, config: ReleaseStatusConfig) !void {
     // Determine neuronas directory
     const cortex_dir = uri_parser.findCortexDir(allocator, config.cortex_dir) catch |err| {
         if (err == error.CortexNotFound) {
-            std.debug.print("Error: No cortex found in current directory or within 3 directory levels.\n", .{});
-            std.debug.print("\nHint: Navigate to a cortex directory or use --cortex <path> to specify location.\n", .{});
-            std.debug.print("Run 'engram init <name>' to create a new cortex.\n", .{});
+            try HumanOutput.printError("No cortex found in current directory or within 3 directory levels.");
+            try HumanOutput.printInfo("Navigate to a cortex directory or use --cortex <path> to specify location.");
+            try HumanOutput.printInfo("Run 'engram init <name>' to create a new cortex.");
             std.process.exit(1);
         }
         return err;
@@ -480,9 +485,13 @@ fn generateRecommendations(allocator: Allocator, status: *ReleaseStatus) !void {
 
 /// Output release status report
 fn outputReport(status: *const ReleaseStatus, verbose: bool) !void {
-    std.debug.print("\n🚀 Release Status Report\n", .{});
-    for (0..50) |_| std.debug.print("=", .{});
-    std.debug.print("\n", .{});
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
+
+    try stdout.print("\n🚀 Release Status Report\n", .{});
+    for (0..50) |_| try stdout.print("=", .{});
+    try stdout.print("\n", .{});
 
     // Completion percentage
     const completion_str = if (status.completion >= 100.0)
@@ -496,18 +505,18 @@ fn outputReport(status: *const ReleaseStatus, verbose: bool) !void {
 
     defer if (status.completion < 100.0 and status.completion > 0.0) std.heap.page_allocator.free(completion_str);
 
-    std.debug.print("\n📊 Overall Completion: {s}\n\n", .{completion_str});
+    try stdout.print("\n📊 Overall Completion: {s}\n\n", .{completion_str});
 
     // Requirements
-    std.debug.print("📝 Requirements\n", .{});
-    for (0..20) |_| std.debug.print("-", .{});
-    std.debug.print("\n", .{});
-    std.debug.print("  Total: {d}\n", .{status.requirements.total});
-    std.debug.print("  Completed: {d}\n", .{status.requirements.tested});
-    std.debug.print("  Partial: {d}\n", .{status.requirements.implemented - status.requirements.tested});
-    std.debug.print("  Not Started: {d}\n", .{status.requirements.not_started});
-    std.debug.print("  Blocked: {d}\n", .{status.requirements.blocked});
-    std.debug.print("\n", .{});
+    try stdout.print("📝 Requirements\n", .{});
+    for (0..20) |_| try stdout.print("-", .{});
+    try stdout.print("\n", .{});
+    try stdout.print("  Total: {d}\n", .{status.requirements.total});
+    try stdout.print("  Completed: {d}\n", .{status.requirements.tested});
+    try stdout.print("  Partial: {d}\n", .{status.requirements.implemented - status.requirements.tested});
+    try stdout.print("  Not Started: {d}\n", .{status.requirements.not_started});
+    try stdout.print("  Blocked: {d}\n", .{status.requirements.blocked});
+    try stdout.print("\n", .{});
 
     if (verbose) {
         for (status.requirements.details.items) |detail| {
@@ -517,53 +526,53 @@ fn outputReport(status: *const ReleaseStatus, verbose: bool) !void {
                 .not_started => "○",
                 .blocked => "⚠",
             };
-            std.debug.print("  {s} {s}: {s}\n", .{ status_sym, detail.id, detail.title });
+            try stdout.print("  {s} {s}: {s}\n", .{ status_sym, detail.id, detail.title });
             if (detail.blocking_issues.items.len > 0) {
-                std.debug.print("      Blocked by: ", .{});
+                try stdout.print("      Blocked by: ", .{});
                 for (detail.blocking_issues.items, 0..) |issue, i| {
-                    if (i > 0) std.debug.print(", ", .{});
-                    std.debug.print("{s}", .{issue});
+                    if (i > 0) try stdout.print(", ", .{});
+                    try stdout.print("{s}", .{issue});
                 }
-                std.debug.print("\n", .{});
+                try stdout.print("\n", .{});
             }
         }
-        std.debug.print("\n", .{});
+        try stdout.print("\n", .{});
     }
 
     // Tests
-    std.debug.print("🧪 Tests\n", .{});
-    for (0..20) |_| std.debug.print("-", .{});
-    std.debug.print("\n", .{});
-    std.debug.print("  Total: {d}\n", .{status.tests.total});
-    std.debug.print("  Passing: {d}\n", .{status.tests.passing});
-    std.debug.print("  Failing: {d}\n", .{status.tests.failing});
-    std.debug.print("  Not Run: {d}\n", .{status.tests.not_run});
-    std.debug.print("\n", .{});
+    try stdout.print("🧪 Tests\n", .{});
+    for (0..20) |_| try stdout.print("-", .{});
+    try stdout.print("\n", .{});
+    try stdout.print("  Total: {d}\n", .{status.tests.total});
+    try stdout.print("  Passing: {d}\n", .{status.tests.passing});
+    try stdout.print("  Failing: {d}\n", .{status.tests.failing});
+    try stdout.print("  Not Run: {d}\n", .{status.tests.not_run});
+    try stdout.print("\n", .{});
 
     if (verbose and status.tests.failing > 0) {
-        std.debug.print("  Failing Tests:\n", .{});
+        try stdout.print("  Failing Tests:\n", .{});
         for (status.tests.details.items) |detail| {
             if (std.mem.eql(u8, detail.status, "failing")) {
-                std.debug.print("    - {s}: {s}\n", .{ detail.id, detail.title });
+                try stdout.print("    - {s}: {s}\n", .{ detail.id, detail.title });
             }
         }
-        std.debug.print("\n", .{});
+        try stdout.print("\n", .{});
     }
 
     // Issues
-    std.debug.print("🐛 Issues\n", .{});
-    for (0..20) |_| std.debug.print("-", .{});
-    std.debug.print("\n", .{});
-    std.debug.print("  Total: {d}\n", .{status.issues.total});
-    std.debug.print("  Blocking: {d}\n", .{status.issues.blocking});
-    std.debug.print("  Resolved: {d}\n", .{status.issues.resolved});
-    std.debug.print("\n", .{});
+    try stdout.print("🐛 Issues\n", .{});
+    for (0..20) |_| try stdout.print("-", .{});
+    try stdout.print("\n", .{});
+    try stdout.print("  Total: {d}\n", .{status.issues.total});
+    try stdout.print("  Blocking: {d}\n", .{status.issues.blocking});
+    try stdout.print("  Resolved: {d}\n", .{status.issues.resolved});
+    try stdout.print("\n", .{});
 
     // Recommendations
     if (status.recommendations.items.len > 0) {
-        std.debug.print("💡 Recommendations\n", .{});
-        for (0..20) |_| std.debug.print("-", .{});
-        std.debug.print("\n", .{});
+        try stdout.print("💡 Recommendations\n", .{});
+        for (0..20) |_| try stdout.print("-", .{});
+        try stdout.print("\n", .{});
 
         for (status.recommendations.items) |rec| {
             const priority_emoji = switch (rec.priority) {
@@ -572,36 +581,62 @@ fn outputReport(status: *const ReleaseStatus, verbose: bool) !void {
                 3 => "🟡",
                 else => "⚪",
             };
-            std.debug.print("  {s} [{d}] {s}\n", .{ priority_emoji, rec.priority, rec.action });
-            std.debug.print("      {s}\n", .{rec.description});
-            std.debug.print("\n", .{});
+            try stdout.print("  {s} [{d}] {s}\n", .{ priority_emoji, rec.priority, rec.action });
+            try stdout.print("      {s}\n", .{rec.description});
+            try stdout.print("\n", .{});
         }
     }
+    try stdout.flush();
 }
 
 /// JSON output for AI parsing
 fn outputJson(status: *const ReleaseStatus) !void {
-    std.debug.print("{{", .{});
-    std.debug.print("\"completion\":{d:.1},", .{status.completion});
-    std.debug.print("\"requirements\":{{", .{});
-    std.debug.print("\"total\":{d},", .{status.requirements.total});
-    std.debug.print("\"implemented\":{d},", .{status.requirements.implemented});
-    std.debug.print("\"tested\":{d},", .{status.requirements.tested});
-    std.debug.print("\"blocked\":{d},", .{status.requirements.blocked});
-    std.debug.print("\"not_started\":{d}", .{status.requirements.not_started});
-    std.debug.print("}},", .{});
-    std.debug.print("\"tests\":{{", .{});
-    std.debug.print("\"total\":{d},", .{status.tests.total});
-    std.debug.print("\"passing\":{d},", .{status.tests.passing});
-    std.debug.print("\"failing\":{d},", .{status.tests.failing});
-    std.debug.print("\"not_run\":{d}", .{status.tests.not_run});
-    std.debug.print("}},", .{});
-    std.debug.print("\"issues\":{{", .{});
-    std.debug.print("\"total\":{d},", .{status.issues.total});
-    std.debug.print("\"blocking\":{d},", .{status.issues.blocking});
-    std.debug.print("\"resolved\":{d}", .{status.issues.resolved});
-    std.debug.print("}}", .{});
-    std.debug.print("}}\n", .{});
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
+
+    try JsonOutput.beginObject(stdout);
+    try JsonOutput.numberField(stdout, "completion", status.completion);
+    try JsonOutput.separator(stdout, true);
+
+    // Requirements
+    try stdout.print("\"requirements\":{{", .{});
+    try JsonOutput.numberField(stdout, "total", status.requirements.total);
+    try JsonOutput.separator(stdout, true);
+    try JsonOutput.numberField(stdout, "implemented", status.requirements.implemented);
+    try JsonOutput.separator(stdout, true);
+    try JsonOutput.numberField(stdout, "tested", status.requirements.tested);
+    try JsonOutput.separator(stdout, true);
+    try JsonOutput.numberField(stdout, "blocked", status.requirements.blocked);
+    try JsonOutput.separator(stdout, true);
+    try JsonOutput.numberField(stdout, "not_started", status.requirements.not_started);
+    try stdout.writeAll("}");
+    try JsonOutput.separator(stdout, true);
+
+    // Tests
+    try stdout.print("\"tests\":{{", .{});
+    try JsonOutput.numberField(stdout, "total", status.tests.total);
+    try JsonOutput.separator(stdout, true);
+    try JsonOutput.numberField(stdout, "passing", status.tests.passing);
+    try JsonOutput.separator(stdout, true);
+    try JsonOutput.numberField(stdout, "failing", status.tests.failing);
+    try JsonOutput.separator(stdout, true);
+    try JsonOutput.numberField(stdout, "not_run", status.tests.not_run);
+    try stdout.writeAll("}");
+    try JsonOutput.separator(stdout, true);
+
+    // Issues
+    try stdout.print("\"issues\":{{", .{});
+    try JsonOutput.numberField(stdout, "total", status.issues.total);
+    try JsonOutput.separator(stdout, true);
+    try JsonOutput.numberField(stdout, "blocking", status.issues.blocking);
+    try JsonOutput.separator(stdout, true);
+    try JsonOutput.numberField(stdout, "resolved", status.issues.resolved);
+    try stdout.writeAll("}");
+
+    try JsonOutput.endObject(stdout);
+    try stdout.print("\n", .{});
+    try stdout.flush();
 }
 
 // ==================== Tests ====================
