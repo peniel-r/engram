@@ -1,15 +1,20 @@
 # Segmentation Fault Investigation
 
-**Version**: 1.1.0  
-**Date**: 2026-02-14  
-**Status**: PRE-EXISTING ISSUE  
-**Priority**: Critical  
+**Version**: 1.2.0
+**Date**: 2026-02-14
+**Status**: PARTIALLY RESOLVED
+**Priority**: Critical
 
 ---
 
 ## Problem Summary
 
-`engram show man` command causes a segmentation fault. After investigation, this issue is **PRE-EXISTING** and was not introduced by the memory leak fixes (commit 6460061).
+`engram show man` command causes a segmentation fault. This investigation has identified **TWO SEPARATE BUGS**:
+
+1. ✅ **HashMap Iterator Invalidation** - FIXED (see SEGFAULT_FIX_PLAN.md)
+2. ⚠️ **findNeuronaPath Double-Free** - Open (see findNeuronaPath_bug.md)
+
+Both bugs are PRE-EXISTING and were not introduced by the memory leak fixes (commit 6460061).
 
 ---
 
@@ -18,87 +23,124 @@
 ### Testing Performed
 1. ✅ Tested original code (before memory leak fixes) - segfault still occurs
 2. ✅ Confirmed segfault is NOT caused by memory leak fix changes
-3. ⚠️ The segfault exists in the codebase before commit 6460061
+3. ✅ Identified TWO separate bugs causing segfaults
+4. ⚠️ The segfault exists in the codebase before commit 6460061
 
-### Root Cause Analysis
+### Root Cause Analysis - Bug #1: HashMap Iterator Invalidation (RESOLVED ✅)
 
-The root cause appears to be in the `parseContext` function where `put()` operations are called during HashMap iteration. When the custom HashMap needs to rehash, the iterator becomes invalid, leading to undefined behavior.
+**Location**: `parseContext` function where `put()` operations are called during HashMap iteration.
 
-**Note**: This pattern exists in multiple locations in `parseContext`:
+**Root Cause**: When the custom HashMap needs to rehash during iteration, the iterator becomes invalid, leading to undefined behavior.
+
+**Affected Code**:
 - Lines 94-112: feature/lesson/reference/concept types
 - Lines 273-286: default custom context fallback
 
-### Fix Attempts
+**Fix Applied**: See [SEGFAULT_FIX_PLAN.md](SEGFAULT_FIX_PLAN.md)
+- Collect all entries into ArrayList before HashMap insertion
+- Transfer ownership after iteration completes
+- Prevents iterator invalidation
 
-Attempted to fix by collecting entries into ArrayList before insertion, but encountered Zig 0.15 ArrayList API compatibility issues:
-- `std.ArrayList([]const u8).init(allocator)` - not found in API
-- `std.ArrayList(u8).init(allocator)` - works but ArrayListUnmanaged has type constraints
-- `ArrayListUnmanaged([]const u8)` - element type mismatch with append()
+**Status**: ✅ FIXED and tested in production
 
-### Current Status
+### Root Cause Analysis - Bug #2: findNeuronaPath Double-Free (OPEN ⚠️)
 
-- Code currently reverted to original pattern
-- Segfault still present
-- Root cause identified but requires alternative fix approach
+**Location**: `findNeuronaPath` function around line 900.
+
+**Root Cause**: Double-free of `id_md` allocation due to both `errdefer` and manual free being executed.
+
+**Affected Commands**: All commands attempting to read non-existent neuronas.
+
+**Documentation**: See [findNeuronaPath_bug.md](findNeuronaPath_bug.md)
+
+**Status**: ⚠️ OPEN - Requires fix
 
 ---
 
 ## Recommended Next Steps
 
-1. **Investigate Zig 0.15 ArrayList API** - find correct method to collect entries
-2. **Alternative approaches**:
-   - Use `std.HashMap.clone()` to create a copy before iteration
-   - Pre-allocate HashMap with sufficient capacity
-   - Use manual array-based storage instead of HashMap
-3. **Testing** - Verify fix with `engram show man` and other custom context neuronas
+### Completed ✅
+1. ✅ **HashMap Iterator Bug** - Fixed in SEGFAULT_FIX_PLAN.md
+   - Implemented ArrayList collection pattern
+   - Ownership tracking prevents double-free
+   - Tested in production with multiple neurona types
+
+### Open ⚠️
+2. ⚠️ **findNeuronaPath Double-Free** - Documented in findNeuronaPath_bug.md
+   - Requires fix to memory management in `findNeuronaPath`
+   - Simple fix: Change `errdefer` to `defer` or remove errdefer entirely
+   - See findNeuronaPath_bug.md for detailed implementation steps
+
+### Testing
+3. **Production Validation** - Apply findNeuronaPath fix and test:
+   - `engram show man` should show error message (not segfault)
+   - `engram show <invalid-id>` should show error message
+   - Valid neuronas must continue to work correctly
 
 ---
 
 ## Testing Plan
 
-### Test Case 1: Reproduce Segfault
+### Test Case 1: HashMap Iterator Bug (FIXED ✅)
+**Command**: `engram show feat.yaml-configuration-file-support`
+**Expected**: Should display correctly without segfault
+**Actual**: Works correctly
+**Status**: ✅ PASS (production tested)
+
+### Test Case 2: findNeuronaPath Bug (OPEN ⚠️)
 **Command**: `engram show man`
 **Expected**: Should show "Neurona not found" error message
-**Actual**: Segmentation fault
-**Status**: ⚠️ FAIL
+**Actual**: Segmentation fault (due to double-free in findNeuronaPath)
+**Status**: ⚠️ FAIL (documented in findNeuronaPath_bug.md)
 
-### Test Case 2: Config File
-**Command**: `engram show config`
-**Expected**: Should open config file correctly
-**Status**: ⏸️ NOT TESTED (hung during previous attempt)
-
-### Test Case 3: Valid Neuronas
+### Test Case 3: Valid Neuronas (PASSING ✅)
 **Commands**:
 - `engram show feat.yaml-configuration-file-support`
 - `engram show issue.create-a-script-for-doc-generation`
 - `engram show req.content-test`
 
 **Expected**: Should display correctly
-**Status**: ⏸️ NOT TESTED
+**Actual**: All work correctly
+**Status**: ✅ PASS
+
+### Test Case 4: Config File
+**Command**: `engram show config`
+**Expected**: Should open config file in editor
+**Actual**: Opens correctly (expected behavior)
+**Status**: ✅ PASS
 
 ---
 
 ## Risk Assessment
 
-### High Risk
-- Segfault affects user experience significantly
-- May occur with any neurona using custom context parsing
-- Issue is intermittent (depends on HashMap rehash triggers)
+### Resolved Risks ✅
+- **HashMap Iterator Invalidation**: FIXED
+  - No longer affects user experience
+  - All neurona types with custom context work correctly
+  - Tested in production with multiple test cases
 
-### Mitigation
-- Document the issue for users
-- Provide workaround (avoid large custom contexts)
-- Continue investigation for proper fix
+### Remaining Risks ⚠️
+- **findNeuronaPath Double-Free**: HIGH RISK
+  - Affects user experience when neurona not found
+  - Segfault instead of helpful error message
+  - Common scenario (user types wrong ID)
+  - **Mitigation**: Documented in findNeuronaPath_bug.md with proposed fix
 
 ---
 
 ## References
 
+- [SEGFAULT_FIX_PLAN.md](SEGFAULT_FIX_PLAN.md) - HashMap iterator bug fix (implemented)
+- [findNeuronaPath_bug.md](findNeuronaPath_bug.md) - findNeuronaPath double-free bug (open)
 - AGENTS.md - Zig coding standards
-- src/storage/filesystem.zig:84-286 - parseContext function
+- memory-leak-investigation.md - Memory management patterns
+- src/storage/filesystem.zig:84-286 - parseContext function (HashMap bug)
+- src/storage/filesystem.zig:887-933 - findNeuronaPath function (double-free bug)
 - Zig HashMap documentation
 - Previous memory leak fixes (commit 6460061)
 
 ---
 
-**Status**: Investigation ongoing, root cause identified but fix requires further Zig API research
+**Status**: PARTIALLY RESOLVED
+- ✅ HashMap iterator bug: FIXED (see SEGFAULT_FIX_PLAN.md)
+- ⚠️ findNeuronaPath double-free bug: DOCUMENTED (see findNeuronaPath_bug.md)

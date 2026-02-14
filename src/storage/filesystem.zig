@@ -82,6 +82,11 @@ fn replaceString(allocator: Allocator, old: []const u8, new_value: []const u8) !
 
 /// Parse context from YAML object based on neurona type
 fn parseContext(allocator: Allocator, ctx_obj: std.StringHashMap(yaml.Value), neurona_type: NeuronaType) !Context {
+    // Helper struct for collecting entries before HashMap insertion
+    const Entry = struct {
+        key: []const u8,
+        value: []const u8,
+    };
 
     // Try to infer context type from fields present
     const has_status = ctx_obj.get("status") != null;
@@ -92,22 +97,44 @@ fn parseContext(allocator: Allocator, ctx_obj: std.StringHashMap(yaml.Value), ne
 
     // Handle feature, lesson, reference, concept types as custom context
     if (neurona_type == .feature or neurona_type == .lesson or neurona_type == .reference or neurona_type == .concept) {
+        // Collect entries first to avoid iterator invalidation
+        var entries = std.ArrayListUnmanaged(Entry){};
+        var entries_owned_by_entries = true; // Track who owns the memory
+        defer {
+            if (entries_owned_by_entries) {
+                // Only free if we still own them (not transferred to custom)
+                for (entries.items) |entry| {
+                    allocator.free(entry.key);
+                    allocator.free(entry.value);
+                }
+            }
+            entries.deinit(allocator);
+        }
+
+        var collect_it = ctx_obj.iterator();
+        while (collect_it.next()) |entry| {
+            const key = try allocator.dupe(u8, entry.key_ptr.*);
+            const val = try getString(allocator, entry.value_ptr.*, "");
+            try entries.append(allocator, Entry{ .key = key, .value = val });
+        }
+
         var custom = std.StringHashMap([]const u8).init(allocator);
         errdefer {
-            var it = custom.iterator();
-            while (it.next()) |entry| {
+            var clean_it = custom.iterator();
+            while (clean_it.next()) |entry| {
                 allocator.free(entry.key_ptr.*);
                 allocator.free(entry.value_ptr.*);
             }
             custom.deinit();
         }
 
-        var it = ctx_obj.iterator();
-        while (it.next()) |entry| {
-            const key = try allocator.dupe(u8, entry.key_ptr.*);
-            const val = try getString(allocator, entry.value_ptr.*, "");
-            try custom.put(key, val);
+        // Transfer ownership from entries to custom HashMap
+        for (entries.items) |entry| {
+            try custom.put(entry.key, entry.value);
         }
+
+        // Mark that custom HashMap now owns the memory
+        entries_owned_by_entries = false;
 
         return Context{ .custom = custom };
     }
@@ -265,22 +292,44 @@ fn parseContext(allocator: Allocator, ctx_obj: std.StringHashMap(yaml.Value), ne
     }
 
     // Default: custom context for any other fields
+    // Collect entries first to avoid iterator invalidation
+    var entries = std.ArrayListUnmanaged(Entry){};
+    var entries_owned_by_entries = true; // Track who owns the memory
+    defer {
+        if (entries_owned_by_entries) {
+            // Only free if we still own them (not transferred to custom)
+            for (entries.items) |entry| {
+                allocator.free(entry.key);
+                allocator.free(entry.value);
+            }
+        }
+        entries.deinit(allocator);
+    }
+
+    var collect_it = ctx_obj.iterator();
+    while (collect_it.next()) |entry| {
+        const key = try allocator.dupe(u8, entry.key_ptr.*);
+        const val = try getString(allocator, entry.value_ptr.*, "");
+        try entries.append(allocator, Entry{ .key = key, .value = val });
+    }
+
     var custom = std.StringHashMap([]const u8).init(allocator);
     errdefer {
-        var it = custom.iterator();
-        while (it.next()) |entry| {
+        var clean_it = custom.iterator();
+        while (clean_it.next()) |entry| {
             allocator.free(entry.key_ptr.*);
             allocator.free(entry.value_ptr.*);
         }
         custom.deinit();
     }
 
-    var it = ctx_obj.iterator();
-    while (it.next()) |entry| {
-        const key = try allocator.dupe(u8, entry.key_ptr.*);
-        const val = try getString(allocator, entry.value_ptr.*, "");
-        try custom.put(key, val);
+    // Transfer ownership from entries to custom HashMap
+    for (entries.items) |entry| {
+        try custom.put(entry.key, entry.value);
     }
+
+    // Mark that custom HashMap now owns the memory
+    entries_owned_by_entries = false;
 
     return Context{ .custom = custom };
 }
