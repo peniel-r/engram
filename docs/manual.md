@@ -317,7 +317,7 @@ engram init knowledge_base --type knowledge --language es
 ```
 
 **Options:**
-- `--type, -t` - Choose: `zettelkasten` (default), `alm` (for software projects), or `knowledge`
+- `--type, -t` - Choose: `notes` (default), `alm` (for software projects), or `knowledge`
 - `--language, -l` - Default language (default: `en` for English)
 - `--force, -f` - Overwrite existing Cortex
 
@@ -1197,7 +1197,7 @@ engram init my_project --type alm
 Useful for personal knowledge bases and research notes, but this is a secondary capability of Engram. For best results managing software projects, use the ALM Cortex type.
 
 ```bash
-engram init my_notes --type zettelkasten
+engram init my_notes --type notes
 ```
 
 #### Knowledge Base - SECONDARY USE CASE
@@ -1266,7 +1266,7 @@ engram release-status
 
 ```bash
 # Initialize knowledge base
-engram init research --type zettelkasten
+engram init research --type notes
 cd research
 
 # Add concepts
@@ -1318,7 +1318,7 @@ engram release-status
 
 ```bash
 # Create a learning cortex
-engram init learn-zig --type zettelkasten
+engram init learn-zig --type notes
 cd learn-zig
 
 # Add concepts

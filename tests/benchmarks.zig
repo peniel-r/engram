@@ -76,7 +76,7 @@ fn benchmarkColdStart(allocator: Allocator) !void {
         \\  "version": "0.1.0",
         \\  "spec_version": "0.1.0",
         \\  "capabilities": {{
-        \\    "type": "zettelkasten",
+        \\    "type": "notes",
         \\    "semantic_search": false,
         \\    "llm_integration": false,
         \\    "default_language": "en"
@@ -279,7 +279,7 @@ test "Cold start - parse cortex.json (< 50ms)" {
         \\  "version": "0.1.0",
         \\  "spec_version": "0.1.0",
         \\  "capabilities": {{
-        \\    "type": "zettelkasten",
+        \\    "type": "notes",
         \\    "semantic_search": false,
         \\    "llm_integration": false,
         \\    "default_language": "en"

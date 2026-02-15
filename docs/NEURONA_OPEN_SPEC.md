@@ -138,7 +138,7 @@ The configuration file for the Cortex.
   "version": "1.0.0",
   "spec_version": "0.1.0",
   "capabilities": {
-    "type": "zettelkasten",        // Flavor of the whole cortex
+    "type": "notes",        // Flavor of the whole cortex
     "semantic_search": true,       // Enables .activations/vectors.bin
     "llm_integration": true,       // Enables .activations/cache/
     "default_language": "en"

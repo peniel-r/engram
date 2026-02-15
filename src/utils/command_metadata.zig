@@ -43,15 +43,15 @@ pub const command_registry = [_]CommandMetadata{
         .examples = &[_][]const u8{
             "engram init my-project",
             "engram init my-project --type alm",
-            "engram init my-project --type zettelkasten --language de",
+            "engram init my-project --type notes --language de",
         },
         .flags = &[_]FlagMetadata{
             .{
                 .name = "type",
                 .short = "-t",
-                .description = "Cortex type (zettelkasten, alm, knowledge)",
+                .description = "Cortex type (notes, alm, knowledge)",
                 .value_type = .@"enum",
-                .enum_values = &[_][]const u8{ "zettelkasten", "alm", "knowledge" },
+                .enum_values = &[_][]const u8{ "notes", "alm", "knowledge" },
                 .default_value = "alm",
             },
             .{

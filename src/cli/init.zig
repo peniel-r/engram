@@ -12,12 +12,12 @@ const HumanOutput = @import("output/human.zig").HumanOutput;
 
 /// Cortex types supported
 pub const CortexType = enum {
-    zettelkasten,
+    notes,
     alm,
     knowledge,
 
     pub fn fromString(s: []const u8) ?CortexType {
-        if (std.mem.eql(u8, s, "zettelkasten")) return .zettelkasten;
+        if (std.mem.eql(u8, s, "notes")) return .notes;
         if (std.mem.eql(u8, s, "alm")) return .alm;
         if (std.mem.eql(u8, s, "knowledge")) return .knowledge;
         return null;
@@ -25,7 +25,7 @@ pub const CortexType = enum {
 
     pub fn toString(self: CortexType) []const u8 {
         return switch (self) {
-            .zettelkasten => "zettelkasten",
+            .notes => "notes",
             .alm => "alm",
             .knowledge => "knowledge",
         };
@@ -275,8 +275,8 @@ fn writeReadme(allocator: Allocator, dirs: *const DirectoryStructure, config: In
 
     // Build README content based on type
     const type_details = switch (config.cortex_type) {
-        .zettelkasten =>
-        \\This is a **Zettelkasten** Cortex, optimized for:
+        .notes =>
+        \\This is a **Notes** Cortex, optimized for:
         \\- Personal knowledge management
         \\- Connected note-taking
         \\- Concept linking and discovery
@@ -416,14 +416,14 @@ fn outputSuccess(dirs: *const DirectoryStructure, config: InitConfig) !void {
 // Unit tests
 
 test "CortexType fromString" {
-    try std.testing.expectEqual(CortexType.zettelkasten, CortexType.fromString("zettelkasten").?);
+    try std.testing.expectEqual(CortexType.notes, CortexType.fromString("notes").?);
     try std.testing.expectEqual(CortexType.alm, CortexType.fromString("alm").?);
     try std.testing.expectEqual(CortexType.knowledge, CortexType.fromString("knowledge").?);
     try std.testing.expectEqual(null, CortexType.fromString("invalid"));
 }
 
 test "CortexType toString" {
-    try std.testing.expectEqualStrings("zettelkasten", CortexType.zettelkasten.toString());
+    try std.testing.expectEqualStrings("notes", CortexType.notes.toString());
     try std.testing.expectEqualStrings("alm", CortexType.alm.toString());
     try std.testing.expectEqualStrings("knowledge", CortexType.knowledge.toString());
 }
@@ -438,7 +438,7 @@ test "validateExistingCortex returns error when Cortex exists" {
     // Create a temporary Cortex
     const test_config = InitConfig{
         .name = "test_existing_cortex",
-        .cortex_type = .zettelkasten,
+        .cortex_type = .notes,
         .force = false,
         .verbose = false,
     };
@@ -470,7 +470,7 @@ test "validateExistingCortex succeeds when force is true" {
     // Create a temporary Cortex
     const test_config = InitConfig{
         .name = "test_force_cortex",
-        .cortex_type = .zettelkasten,
+        .cortex_type = .notes,
         .force = true,
         .verbose = false,
     };

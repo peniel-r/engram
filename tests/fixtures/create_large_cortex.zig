@@ -46,7 +46,7 @@ fn createCortexJson(allocator: Allocator, cortex_dir: []const u8) !void {
         \\  "version": "0.1.0",
         \\  "spec_version": "0.1.0",
         \\  "capabilities": {
-        \\    "type": "zettelkasten",
+        \\    "type": "notes",
         \\    "semantic_search": false,
         \\    "llm_integration": false,
         \\    "default_language": "en"

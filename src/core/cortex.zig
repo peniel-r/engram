@@ -5,7 +5,7 @@ const Allocator = std.mem.Allocator;
 
 /// Cortex capabilities configuration
 pub const Capabilities = struct {
-    /// Cortex type: zettelkasten, alm, etc.
+    /// Cortex type: notes, alm, etc.
     type: []const u8,
 
     /// Enable semantic search (vectors)
@@ -123,7 +123,7 @@ pub const Cortex = struct {
         if (self.name.len == 0) return error.InvalidCortexName;
 
         // Check capabilities type
-        const valid_types = [_][]const u8{ "zettelkasten", "alm", "knowledge" };
+        const valid_types = [_][]const u8{ "notes", "alm", "knowledge" };
         var type_valid = false;
         for (valid_types) |t| {
             if (std.mem.eql(u8, self.capabilities.type, t)) {
@@ -156,7 +156,7 @@ pub const Cortex = struct {
             .version = try allocator.dupe(u8, "0.1.0"),
             .spec_version = try allocator.dupe(u8, "0.1.0"),
             .capabilities = Capabilities{
-                .type = try allocator.dupe(u8, "zettelkasten"),
+                .type = try allocator.dupe(u8, "notes"),
                 .semantic_search = false,
                 .llm_integration = false,
                 .default_language = try allocator.dupe(u8, "en"),
@@ -179,7 +179,7 @@ test "Cortex fromJson parses correctly" {
         \\  "version": "0.1.0",
         \\  "spec_version": "0.1.0",
         \\  "capabilities": {
-        \\    "type": "zettelkasten",
+        \\    "type": "notes",
         \\    "semantic_search": false,
         \\    "llm_integration": false,
         \\    "default_language": "en"
@@ -196,7 +196,7 @@ test "Cortex fromJson parses correctly" {
     try std.testing.expectEqualStrings("test_cortex", cortex.id);
     try std.testing.expectEqualStrings("Test Cortex", cortex.name);
     try std.testing.expectEqualStrings("0.1.0", cortex.version);
-    try std.testing.expectEqualStrings("zettelkasten", cortex.capabilities.type);
+    try std.testing.expectEqualStrings("notes", cortex.capabilities.type);
     try std.testing.expect(!cortex.capabilities.semantic_search);
     try std.testing.expectEqualStrings("lazy", cortex.indices.strategy);
 
@@ -213,7 +213,7 @@ test "Cortex validate accepts valid config" {
         \\  "version": "0.1.0",
         \\  "spec_version": "0.1.0",
         \\  "capabilities": {
-        \\    "type": "zettelkasten",
+        \\    "type": "notes",
         \\    "semantic_search": false,
         \\    "llm_integration": false,
         \\    "default_language": "en"
@@ -271,7 +271,7 @@ test "Cortex validate rejects invalid strategy" {
         \\  "version": "0.1.0",
         \\  "spec_version": "0.1.0",
         \\  "capabilities": {
-        \\    "type": "zettelkasten",
+        \\    "type": "notes",
         \\    "semantic_search": false,
         \\    "llm_integration": false,
         \\    "default_language": "en"
