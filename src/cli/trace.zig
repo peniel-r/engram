@@ -124,7 +124,10 @@ fn trace(allocator: Allocator, graph: *Graph, neuronas_dir: []const u8, config: 
     try traceRecursive(allocator, graph, &result, &visited, config.id, 0, config.max_depth, config.direction);
 
     for (result.items) |*node| {
-        const filepath = try findNeuronaPath(allocator, node.id, neuronas_dir);
+        const filepath = findNeuronaPath(allocator, node.id, neuronas_dir) catch |err| {
+            if (err == error.NeuronaNotFound) continue;
+            return err;
+        };
         defer allocator.free(filepath);
 
         var node_neurona = readNeurona(allocator, filepath) catch |err| {

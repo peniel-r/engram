@@ -435,9 +435,8 @@ test "filterNeuronas filters by type" {
     };
 
     const neuronas = [_]Neurona{ neurona1, neurona2 };
-    const pointers = [_]*const Neurona{ &neuronas[0], &neuronas[1] };
 
-    const result = try filterNeuronas(allocator, &pointers, config, null);
+    const result = try filterNeuronas(allocator, &neuronas, config, null);
     defer allocator.free(result);
 
     try std.testing.expectEqual(@as(usize, 1), result.len);

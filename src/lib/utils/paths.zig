@@ -21,7 +21,7 @@ pub const Cortex = struct {
     activations_path: []const u8,
 
     /// Free allocated memory
-    pub fn deinit(self: *Cortex, allocator: Allocator) void {
+    pub fn deinit(self: *const Cortex, allocator: Allocator) void {
         allocator.free(self.dir);
         allocator.free(self.neuronas_path);
         allocator.free(self.activations_path);
