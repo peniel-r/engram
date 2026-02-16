@@ -37,6 +37,13 @@ pub const ConnectionType = enum {
     /// Opposition: conflicts, opposes
     opposes,
 
+    /// Notes-specific relationships
+    builds_on, // Extends or develops another concept
+    contradicts, // Opposes or conflicts with another view
+    cites, // References external source
+    example_of, // Concrete example of abstract concept
+    proves, // Demonstrates or validates
+
     /// Parse string to ConnectionType
     /// Returns null if string is not a valid connection type
     pub fn fromString(s: []const u8) ?ConnectionType {
@@ -55,6 +62,11 @@ pub const ConnectionType = enum {
         if (std.mem.eql(u8, s, "next")) return .next;
         if (std.mem.eql(u8, s, "related")) return .related;
         if (std.mem.eql(u8, s, "opposes")) return .opposes;
+        if (std.mem.eql(u8, s, "builds_on")) return .builds_on;
+        if (std.mem.eql(u8, s, "contradicts")) return .contradicts;
+        if (std.mem.eql(u8, s, "cites")) return .cites;
+        if (std.mem.eql(u8, s, "example_of")) return .example_of;
+        if (std.mem.eql(u8, s, "proves")) return .proves;
         return null;
     }
 
@@ -76,6 +88,11 @@ pub const ConnectionType = enum {
             .next => "next",
             .related => "related",
             .opposes => "opposes",
+            .builds_on => "builds_on",
+            .contradicts => "contradicts",
+            .cites => "cites",
+            .example_of => "example_of",
+            .proves => "proves",
         };
     }
 };

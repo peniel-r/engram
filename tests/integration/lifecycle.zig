@@ -18,8 +18,7 @@ const new_cmd = Engram.cli.new;
 // ==================== Test 1: Fresh Installation ====================
 
 test "Fresh installation - Complete lifecycle" {
-    std.debug.print("Running: Fresh installation - Complete lifecycle\n", .{});
-
+    
     const allocator = std.testing.allocator;
     const test_cortex_name = "test_fresh_install";
     const cortex_path = test_cortex_name;
@@ -41,8 +40,7 @@ test "Fresh installation - Complete lifecycle" {
 
     try init_cmd.execute(allocator, init_config);
 
-    std.debug.print("Cortex init completed successfully\n", .{});
-
+    
     // Verify cortex structure exists
     var cortex_dir = std.fs.cwd().openDir(cortex_path, .{}) catch |err| {
         try std.testing.expect(error.FileNotFound != err);
@@ -50,23 +48,19 @@ test "Fresh installation - Complete lifecycle" {
     };
     defer cortex_dir.close();
 
-    std.debug.print("Cortex directory opened\n", .{});
-
+    
     // Verify cortex.json exists
-    std.debug.print("Reading cortex.json...\n", .{});
-    const cortex_json = try cortex_dir.readFileAlloc(allocator, "cortex.json", 1024 * 10);
+        const cortex_json = try cortex_dir.readFileAlloc(allocator, "cortex.json", 1024 * 10);
     defer allocator.free(cortex_json);
     try std.testing.expect(cortex_json.len > 0);
 
-    std.debug.print("cortex.json verified, checking neuronas directory...\n", .{});
-    // Verify neuronas directory exists
+        // Verify neuronas directory exists
     _ = cortex_dir.openDir("neuronas", .{}) catch |err| {
         try std.testing.expect(error.FileNotFound != err);
         return;
     };
 
-    std.debug.print("neuronas directory verified\n", .{});
-
+    
     // =========================================================================
     // Step 2: Download/Setup GloVe vectors (simulate download)
     // =========================================================================
@@ -100,14 +94,12 @@ test "Fresh installation - Complete lifecycle" {
     defer allocator.free(glove_cache_path);
     try glove_index.saveCache(glove_cache_path);
 
-    std.debug.print("GloVe cache saved\n", .{});
-    try std.testing.expect(GloVeIndex.cacheExists(glove_cache_path));
+        try std.testing.expect(GloVeIndex.cacheExists(glove_cache_path));
 
     // =========================================================================
     // Step 3: Create Neuronas
     // =========================================================================
-    std.debug.print("Creating Neuronas...\n", .{});
-
+    
     // Change to cortex directory
     const original_dir = std.fs.cwd();
 
@@ -166,19 +158,16 @@ test "Fresh installation - Complete lifecycle" {
     // =========================================================================
 
     // Scan neuronas
-    std.debug.print("Scanning neuronas...\n", .{});
-    const neuronas = try storage.scanNeuronas(allocator, cortex_path ++ "/neuronas");
+        const neuronas = try storage.scanNeuronas(allocator, cortex_path ++ "/neuronas");
     defer {
         for (neuronas) |*n| n.deinit(allocator);
         allocator.free(neuronas);
     }
 
-    std.debug.print("Found {} neuronas\n", .{neuronas.len});
-    try std.testing.expect(neuronas.len >= 4);
+        try std.testing.expect(neuronas.len >= 4);
 
     // Load GloVe index
-    std.debug.print("Loading GloVe index...\n", .{});
-    var loaded_glove = GloVeIndex.init(allocator);
+        var loaded_glove = GloVeIndex.init(allocator);
     defer loaded_glove.deinit(allocator);
     try loaded_glove.loadCache(allocator, glove_cache_path);
 
@@ -186,8 +175,7 @@ test "Fresh installation - Complete lifecycle" {
     var vector_index = VectorIndex.init(allocator, loaded_glove.dimension);
     defer vector_index.deinit(allocator);
 
-    std.debug.print("Building vector index for {} neuronas\n", .{neuronas.len});
-    for (neuronas) |*neurona| {
+        for (neuronas) |*neurona| {
         const words = [_][]const u8{ "test", "vector" };
         const embedding = try loaded_glove.computeEmbedding(allocator, &words);
         defer allocator.free(embedding);
@@ -198,21 +186,17 @@ test "Fresh installation - Complete lifecycle" {
     const vectors_path = try std.fs.path.join(allocator, &.{ cortex_path, ".activations", "vectors.bin" });
     defer allocator.free(vectors_path);
 
-    std.debug.print("Saving vector index to {s}...\n", .{vectors_path});
-    try vector_index.save(allocator, vectors_path, std.time.timestamp());
+        try vector_index.save(allocator, vectors_path, std.time.timestamp());
 
     // =========================================================================
     // Step 5: Verify `.activations/vectors.bin` exists
     // =========================================================================
 
-    std.debug.print("Verifying vectors.bin...\n", .{});
-    const vectors_file = try std.fs.cwd().openFile(vectors_path, .{});
+        const vectors_file = try std.fs.cwd().openFile(vectors_path, .{});
     defer vectors_file.close();
     const file_size = try vectors_file.getEndPos();
-    std.debug.print("vectors.bin size: {} bytes\n", .{file_size});
-    try std.testing.expect(file_size > 0);
+        try std.testing.expect(file_size > 0);
 
-    std.debug.print("Test 2 (Incremental updates) completed successfully!\n", .{});
 
     // Cleanup
     std.fs.cwd().deleteTree(cortex_path) catch {};
@@ -221,8 +205,7 @@ test "Fresh installation - Complete lifecycle" {
 // ==================== Test 2: Incremental Updates ====================
 
 test "Incremental updates - Lazy and forced persistence" {
-    std.debug.print("Running: Incremental updates - Lazy and forced persistence\n", .{});
-
+    
     const allocator = std.testing.allocator;
     const test_cortex_name = "test_incremental_updates";
     const cortex_path = test_cortex_name;
@@ -396,8 +379,7 @@ test "Incremental updates - Lazy and forced persistence" {
 // ==================== Test 3: Migration Scenario ====================
 
 test "Migration scenario - Delete .activations/ and verify fallback" {
-    std.debug.print("Running: Migration scenario - Delete .activations/ and verify fallback\n", .{});
-
+    
     const allocator = std.testing.allocator;
     const test_cortex_name = "test_migration_scenario";
     const cortex_path = test_cortex_name;
@@ -567,8 +549,7 @@ test "Migration scenario - Delete .activations/ and verify fallback" {
 // ==================== Test 4: Edge Cases ====================
 
 test "Edge case - Empty cortex with semantic search enabled" {
-    std.debug.print("Running: Edge case - Empty cortex with semantic search enabled\n", .{});
-
+    
     const allocator = std.testing.allocator;
     const test_cortex_name = "test_empty_cortex";
     const cortex_path = test_cortex_name;

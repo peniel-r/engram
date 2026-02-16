@@ -166,6 +166,12 @@ fn getReverseType(ctype: ConnectionType) ?ConnectionType {
         .related => .related,
         .relates_to => .relates_to,
         .opposes => .opposes,
+        // Notes-specific types (no clear inverse for these)
+        .builds_on => null,
+        .contradicts => .contradicts, // symmetric
+        .cites => null,
+        .example_of => null,
+        .proves => null,
     };
 }
 

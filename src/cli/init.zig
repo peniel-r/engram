@@ -180,7 +180,6 @@ fn createDirectoryStructure(dirs: *const DirectoryStructure, verbose: bool) !voi
         try stdout.print("  ✓ {s}/\n", .{dirs.activations});
         try stdout.print("  ✓ {s}/\n", .{dirs.cache});
         try stdout.print("  ✓ {s}/\n", .{dirs.assets});
-        try stdout.flush();
     }
 }
 
@@ -250,7 +249,6 @@ fn writeCortexConfig(allocator: Allocator, dirs: *const DirectoryStructure, conf
         var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
         const stdout = &stdout_writer.interface;
         try stdout.print("  ✓ {s}\n", .{cortex_json_path});
-        try stdout.flush();
     }
 }
 
@@ -366,7 +364,6 @@ fn writeReadme(allocator: Allocator, dirs: *const DirectoryStructure, config: In
         var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
         const stdout = &stdout_writer.interface;
         try stdout.print("  ✓ {s}\n", .{readme_path});
-        try stdout.flush();
     }
 }
 
@@ -390,7 +387,6 @@ fn writeGitignore(dirs: *const DirectoryStructure, verbose: bool) !void {
         var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
         const stdout = &stdout_writer.interface;
         try stdout.print("  ✓ {s}\n", .{gitignore_path});
-        try stdout.flush();
     }
 }
 
@@ -410,7 +406,6 @@ fn outputSuccess(dirs: *const DirectoryStructure, config: InitConfig) !void {
     try stdout.print("  cd {s}\n", .{dirs.root});
     try stdout.print("  engram new concept \"Hello World\"\n", .{});
     try stdout.print("  engram show hello.world\n\n", .{});
-    try stdout.flush();
 }
 
 // Unit tests

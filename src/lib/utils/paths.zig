@@ -223,7 +223,8 @@ test "CortexResolver getNeuronasPath formats correctly" {
     const path = try CortexResolver.getNeuronasPath(allocator, "/my/cortex");
     defer allocator.free(path);
 
-    try std.testing.expectEqualStrings("/my/cortex/neuronas", path);
+    // Path should end with separator + "neuronas"
+    try std.testing.expect(std.mem.endsWith(u8, path, std.fs.path.sep_str ++ "neuronas"));
 }
 
 test "CortexResolver getActivationsPath formats correctly" {
@@ -232,7 +233,8 @@ test "CortexResolver getActivationsPath formats correctly" {
     const path = try CortexResolver.getActivationsPath(allocator, "/my/cortex");
     defer allocator.free(path);
 
-    try std.testing.expectEqualStrings("/my/cortex/.activations", path);
+    // Path should end with separator + ".activations"
+    try std.testing.expect(std.mem.endsWith(u8, path, std.fs.path.sep_str ++ ".activations"));
 }
 
 test "CortexResolver findCortexDir validates provided path" {

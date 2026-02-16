@@ -400,6 +400,66 @@ fn applyContextUpdate(allocator: Allocator, neurona: *Neurona, context_field: []
                 return true;
             }
         },
+        .concept => |*ctx| {
+            if (std.mem.eql(u8, context_field, "definition")) {
+                allocator.free(ctx.definition);
+                ctx.definition = try allocator.dupe(u8, value);
+                return true;
+            }
+            if (std.mem.eql(u8, context_field, "difficulty")) {
+                ctx.difficulty = std.fmt.parseInt(u8, value, 10) catch {
+                    try HumanOutput.printError("Invalid difficulty '{s}'");
+                    return false;
+                };
+                return true;
+            }
+        },
+        .reference => |*ctx| {
+            if (std.mem.eql(u8, context_field, "source")) {
+                allocator.free(ctx.source);
+                ctx.source = try allocator.dupe(u8, value);
+                return true;
+            }
+            if (std.mem.eql(u8, context_field, "url")) {
+                if (ctx.url) |u| allocator.free(u);
+                ctx.url = try allocator.dupe(u8, value);
+                return true;
+            }
+            if (std.mem.eql(u8, context_field, "author")) {
+                if (ctx.author) |a| allocator.free(a);
+                ctx.author = try allocator.dupe(u8, value);
+                return true;
+            }
+            if (std.mem.eql(u8, context_field, "citation")) {
+                if (ctx.citation) |c| allocator.free(c);
+                ctx.citation = try allocator.dupe(u8, value);
+                return true;
+            }
+        },
+        .lesson => |*ctx| {
+            if (std.mem.eql(u8, context_field, "learning_objectives")) {
+                allocator.free(ctx.learning_objectives);
+                ctx.learning_objectives = try allocator.dupe(u8, value);
+                return true;
+            }
+            if (std.mem.eql(u8, context_field, "prerequisites")) {
+                if (ctx.prerequisites) |p| allocator.free(p);
+                ctx.prerequisites = try allocator.dupe(u8, value);
+                return true;
+            }
+            if (std.mem.eql(u8, context_field, "difficulty")) {
+                ctx.difficulty = std.fmt.parseInt(u8, value, 10) catch {
+                    try HumanOutput.printError("Invalid difficulty '{s}'");
+                    return false;
+                };
+                return true;
+            }
+            if (std.mem.eql(u8, context_field, "estimated_time")) {
+                if (ctx.estimated_time) |t| allocator.free(t);
+                ctx.estimated_time = try allocator.dupe(u8, value);
+                return true;
+            }
+        },
         .custom => |*ctx| {
             // For custom context, check if key exists
             var key_exists = false;

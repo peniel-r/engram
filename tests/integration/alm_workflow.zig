@@ -105,7 +105,6 @@ test "CRUD Workflow: Create → Read → Delete" {
     const result = std.fs.cwd().openFile(path, .{});
     try std.testing.expectError(error.FileNotFound, result);
 
-    std.debug.print("✅ CRUD workflow test passed\n", .{});
 }
 
 test "Graph Operations: Multiple connections → Sync" {
@@ -153,5 +152,4 @@ test "Graph Operations: Multiple connections → Sync" {
     allocator.free(node2_path);
     allocator.free(node3_path);
 
-    std.debug.print("✅ Graph operations test passed\n", .{});
 }

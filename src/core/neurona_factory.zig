@@ -75,8 +75,11 @@ const Connection = struct {
 };
 
 const TemplateConfig = struct {
+    type_name: []const u8,
+    tier: u8,
     default_tags: []const []const u8,
     required_context: []const []const u8,
+    optional_context: []const []const u8,
     content_sections: []const []const u8,
 };
 
@@ -87,32 +90,128 @@ fn getTypePrefix(t: NeuronaType) []const u8 {
         .issue => "issue",
         .artifact => "art",
         .feature => "feat",
-        else => "concept",
+        .concept => "concept",
+        .reference => "reference",
+        .lesson => "lesson",
+        else => "neurona",
     };
 }
 
 fn getTemplate(t: NeuronaType) TemplateConfig {
     switch (t) {
+        .concept => return .{
+            .type_name = "concept",
+            .tier = 2,
+            .default_tags = &[_][]const u8{"concept"},
+            .required_context = &[_][]const u8{"definition"},
+            .optional_context = &[_][]const u8{"difficulty", "examples"},
+            .content_sections = &[_][]const u8{
+                "Definition",
+                "Key Points",
+                "Examples",
+                "Related Concepts"
+            },
+        },
+        .reference => return .{
+            .type_name = "reference",
+            .tier = 2,
+            .default_tags = &[_][]const u8{"reference"},
+            .required_context = &[_][]const u8{"source"},
+            .optional_context = &[_][]const u8{"url", "author", "citation"},
+            .content_sections = &[_][]const u8{
+                "Source",
+                "Key Information",
+                "Notes",
+            },
+        },
+        .lesson => return .{
+            .type_name = "lesson",
+            .tier = 2,
+            .default_tags = &[_][]const u8{"lesson"},
+            .required_context = &[_][]const u8{"learning_objectives"},
+            .optional_context = &[_][]const u8{
+                "prerequisites",
+                "key_takeaways",
+                "difficulty",
+                "estimated_time"
+            },
+            .content_sections = &[_][]const u8{
+                "Learning Objectives",
+                "Prerequisites",
+                "Content",
+                "Key Takeaways",
+            },
+        },
         .requirement => return .{
+            .type_name = "requirement",
+            .tier = 2,
             .default_tags = &[_][]const u8{"requirement"},
-            .required_context = &[_][]const u8{"verification_method", "status", "priority"},
-            .content_sections = &[_][]const u8{"Description", "Acceptance Criteria", "Verification Method"},
+            .required_context = &[_][]const u8{"status", "verification_method"},
+            .optional_context = &[_][]const u8{"assignee", "priority", "effort_points"},
+            .content_sections = &[_][]const u8{
+                "Description",
+                "Acceptance Criteria",
+                "Notes",
+            },
         },
         .test_case => return .{
-            .default_tags = &[_][]const u8{"test", "automated"},
-            .required_context = &[_][]const u8{"framework", "status", "priority"},
-            .content_sections = &[_][]const u8{"Test Objective", "Test Steps", "Expected Results"},
+            .type_name = "test_case",
+            .tier = 2,
+            .default_tags = &[_][]const u8{"test"},
+            .required_context = &[_][]const u8{"status", "framework"},
+            .optional_context = &[_][]const u8{"priority", "assignee", "duration"},
+            .content_sections = &[_][]const u8{
+                "Test Description",
+                "Test Steps",
+                "Expected Results",
+            },
         },
         .issue => return .{
-            .default_tags = &[_][]const u8{"bug"},
-            .required_context = &[_][]const u8{"status", "priority", "created"},
-            .content_sections = &[_][]const u8{"Problem", "Impact", "Proposed Solution"},
+            .type_name = "issue",
+            .tier = 2,
+            .default_tags = &[_][]const u8{"issue"},
+            .required_context = &[_][]const u8{"status", "created"},
+            .optional_context = &[_][]const u8{"priority", "assignee", "resolved", "closed"},
+            .content_sections = &[_][]const u8{
+                "Issue Description",
+                "Steps to Reproduce",
+                "Expected Behavior",
+                "Actual Behavior",
+            },
         },
-        // ... add others ...
+        .artifact => return .{
+            .type_name = "artifact",
+            .tier = 2,
+            .default_tags = &[_][]const u8{"artifact"},
+            .required_context = &[_][]const u8{"runtime", "file_path"},
+            .optional_context = &[_][]const u8{"language_version", "last_modified"},
+            .content_sections = &[_][]const u8{
+                "Description",
+                "Usage",
+                "Notes",
+            },
+        },
+        .feature => return .{
+            .type_name = "feature",
+            .tier = 2,
+            .default_tags = &[_][]const u8{"feature"},
+            .required_context = &[_][]const u8{},
+            .optional_context = &[_][]const u8{},
+            .content_sections = &[_][]const u8{
+                "Description",
+                "Implementation Plan",
+                "Notes",
+            },
+        },
         else => return .{
+            .type_name = "neurona",
+            .tier = 1,
             .default_tags = &[_][]const u8{},
             .required_context = &[_][]const u8{},
-            .content_sections = &[_][]const u8{},
+            .optional_context = &[_][]const u8{},
+            .content_sections = &[_][]const u8{
+                "Content",
+            },
         },
     }
 }

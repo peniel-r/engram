@@ -18,7 +18,6 @@ pub const HumanOutput = struct {
             try stdout.writeByte('=');
         }
         try stdout.writeByte('\n');
-        try stdout.flush();
     }
 
     /// Print subheader with emoji
@@ -28,7 +27,6 @@ pub const HumanOutput = struct {
         const stdout = &stdout_writer.interface;
 
         try stdout.print("  {s} {s}\n", .{ emoji, title });
-        try stdout.flush();
     }
 
     /// Print separator line
@@ -41,7 +39,6 @@ pub const HumanOutput = struct {
             try stdout.writeByte(char);
         }
         try stdout.writeByte('\n');
-        try stdout.flush();
     }
 
     /// Print success message
@@ -51,7 +48,6 @@ pub const HumanOutput = struct {
         const stdout = &stdout_writer.interface;
 
         try stdout.print("✅ {s}\n", .{message});
-        try stdout.flush();
     }
 
     /// Print warning message
@@ -61,7 +57,6 @@ pub const HumanOutput = struct {
         const stdout = &stdout_writer.interface;
 
         try stdout.print("⚠️  {s}\n", .{message});
-        try stdout.flush();
     }
 
     /// Print error message
@@ -71,7 +66,6 @@ pub const HumanOutput = struct {
         const stdout = &stdout_writer.interface;
 
         try stdout.print("❌ {s}\n", .{message});
-        try stdout.flush();
     }
 
     /// Print info message
@@ -81,7 +75,6 @@ pub const HumanOutput = struct {
         const stdout = &stdout_writer.interface;
 
         try stdout.print("ℹ️  {s}\n", .{message});
-        try stdout.flush();
     }
 };
 

@@ -4,13 +4,57 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const CortexResolver = @import("../../lib/root.zig").utils.CortexResolver;
 
-/// Application configuration
-pub const AppConfig = struct {
-    verbose: bool = false,
-    json_output: bool = false,
-    editor: []const u8 = "hx",
+// Import CLI parser utilities
+const CliParser = @import("../utils/cli_parser.zig").CliParser;
+const HelpGenerator = @import("../utils/help_generator.zig").HelpGenerator;
+const command_metadata = @import("../utils/command_metadata.zig");
+
+// Import all CLI commands
+const init_cmd = @import("./cli/init.zig");
+const new_cmd = @import("./cli/new.zig");
+const show_cmd = @import("./cli/show.zig");
+const link_cmd = @import("./cli/link.zig");
+const sync_cmd = @import("./cli/sync.zig");
+const delete_cmd = @import("./cli/delete.zig");
+const trace_cmd = @import("./cli/trace.zig");
+const status_cmd = @import("./cli/status.zzig");
+const query_cmd = @import("./cli/query.zig");
+const update_cmd = @import("./cli/update.zig");
+const impact_cmd = @import("./cli/impact.zig");
+const link_artifact_cmd = @import("./cli/link_artifact.zig");
+const release_status_cmd = @import("./cli/release_status.zig");
+const metrics_cmd = @import("./cli/metrics.zig");
+const man_cmd = @import("./cli/man.zig");
+const daily_cmd = @import("./cli/daily.zig");
+
+// Command registry with all commands
+const commands = [_]Command{
+    .{
+        .name = "init",
+        .description = "Initialize a new Cortex",
+        .handler = handleInit,
+        .help_fn = printInitHelp,
+    },
+    .{
+        .name = "new",
+        .description = "Create a new Neurona",
+        .handler = handleNew,
+        .help_fn = printNewHelp,
+    },
+    .{
+        .name = "daily",
+        .description = "Create daily notes with date-based IDs",
+        .handler = handleDaily,
+        .help_fn = printDailyHelp,
+    },
+    .{
+        .name = "show",
+        .description = "Display a Neurona",
+        .handler = handleShow,
+        .help_fn = printShowHelp,
+    },
+    // ... rest of existing commands ...
 };
 
 /// Application context for CLI commands

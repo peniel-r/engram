@@ -252,6 +252,47 @@ fn evaluateContextField(neurona: *const Neurona, context_field: []const u8, oper
                 return state_filters.compareStrings(ctx.exit_action, operator, expected);
             }
         },
+        .concept => |ctx| {
+            if (std.mem.eql(u8, context_field, "definition")) {
+                return state_filters.compareStrings(ctx.definition, operator, expected);
+            }
+            if (std.mem.eql(u8, context_field, "difficulty")) {
+                const diff_val = std.fmt.parseInt(u8, expected, 10) catch return false;
+                if (ctx.difficulty) |d| {
+                    return state_filters.compareIntegers(d, operator, diff_val);
+                }
+                return false;
+            }
+        },
+        .reference => |ctx| {
+            if (std.mem.eql(u8, context_field, "source")) {
+                return state_filters.compareStrings(ctx.source, operator, expected);
+            }
+            if (std.mem.eql(u8, context_field, "url")) {
+                if (ctx.url) |u| {
+                    return state_filters.compareStrings(u, operator, expected);
+                }
+                return false;
+            }
+            if (std.mem.eql(u8, context_field, "author")) {
+                if (ctx.author) |a| {
+                    return state_filters.compareStrings(a, operator, expected);
+                }
+                return false;
+            }
+        },
+        .lesson => |ctx| {
+            if (std.mem.eql(u8, context_field, "learning_objectives")) {
+                return state_filters.compareStrings(ctx.learning_objectives, operator, expected);
+            }
+            if (std.mem.eql(u8, context_field, "difficulty")) {
+                const diff_val = std.fmt.parseInt(u8, expected, 10) catch return false;
+                if (ctx.difficulty) |d| {
+                    return state_filters.compareIntegers(d, operator, diff_val);
+                }
+                return false;
+            }
+        },
         .custom => |ctx| {
             if (ctx.get(context_field)) |v| {
                 return state_filters.compareStrings(v, operator, expected);

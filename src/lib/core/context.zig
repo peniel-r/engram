@@ -23,6 +23,15 @@ pub const Context = union(enum) {
     /// Requirement context (ALM)
     requirement: RequirementContext,
 
+    /// Concept context (Notes)
+    concept: ConceptContext,
+
+    /// Reference context (Notes)
+    reference: ReferenceContext,
+
+    /// Lesson context (Notes)
+    lesson: LessonContext,
+
     /// Custom context (any key-value pairs)
     /// Using managed StringHashMap for compatibility with existing storage/CLI code
     custom: std.StringHashMap([]const u8),
@@ -38,6 +47,9 @@ pub const Context = union(enum) {
             .test_case => |*ctx| ctx.deinit(allocator),
             .issue => |*ctx| ctx.deinit(allocator),
             .requirement => |*ctx| ctx.deinit(allocator),
+            .concept => |*ctx| ctx.deinit(allocator),
+            .reference => |*ctx| ctx.deinit(allocator),
+            .lesson => |*ctx| ctx.deinit(allocator),
             .custom => |*ctx| {
                 var it = ctx.iterator();
                 while (it.next()) |entry| {
@@ -147,6 +159,54 @@ pub const RequirementContext = struct {
         allocator.free(self.verification_method);
         if (self.assignee) |a| allocator.free(a);
         if (self.sprint) |s| allocator.free(s);
+    }
+};
+
+/// Concept context (Notes)
+pub const ConceptContext = struct {
+    definition: []const u8,
+    difficulty: ?u8, // 1-5 (1=beginner, 5=advanced)
+    examples: std.ArrayListUnmanaged([]const u8),
+
+    /// Free allocated memory
+    pub fn deinit(self: *ConceptContext, allocator: Allocator) void {
+        allocator.free(self.definition);
+        for (self.examples.items) |e| allocator.free(e);
+        self.examples.deinit(allocator);
+    }
+};
+
+/// Reference context (Notes)
+pub const ReferenceContext = struct {
+    source: []const u8,
+    url: ?[]const u8,
+    author: ?[]const u8,
+    citation: ?[]const u8,
+
+    /// Free allocated memory
+    pub fn deinit(self: *ReferenceContext, allocator: Allocator) void {
+        allocator.free(self.source);
+        if (self.url) |u| allocator.free(u);
+        if (self.author) |a| allocator.free(a);
+        if (self.citation) |c| allocator.free(c);
+    }
+};
+
+/// Lesson context (Notes)
+pub const LessonContext = struct {
+    learning_objectives: []const u8,
+    prerequisites: ?[]const u8,
+    key_takeaways: std.ArrayListUnmanaged([]const u8),
+    difficulty: ?u8, // 1-5
+    estimated_time: ?[]const u8, // e.g., "30 min", "2 hours"
+
+    /// Free allocated memory
+    pub fn deinit(self: *LessonContext, allocator: Allocator) void {
+        allocator.free(self.learning_objectives);
+        if (self.prerequisites) |p| allocator.free(p);
+        for (self.key_takeaways.items) |k| allocator.free(k);
+        self.key_takeaways.deinit(allocator);
+        if (self.estimated_time) |t| allocator.free(t);
     }
 };
 

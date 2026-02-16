@@ -790,6 +790,38 @@ pub fn neuronaToYaml(allocator: Allocator, neurona: Neurona) ![]u8 {
                 try writer.writeAll("]\n");
             }
         },
+        .concept => |*ctx| {
+            if (ctx.definition.len > 0) try writer.print("  definition: {s}\n", .{ctx.definition});
+            if (ctx.difficulty) |d| try writer.print("  difficulty: {d}\n", .{d});
+            if (ctx.examples.items.len > 0) {
+                try writer.writeAll("  examples: [");
+                for (ctx.examples.items, 0..) |e, i| {
+                    if (i > 0) try writer.writeAll(", ");
+                    try writer.print("\"{s}\"", .{e});
+                }
+                try writer.writeAll("]\n");
+            }
+        },
+        .reference => |*ctx| {
+            if (ctx.source.len > 0) try writer.print("  source: {s}\n", .{ctx.source});
+            if (ctx.url) |u| try writer.print("  url: {s}\n", .{u});
+            if (ctx.author) |a| try writer.print("  author: {s}\n", .{a});
+            if (ctx.citation) |c| try writer.print("  citation: {s}\n", .{c});
+        },
+        .lesson => |*ctx| {
+            if (ctx.learning_objectives.len > 0) try writer.print("  learning_objectives: {s}\n", .{ctx.learning_objectives});
+            if (ctx.prerequisites) |p| try writer.print("  prerequisites: {s}\n", .{p});
+            if (ctx.key_takeaways.items.len > 0) {
+                try writer.writeAll("  key_takeaways: [");
+                for (ctx.key_takeaways.items, 0..) |k, i| {
+                    if (i > 0) try writer.writeAll(", ");
+                    try writer.print("\"{s}\"", .{k});
+                }
+                try writer.writeAll("]\n");
+            }
+            if (ctx.difficulty) |d| try writer.print("  difficulty: {d}\n", .{d});
+            if (ctx.estimated_time) |t| try writer.print("  estimated_time: {s}\n", .{t});
+        },
         .custom => |*ctx| {
             var it = ctx.iterator();
             while (it.next()) |entry| {
