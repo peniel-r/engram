@@ -56,9 +56,10 @@ pub fn readNeurona(allocator: Allocator, filepath: []const u8) !Neurona {
     // Parse YAML
     var yaml_data = try yaml.Parser.parse(allocator, fm.content);
     defer {
-        // Deinitialize each Value in the HashMap before freeing the HashMap itself
+        // Deinitialize each Value in the HashMap and free keys before freeing the HashMap itself
         var it = yaml_data.iterator();
         while (it.next()) |entry| {
+            allocator.free(entry.key_ptr.*);
             entry.value_ptr.deinit(allocator);
         }
         yaml_data.deinit();

@@ -364,7 +364,13 @@ fn buildGraphIndex(allocator: Allocator, neuronas: []const Neurona, verbose: boo
 
     // Step 2.5: Detect and report orphans
     const orphans = try validator.findOrphans(neuronas, &graph, allocator);
-    defer allocator.free(orphans);
+    defer {
+        // Free each orphan ID string before freeing the slice
+        for (orphans) |orphan_id| {
+            allocator.free(orphan_id);
+        }
+        allocator.free(orphans);
+    }
 
     if (orphans.len > 0) {
         var stdout_buffer: [4096]u8 = undefined;

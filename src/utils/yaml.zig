@@ -31,6 +31,9 @@ pub const Value = union(enum) {
                 if (obj_opt.*) |*obj| {
                     var it = obj.iterator();
                     while (it.next()) |entry| {
+                        // Free the key first
+                        allocator.free(entry.key_ptr.*);
+
                         const value = entry.value_ptr.*;
                         switch (value) {
                             .string => |s| allocator.free(s),
@@ -45,6 +48,8 @@ pub const Value = union(enum) {
                                 if (nested_opt) |nested_obj| {
                                     var nit = nested_obj.iterator();
                                     while (nit.next()) |nentry| {
+                                        // Free nested object keys
+                                        allocator.free(nentry.key_ptr.*);
                                         nentry.value_ptr.deinit(allocator);
                                     }
                                     var mut_nested = nested_obj;
@@ -101,8 +106,10 @@ pub const Parser = struct {
         const colon_idx = std.mem.indexOfScalar(u8, line, ':') orelse return;
         if (colon_idx == 0) return;
 
-        // Extract key (trim whitespace)
-        const key = std.mem.trim(u8, line[0..colon_idx], " \t\r");
+        // Extract key (trim whitespace and duplicate for HashMap ownership)
+        const key_slice = std.mem.trim(u8, line[0..colon_idx], " \t\r");
+        const key = try self.allocator.dupe(u8, key_slice);
+        errdefer self.allocator.free(key);
 
         // Extract value (without trimming, to detect empty properly)
         const value_part = line[colon_idx + 1 ..];
@@ -112,13 +119,27 @@ pub const Parser = struct {
         if (value_str.len == 0) {
             // Look ahead to parse indented block as nested object
             const nested_obj = try self.parseNestedObject();
-            try result.put(key, Value{ .object = nested_obj });
+            const gop = try result.getOrPut(key);
+            if (gop.found_existing) {
+                // Free old key and value before replacing
+                self.allocator.free(gop.key_ptr.*);
+                gop.value_ptr.deinit(self.allocator);
+            }
+            gop.key_ptr.* = key;
+            gop.value_ptr.* = Value{ .object = nested_obj };
             return;
         }
 
         // Parse value
         const value = try self.parseValue(value_str);
-        try result.put(key, value);
+        const gop = try result.getOrPut(key);
+        if (gop.found_existing) {
+            // Free old key and value before replacing
+            self.allocator.free(gop.key_ptr.*);
+            gop.value_ptr.deinit(self.allocator);
+        }
+        gop.key_ptr.* = key;
+        gop.value_ptr.* = value;
     }
 
     /// Parse nested object from indented lines
@@ -156,6 +177,14 @@ pub const Parser = struct {
 
         // Parse nested lines
         var nested_result = std.StringHashMap(Value).init(self.allocator);
+        errdefer {
+            var it = nested_result.iterator();
+            while (it.next()) |entry| {
+                self.allocator.free(entry.key_ptr.*);
+                entry.value_ptr.deinit(self.allocator);
+            }
+            nested_result.deinit();
+        }
 
         // Process first line (already read)
         {
@@ -165,15 +194,31 @@ pub const Parser = struct {
             // Skip lines without colon
             if (colon_idx == null or colon_idx.? == 0) return null;
 
-            const key = std.mem.trim(u8, content[0..colon_idx.?], " \t");
+            const key_slice = std.mem.trim(u8, content[0..colon_idx.?], " \t");
+            const key = try self.allocator.dupe(u8, key_slice);
+            errdefer self.allocator.free(key);
             const value_str = std.mem.trim(u8, content[colon_idx.? + 1 ..], " \t\r");
 
             if (value_str.len == 0) {
                 const nested_nested = try self.parseNestedObject();
-                try nested_result.put(key, Value{ .object = nested_nested });
+                const gop = try nested_result.getOrPut(key);
+                if (gop.found_existing) {
+                    // Free old key and value before replacing
+                    self.allocator.free(gop.key_ptr.*);
+                    gop.value_ptr.deinit(self.allocator);
+                }
+                gop.key_ptr.* = key;
+                gop.value_ptr.* = Value{ .object = nested_nested };
             } else {
                 const value = try self.parseValue(value_str);
-                try nested_result.put(key, value);
+                const gop = try nested_result.getOrPut(key);
+                if (gop.found_existing) {
+                    // Free old key and value before replacing
+                    self.allocator.free(gop.key_ptr.*);
+                    gop.value_ptr.deinit(self.allocator);
+                }
+                gop.key_ptr.* = key;
+                gop.value_ptr.* = value;
             }
         }
 
@@ -204,19 +249,35 @@ pub const Parser = struct {
             // Skip lines without colon
             if (colon_idx == null or colon_idx.? == 0) continue;
 
-            const key = std.mem.trim(u8, content[0..colon_idx.?], " \t");
+            const key_slice = std.mem.trim(u8, content[0..colon_idx.?], " \t");
+            const key = try self.allocator.dupe(u8, key_slice);
+            errdefer self.allocator.free(key);
             const value_str = std.mem.trim(u8, content[colon_idx.? + 1 ..], " \t\r");
 
             // Handle nested objects within nested objects
             if (value_str.len == 0) {
                 const nested_nested = try self.parseNestedObject();
-                try nested_result.put(key, Value{ .object = nested_nested });
+                const gop = try nested_result.getOrPut(key);
+                if (gop.found_existing) {
+                    // Free old key and value before replacing
+                    self.allocator.free(gop.key_ptr.*);
+                    gop.value_ptr.deinit(self.allocator);
+                }
+                gop.key_ptr.* = key;
+                gop.value_ptr.* = Value{ .object = nested_nested };
                 continue;
             }
 
             // Parse value
             const value = try self.parseValue(value_str);
-            try nested_result.put(key, value);
+            const gop = try nested_result.getOrPut(key);
+            if (gop.found_existing) {
+                // Free old key and value before replacing
+                self.allocator.free(gop.key_ptr.*);
+                gop.value_ptr.deinit(self.allocator);
+            }
+            gop.key_ptr.* = key;
+            gop.value_ptr.* = value;
         }
 
         return nested_result;

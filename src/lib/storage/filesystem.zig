@@ -75,9 +75,10 @@ pub fn readNeurona(allocator: Allocator, filepath: []const u8) !Neurona {
     defer {
         var it = yaml_fields.iterator();
         while (it.next()) |entry| {
+            allocator.free(entry.key_ptr.*);
             entry.value_ptr.deinit(allocator);
         }
-        yaml_fields.deinit(allocator);
+        yaml_fields.deinit();
     }
 
     try parseSimpleYaml(allocator, yaml_content, &yaml_fields);
@@ -97,13 +98,18 @@ fn parseSimpleYaml(allocator: Allocator, yaml: []const u8, fields: *std.StringHa
         // Split on first colon
         const colon_idx = std.mem.indexOfScalar(u8, trimmed, ':') orelse continue;
 
-        const key = std.mem.trim(u8, trimmed[0..colon_idx], &std.ascii.whitespace);
+        const key_slice = std.mem.trim(u8, trimmed[0..colon_idx], &std.ascii.whitespace);
         const value_str = std.mem.trim(u8, trimmed[colon_idx + 1 ..], &std.ascii.whitespace);
 
         // Parse value
         const value = try parseYamlValue(allocator, value_str);
+        errdefer value.deinit(allocator);
 
-        try fields.put(allocator, key, value);
+        // Duplicate the key since it's a slice of the yaml string which will be freed
+        const key = try allocator.dupe(u8, key_slice);
+        errdefer allocator.free(key);
+
+        try fields.put(key, value);
     }
 }
 

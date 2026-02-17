@@ -167,7 +167,7 @@ pub fn detectCycles(graph: *const Graph, allocator: Allocator) ![][]const u8 {
     }
 
     var cycles = std.ArrayListUnmanaged([]const u8){};
-    defer {
+    errdefer {
         for (cycles.items) |c| allocator.free(c);
         cycles.deinit(allocator);
     }
@@ -226,7 +226,7 @@ const Color = enum { white, gray, black };
 /// Find orphaned Neuronas (no connections in or out)
 pub fn findOrphans(neuronas: []const Neurona, graph: *const Graph, allocator: Allocator) ![]const []const u8 {
     var orphans = std.ArrayListUnmanaged([]const u8){};
-    defer {
+    errdefer {
         for (orphans.items) |o| allocator.free(o);
         orphans.deinit(allocator);
     }
@@ -236,7 +236,7 @@ pub fn findOrphans(neuronas: []const Neurona, graph: *const Graph, allocator: Al
         const has_incoming = graph.inDegree(neurona.id) > 0;
 
         if (!has_outgoing and !has_incoming) {
-            try orphans.append(allocator, neurona.id);
+            try orphans.append(allocator, try allocator.dupe(u8, neurona.id));
         }
     }
 
@@ -246,7 +246,7 @@ pub fn findOrphans(neuronas: []const Neurona, graph: *const Graph, allocator: Al
 /// Find unconnected Neuronas of a specific type
 pub fn findUnconnectedOfType(neuronas: []const Neurona, graph: *const Graph, neurona_type: NeuronaType, allocator: Allocator) ![]const []const u8 {
     var result = std.ArrayListUnmanaged([]const u8){};
-    defer {
+    errdefer {
         for (result.items) |r| allocator.free(r);
         result.deinit(allocator);
     }
@@ -258,7 +258,7 @@ pub fn findUnconnectedOfType(neuronas: []const Neurona, graph: *const Graph, neu
         const has_incoming = graph.inDegree(neurona.id) > 0;
 
         if (!has_outgoing and !has_incoming) {
-            try result.append(allocator, neurona.id);
+            try result.append(allocator, try allocator.dupe(u8, neurona.id));
         }
     }
 
