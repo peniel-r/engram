@@ -114,7 +114,7 @@ pub const GloVeIndex = struct {
                     return vec;
                 }
             }
-            return error.WordNotFound;
+            return null;
         } else {
             // Regular hash map lookup
             return self.word_vectors.get(word);

@@ -1,0 +1,16 @@
+{
+  "id": "librarian",
+  "name": "Librarian - Polarion Work Items Knowledge Cortex",
+  "version": "0.2.0",
+  "spec_version": "0.1.0",
+  "capabilities": {
+    "type": "knowledge",
+    "semantic_search": true,
+    "llm_integration": true,
+    "default_language": "en"
+  },
+  "indices": {
+    "strategy": "lazy",
+    "embedding_model": "glove-6B-100d"
+  }
+}

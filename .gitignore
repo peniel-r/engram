@@ -18,3 +18,13 @@ zig-out/
 test_existing_cortex/
 test_force_cortex/
 test/fixtures/large_cortex/*.md
+
+# ---> Librarian Demo
+# Environment files with credentials
+librarian/.env
+.env
+
+# NDA-sensitive Polarion work items
+librarian/neuronas/
+librarian/assets/WI-*.json
+librarian/assets/batch_results_*.json

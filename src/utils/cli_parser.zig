@@ -43,6 +43,13 @@ pub const CliParser = struct {
 
             // Skip flags
             if (std.mem.startsWith(u8, arg, "-")) {
+                // Check if this flag takes a value (doesn't have '=' syntax)
+                if (!std.mem.containsAtLeast(u8, arg, 1, "=")) {
+                    // Skip the next argument if it exists and doesn't start with '-'
+                    if (i + 1 < self.args.len and !std.mem.startsWith(u8, self.args[i + 1], "-")) {
+                        i += 1; // Skip the flag's value
+                    }
+                }
                 continue;
             }
 
