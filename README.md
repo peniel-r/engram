@@ -150,8 +150,10 @@ engram new test_case "Login Test" --validates req.auth.user-authentication
 ### Link Neuronas
 
 ```bash
-engram link req.auth.user-authentication issue.auth.001 blocks
+engram link issue.auth.001 req.auth.user-authentication blocks
 ```
+
+Valid connection types: `validates`, `validated_by`, `blocks`, `blocked_by`, `implements`, `implemented_by`, `tested_by`, `tests`, `parent`, `child`, `relates_to`, `prerequisite`, `next`, `related`, `opposes`
 
 ### Update Neuronas
 

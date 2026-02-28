@@ -49,13 +49,14 @@ pub const ErrorReporter = struct {
     /// Report invalid connection type
     pub fn invalidConnectionType(connection_type: []const u8) void {
         std.debug.print("Error: Invalid connection type '{s}'.\n", .{connection_type});
-        std.debug.print("\nValid types: validates, blocks, references, related_to, depends_on\n", .{});
+        std.debug.print("\nValid types: validates, validated_by, blocks, blocked_by, implements, implemented_by, tested_by, tests, parent, child, relates_to, prerequisite, next, related, opposes\n", .{});
+        std.debug.print("\nHint: Run 'engram link --help' for usage examples\n", .{});
     }
 
     /// Report invalid neurona type
     pub fn invalidNeuronaType(neurona_type: []const u8) void {
         std.debug.print("Error: Invalid neurona type '{s}'.\n", .{neurona_type});
-        std.debug.print("\nValid types: requirement, test_case, issue, concept, decision\n", .{});
+        std.debug.print("\nValid types: concept, reference, artifact, state_machine, lesson, requirement, test_case, issue, feature\n", .{});
     }
 
     /// Report that a resource must be a specific type

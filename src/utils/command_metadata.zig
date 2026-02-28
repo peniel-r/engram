@@ -182,12 +182,12 @@ pub const command_registry = [_]CommandMetadata{
     // link command
     .{
         .name = "link",
-        .description = "Create connections between Neuronas",
-        .usage = "engram link <source> <type> <target> [options]",
+        .description = "Create connections between Neuronas. Valid types: validates, validated_by, blocks, blocked_by, implements, implemented_by, tested_by, tests, parent, child, relates_to, prerequisite, next, related, opposes",
+        .usage = "engram link <source> <target> <type> [options]",
         .examples = &[_][]const u8{
-            "engram link test.login validates req.auth.login",
-            "engram link test.api blocks req.auth.login",
-            "engram link req.auth.login depends-on req.db.users",
+            "engram link test.login req.auth.login validates",
+            "engram link test.api req.auth.login blocks",
+            "engram link req.implementation req.db.users implements",
         },
         .flags = &[_]FlagMetadata{
             .{
